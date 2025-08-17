@@ -17,7 +17,7 @@ import {
   LayoutGrid
 } from 'lucide-react';
 import Link from 'next/link';
-import { ExtendedProperty } from '../../types/property';
+import { type ExtendedProperty } from '../../types/property';
 import PropertyCard from '../PropertyCard';
 
 interface ModernPropertiesPageProps {

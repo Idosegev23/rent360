@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../lib/auth'
-import { computeMatchScore, Weights } from '../../../../lib/matching'
+import { computeMatchScore, type Weights } from '../../../../lib/matching'
 
 const DEFAULT_WEIGHTS: Weights = {
   price: 0.3,

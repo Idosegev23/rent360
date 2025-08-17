@@ -1,4 +1,4 @@
-import { ExtendedProperty } from '../types/property';
+import { type ExtendedProperty } from '../types/property';
 import { Calendar, MapPin, Phone, Clock, Info } from 'lucide-react';
 
 interface PropertyCardProps {

@@ -1,7 +1,7 @@
 // Property import utilities for handling scraped data
 
 import { supabaseService } from './supabase';
-import { ScrapedPropertyData, convertScrapedToProperty, ExtendedProperty } from '../types/property';
+import { type ScrapedPropertyData, convertScrapedToProperty, type ExtendedProperty } from '../types/property';
 
 export interface ImportResult {
   success: boolean;
@@ -109,7 +109,7 @@ export function parseEvacuationDate(evacuation: string): string | null {
 
   // Try to parse DD/MM/YYYY format
   const dateMatch = evacuation.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (dateMatch) {
+  if (dateMatch && dateMatch[1] && dateMatch[2] && dateMatch[3]) {
     const [, day, month, year] = dateMatch;
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
@@ -123,13 +123,13 @@ export function parseEvacuationDate(evacuation: string): string | null {
 export function extractRoomsCount(text: string): number | null {
   // Look for patterns like "3 חדרים" or "3.5 חדרים"
   const roomsMatch = text.match(/(\d+(?:\.\d+)?)\s*חדרים?/);
-  if (roomsMatch) {
+  if (roomsMatch && roomsMatch[1]) {
     return parseFloat(roomsMatch[1]);
   }
 
   // Look for patterns like "דירת 3 חדרים"
   const apartmentMatch = text.match(/דירת?\s+(\d+(?:\.\d+)?)\s*חדרים?/);
-  if (apartmentMatch) {
+  if (apartmentMatch && apartmentMatch[1]) {
     return parseFloat(apartmentMatch[1]);
   }
 
@@ -142,7 +142,7 @@ export function extractRoomsCount(text: string): number | null {
 export function parseAddress(address: string): { city: string; neighborhood: string | null } {
   const parts = address.split(',');
   const city = parts[parts.length - 1]?.trim().replace(/ - מגורים$/, '') || '';
-  const neighborhood = parts.length > 1 ? parts[0].trim() : null;
+  const neighborhood = parts.length > 1 ? parts[0]?.trim() || null : null;
   
   return { city, neighborhood };
 }

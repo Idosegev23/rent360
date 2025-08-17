@@ -42,10 +42,7 @@ export default function PropertiesView({ items }: Props){
     else if(sort==='price_asc') res.sort((a:any,b:any)=>Number(a.price||0)-Number(b.price||0))
     else res.sort((a:any,b:any)=> new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
     return res
-  }, [items, query, city, sort])
-  // include filters in deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const _ = useMemo(()=>({priceMin, priceMax, roomsMin, roomsMax, status}), [priceMin, priceMax, roomsMin, roomsMax, status])
+  }, [items, query, city, sort, priceMin, priceMax, roomsMin, roomsMax, status])
 
   const uniqueCities = useMemo(()=>Array.from(new Set((items||[]).map((p:any)=>p.city).filter(Boolean))), [items])
 

@@ -105,7 +105,7 @@ export function convertScrapedToProperty(scraped: ScrapedPropertyData, orgId: st
   if (scraped.basicInfo.evacuation && scraped.basicInfo.evacuation !== 'מיידי') {
     // Try to parse date in format DD/MM/YYYY
     const dateMatch = scraped.basicInfo.evacuation.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (dateMatch) {
+    if (dateMatch && dateMatch[1] && dateMatch[2] && dateMatch[3]) {
       const [, day, month, year] = dateMatch;
       evacuationDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
@@ -114,7 +114,7 @@ export function convertScrapedToProperty(scraped: ScrapedPropertyData, orgId: st
   // Extract city and neighborhood from address
   const addressParts = scraped.basicInfo.address.split(',');
   const city = addressParts[addressParts.length - 1]?.trim().replace(' - מגורים', '') || '';
-  const neighborhood = addressParts.length > 1 ? addressParts[0].trim() : null;
+  const neighborhood = addressParts.length > 1 ? addressParts[0]?.trim() || null : null;
   
   return {
     external_id: scraped.basicInfo.id,

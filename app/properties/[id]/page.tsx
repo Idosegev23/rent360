@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react'
-import { ExtendedProperty } from '../../../types/property'
+import { type ExtendedProperty } from '../../../types/property'
 import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft } from 'lucide-react'
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
 
