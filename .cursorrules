@@ -1,0 +1,20 @@
+# Project Intelligence (.cursorrules) – Rent360
+
+## דפוסים מועדפים
+- תיעוד מתמשך ב‑memory-bank לפי ההיררכיה: projectbrief → productContext/systemPatterns/techContext → activeContext → progress.
+- אחרי כל שינוי מהותי: עדכון `activeContext.md` ו‑`progress.md`.
+- כשמבקשים "update memory bank": לקרוא ולעדכן את כל הקבצים.
+
+## העדפות משתמש/פרויקט
+- שפה: עברית כברירת מחדל, EN‑ready בקוד.
+- Mobile‑first, RTL; שימוש ב‑shadcn/ui ו‑Tailwind עם צבעי המותג.
+- בעלות מלאה על קוד ודאטה; שימוש ב‑Supabase.
+
+## תהליכים
+- Plan Mode: לשאול 4–6 שאלות הבהרה לפני תכנון ולהציג תוכנית לאישור.
+- Act Mode: ליישם לפי התוכנית, ולעדכן Memory Bank.
+
+## הערות פיתוח
+- מנוע התאמה: משקלים דינמיים מקונפיג; לחשב Score עם Breakdown.
+- הודעות: Service צד שרת בלבד; לנהל סטטוסים בטבלת `messages`.
+- אבטחה: RLS לפי `org_id`; JWT מכיל `org_id`.

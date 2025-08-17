@@ -1,0 +1,74 @@
+openapi: 3.1.0
+info:
+  title: Rentals & Leads API
+  version: 1.0.0
+servers:
+  - url: https://api.your-domain.com/v1
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /leads:
+    post:
+      summary: Upsert lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadInput'
+      responses:
+        '200': { description: Updated }
+        '201': { description: Created }
+        '422': { description: Validation error }
+  /properties:
+    post:
+      summary: Upsert property
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyInput'
+      responses:
+        '200': { description: Updated }
+        '201': { description: Created }
+components:
+  schemas:
+    LeadInput:
+      type: object
+      required: [source_id, phone]
+      properties:
+        external_id: { type: string }
+        source_id: { type: string }
+        full_name: { type: string }
+        phone: { type: string, description: E.164 }
+        email: { type: string }
+        budget_min: { type: integer }
+        budget_max: { type: integer }
+        preferred_cities: { type: array, items: { type: string } }
+        preferred_rooms: { type: integer }
+        must_haves: { type: object }
+        nice_to_haves: { type: object }
+        move_in_from: { type: string, format: date }
+        notes: { type: string }
+    PropertyInput:
+      type: object
+      required: [source_id, title, city, price]
+      properties:
+        external_id: { type: string }
+        source_id: { type: string }
+        title: { type: string }
+        city: { type: string }
+        neighborhood: { type: string }
+        address: { type: string }
+        price: { type: integer }
+        rooms: { type: integer }
+        sqm: { type: integer }
+        amenities: { type: object }
+        available_from: { type: string, format: date }
+        link: { type: string }
+        images: { type: array, items: { type: object } }
+        is_active: { type: boolean }

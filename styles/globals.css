@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  @apply bg-brand-bg text-brand-ink;
+  font-family: 'Heebo', system-ui, -apple-system, Segoe UI, Roboto, Arial, 'Noto Sans', 'Helvetica Neue', 'Apple Color Emoji', 'Segoe UI Emoji';
+}
+
+.container {
+  @apply mx-auto px-4 sm:px-6 lg:px-8;
+}

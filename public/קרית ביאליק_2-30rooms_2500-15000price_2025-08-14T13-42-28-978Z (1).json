@@ -1,0 +1,177 @@
+{
+  "searchParams": {
+    "city": "קרית ביאליק",
+    "roomsFrom": 2,
+    "roomsTo": 30,
+    "priceFrom": 2500,
+    "priceTo": 15000,
+    "outputDir": "./test-output",
+    "headless": false,
+    "maxPages": 2,
+    "maxAds": 3
+  },
+  "timestamp": "2025-08-14T13:41:17.834Z",
+  "properties": [
+    {
+      "basicInfo": {
+        "price": "6,300 ₪",
+        "size": "180",
+        "address": "אפק אפק, קרית ביאליק - מגורים",
+        "status": "משופצת",
+        "evacuation": "מיידי",
+        "id": "4bbec508-d8cf-4c4f-897c-271cc6e37c2b"
+      },
+      "details": {
+        "parking": true,
+        "airConditioner": true,
+        "storage": true,
+        "balcony": true,
+        "elevator": false,
+        "mamad": true,
+        "description": null,
+        "timeline": [
+          {
+            "type": "מודעה חדשה",
+            "content": "פורסם ביד2 תיווך. מחיר 6,300 ₪."
+          }
+        ]
+      },
+      "contact": {
+        "name": "יוסי",
+        "phone": "055-4337863"
+      },
+      "images": [
+        "https://nd1.info/img.il/X6N/LW3RZ4.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/UJNPML.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/GWE2I2.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/8VO8LG.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/0B37G0.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/DJC7JN.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/ZW3KF4.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/IQVDQN.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/EP9X55.jpeg?w=600",
+        "https://nd1.info/img.il/X6N/5OI29J.jpeg?w=600"
+      ],
+      "additionalInfo": {
+        "source": "יד2 תיווך",
+        "updated": "--"
+      },
+      "fullText": "להשכרה בקרית ביאליק בשכונת אפק בית פרטי 6.5 חדרים ב 2 קומות + גינה קדמית ואחורית לכניסה מידית טווח ארוךיכול להתאים לשילוב של עסק קטן בבית או משפחתון שקד נכסיםיוסי שקד",
+      "pageNumber": 1,
+      "positionInPage": 1,
+      "scrapedAt": "2025-08-14T13:41:57.877Z"
+    },
+    {
+      "basicInfo": {
+        "price": "3,500 ₪",
+        "size": "85",
+        "address": "הנרקיסים 37 קומה 1 מרכז, קרית ביאליק - מגורים",
+        "status": "משופצת",
+        "evacuation": "03/10/2025",
+        "id": "bc550e26-ef8b-4301-8d38-24836790400a"
+      },
+      "details": {
+        "parking": false,
+        "airConditioner": true,
+        "storage": true,
+        "balcony": false,
+        "elevator": false,
+        "mamad": false,
+        "description": null,
+        "timeline": [
+          {
+            "type": "שינוי מחיר",
+            "content": "המחיר שונה מ 3,100 ₪ ל 3,500 ₪."
+          },
+          {
+            "type": "מודעה חדשה",
+            "content": "פורסם ביד2. מחיר 3,500 ₪."
+          },
+          {
+            "type": "ירד מפרסום",
+            "content": "המודעה ביד2 ירדה מפרסום. פורסמה במשך 43 ימים."
+          },
+          {
+            "type": "שינוי מחיר",
+            "content": "המחיר שונה מ 3,500 ₪ ל 3,100 ₪."
+          },
+          {
+            "type": "מודעה חדשה",
+            "content": "פורסם ביד2. מחיר 3,500 ₪."
+          }
+        ]
+      },
+      "contact": {
+        "name": "דורון/",
+        "phone": null
+      },
+      "images": [
+        "https://nd1.info/img.il/9KQ/9ATV04.jpeg?w=600",
+        "https://nd1.info/img.il/9KQ/VMK8VL.jpeg?w=600",
+        "https://nd1.info/img.il/9KQ/TOH0Y2.jpeg?w=600",
+        "https://nd1.info/img.il/9KQ/F18DUJ.jpeg?w=600",
+        "https://nd1.info/img.il/9KQ/OPSBH0.jpeg?w=600"
+      ],
+      "additionalInfo": {
+        "source": "יד2",
+        "updated": "לפני שעתיים"
+      },
+      "fullText": "להשכרה,דירת 3 חדרים כ 85 מטר, קומה ראשונה חזיתית, מחסן.משופצתת ברחוב הנרקיסים.תאריך כניסה 3.10.25",
+      "pageNumber": 1,
+      "positionInPage": 2,
+      "scrapedAt": "2025-08-14T13:42:11.832Z"
+    },
+    {
+      "basicInfo": {
+        "price": "4,900 ₪",
+        "size": "131",
+        "address": "הפטל 19 קומה 12 הפרפר, קרית ביאליק - מגורים",
+        "status": null,
+        "evacuation": "מיידי",
+        "id": "1b806116-2d52-4010-8ea0-1346e20add75"
+      },
+      "details": {
+        "parking": false,
+        "airConditioner": true,
+        "storage": false,
+        "balcony": false,
+        "elevator": true,
+        "mamad": true,
+        "description": null,
+        "timeline": [
+          {
+            "type": "שינוי מחיר",
+            "content": "המחיר שונה מ 5,500 ₪ ל 4,900 ₪."
+          },
+          {
+            "type": "שינוי מחיר",
+            "content": "המחיר שונה מ 4,900 ₪ ל 5,500 ₪."
+          },
+          {
+            "type": "מודעה חדשה",
+            "content": "פורסם ביד2. מחיר 4,900 ₪."
+          }
+        ]
+      },
+      "contact": {
+        "name": "רון",
+        "phone": "054-3346480"
+      },
+      "images": [],
+      "additionalInfo": {
+        "source": "יד2",
+        "updated": "לפני 4 שעות"
+      },
+      "fullText": "דירה קסומה ליד הקריון, המון אור ואוירבבניין יוקרתי עם 3 מעליות,ממ\"ד ולובי מפואר.3 חדרים ומרפסת סגורה לכיון הים. במקור היתה דירת 4 חדרים. שכנים טובים וחנייה פרטית.",
+      "pageNumber": 1,
+      "positionInPage": 3,
+      "scrapedAt": "2025-08-14T13:42:25.714Z"
+    }
+  ],
+  "summary": {
+    "totalFound": 3,
+    "totalScraped": 3,
+    "errors": [],
+    "completedPages": 1
+  }
+}
