@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PropertyInput } from './types'
-import { getOrgIdFromAuthHeader } from '../../../../lib/auth'
+import { getOrgIdFromAuthHeader, getUserIdFromSupabaseCookie } from '../../../../lib/auth'
 import { supabaseService } from '../../../../lib/supabase'
+import { cookies } from 'next/headers'
 
 export async function POST(req: NextRequest){
   const idem = req.headers.get('idempotency-key')
@@ -88,4 +89,93 @@ export async function POST(req: NextRequest){
   const isUpdate = false // Best-effort; for now return 201
   const statusCode = isUpdate ? 200 : 201
   return NextResponse.json({ id: data?.[0]?.id, status: isUpdate ? 'updated' : 'created' }, { status: statusCode })
+}
+
+export async function GET(req: NextRequest){
+  const url = new URL(req.url)
+  const page = parseInt(url.searchParams.get('page') || '1')
+  const limit = parseInt(url.searchParams.get('limit') || '50')
+  const search = url.searchParams.get('search') || ''
+  const city = url.searchParams.get('city') || ''
+  const price_min = url.searchParams.get('price_min')
+  const price_max = url.searchParams.get('price_max')
+  const rooms_min = url.searchParams.get('rooms_min')
+  const rooms_max = url.searchParams.get('rooms_max')
+  const is_active = url.searchParams.get('is_active')
+  const amenities = url.searchParams.get('amenities') // comma-separated list
+  
+  // Get user's org_id from cookie
+  const cookie = cookies().get('sb-access-token')?.value
+  const userId = getUserIdFromSupabaseCookie(cookie)
+  if(!userId) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
+  
+  const sb = supabaseService()
+  const { data: user } = await sb.from('users').select('org_id').eq('id', userId).maybeSingle()
+  if(!user) return NextResponse.json({ error: { code: 'NO_USER' } }, { status: 401 })
+  
+  const orgId = user.org_id
+  const offset = (page - 1) * limit
+  
+  // Build query
+  let query = sb
+    .from('properties')
+    .select('*', { count: 'exact' })
+    .eq('org_id', orgId)
+  
+  // Apply filters
+  if(search) {
+    query = query.or(`title.ilike.%${search}%,city.ilike.%${search}%,neighborhood.ilike.%${search}%,address.ilike.%${search}%`)
+  }
+  if(city) {
+    query = query.eq('city', city)
+  }
+  if(price_min) {
+    query = query.gte('price', parseInt(price_min))
+  }
+  if(price_max) {
+    query = query.lte('price', parseInt(price_max))
+  }
+  if(rooms_min) {
+    query = query.gte('rooms', parseInt(rooms_min))
+  }
+  if(rooms_max) {
+    query = query.lte('rooms', parseInt(rooms_max))
+  }
+  if(is_active !== null && is_active !== '') {
+    query = query.eq('is_active', is_active === 'true')
+  }
+  if(amenities) {
+    // Parse amenities filter
+    const amenitiesList = amenities.split(',').filter(Boolean)
+    if(amenitiesList.length > 0) {
+      // Build the JSON query for each amenity
+      const amenityFilters = amenitiesList.map(amenity => `amenities->${amenity}.eq.true`)
+      query = query.and(amenityFilters.join(','))
+    }
+  }
+  
+  // Apply pagination and ordering
+  query = query
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+  
+  const { data, error, count } = await query
+  
+  if(error) {
+    return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
+  }
+  
+  const totalPages = Math.ceil((count || 0) / limit)
+  
+  return NextResponse.json({
+    properties: data || [],
+    pagination: {
+      page,
+      limit,
+      total: count || 0,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1
+    }
+  })
 }

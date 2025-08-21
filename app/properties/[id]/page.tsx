@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { type ExtendedProperty } from '../../../types/property'
-import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft } from 'lucide-react'
+import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight } from 'lucide-react'
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
 
 async function fetchProperty(id: string): Promise<ExtendedProperty | null> {
@@ -43,6 +44,7 @@ function getAmenitiesDisplay(amenities: any) {
 export default function PropertyPage({ params }: { params: { id: string } }) {
   const [item, setItem] = useState<ExtendedProperty | null>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     const loadProperty = async () => {
@@ -91,6 +93,17 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
 
   return (
     <main className="pb-20 space-y-8 max-w-4xl mx-auto px-4">
+      {/* Back Button */}
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ArrowRight className="h-5 w-5" />
+          <span>חזרה לרשימת נכסים</span>
+        </button>
+      </div>
+
       {/* Header Section */}
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">

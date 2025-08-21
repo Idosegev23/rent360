@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -14,81 +14,163 @@ import {
   Building,
   Star,
   Eye,
-  LayoutGrid
+  LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { type ExtendedProperty } from '../../types/property';
 import PropertyCard from '../PropertyCard';
 
-interface ModernPropertiesPageProps {
-  properties: ExtendedProperty[];
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
 }
 
-export default function ModernPropertiesPage({ properties }: ModernPropertiesPageProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [cityFilter, setCityFilter] = useState<string>('all');
-  const [priceFilter, setPriceFilter] = useState<string>('all');
-  const [roomsFilter, setRoomsFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+interface PropertiesResponse {
+  properties: ExtendedProperty[];
+  pagination: PaginationInfo;
+}
+
+interface ModernPropertiesPageProps {}
+
+interface FilterState {
+  search: string;
+  city: string;
+  priceMin: string;
+  priceMax: string;
+  roomsMin: string;
+  roomsMax: string;
+  isActive: string;
+  amenities: string[];
+}
+
+export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
+  const [properties, setProperties] = useState<ExtendedProperty[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0,
+    hasNext: false,
+    hasPrev: false
+  });
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<FilterState>({
+    search: '',
+    city: '',
+    priceMin: '',
+    priceMax: '',
+    roomsMin: '',
+    roomsMax: '',
+    isActive: '',
+    amenities: []
+  });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [allCities, setAllCities] = useState<string[]>([]);
 
-  // Get unique cities
-  const uniqueCities = useMemo(() => {
-    return Array.from(new Set(properties.map(p => p.city).filter(Boolean)));
-  }, [properties]);
+  // Fetch properties function
+  const fetchProperties = async (page: number = 1, currentFilters: FilterState = filters) => {
+    setLoading(true);
+    try {
+      const searchParams = new URLSearchParams({
+        page: page.toString(),
+        limit: pagination.limit.toString()
+      });
 
-  // Filter properties
-  const filteredProperties = useMemo(() => {
-    return properties.filter(property => {
-      const matchesSearch = property.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           property.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           property.neighborhood?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           property.address?.toLowerCase().includes(searchTerm.toLowerCase());
+      if (currentFilters.search) searchParams.set('search', currentFilters.search);
+      if (currentFilters.city) searchParams.set('city', currentFilters.city);
+      if (currentFilters.priceMin) searchParams.set('price_min', currentFilters.priceMin);
+      if (currentFilters.priceMax) searchParams.set('price_max', currentFilters.priceMax);
+      if (currentFilters.roomsMin) searchParams.set('rooms_min', currentFilters.roomsMin);
+      if (currentFilters.roomsMax) searchParams.set('rooms_max', currentFilters.roomsMax);
+      if (currentFilters.isActive) searchParams.set('is_active', currentFilters.isActive);
+      if (currentFilters.amenities.length > 0) searchParams.set('amenities', currentFilters.amenities.join(','));
+
+      const response = await fetch(`/api/v1/properties?${searchParams}`);
+      if (!response.ok) throw new Error('Failed to fetch properties');
       
-      const matchesCity = cityFilter === 'all' || property.city === cityFilter;
-      
-      const matchesPrice = priceFilter === 'all' || (() => {
-        const price = property.price || 0;
-        switch (priceFilter) {
-          case 'low': return price <= 4000;
-          case 'medium': return price > 4000 && price <= 7000;
-          case 'high': return price > 7000;
-          default: return true;
-        }
-      })();
+      const data: PropertiesResponse = await response.json();
+      setProperties(data.properties);
+      setPagination(data.pagination);
 
-      const matchesRooms = roomsFilter === 'all' || (() => {
-        const rooms = property.rooms || 0;
-        switch (roomsFilter) {
-          case '1-2': return rooms >= 1 && rooms <= 2;
-          case '3-4': return rooms >= 3 && rooms <= 4;
-          case '5+': return rooms >= 5;
-          default: return true;
-        }
-      })();
+      // Update cities list from all properties for filter dropdown
+      if (page === 1) {
+        const cities = Array.from(new Set(data.properties.map(p => p.city).filter(Boolean)));
+        setAllCities(cities);
+      }
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const matchesStatus = statusFilter === 'all' || (() => {
-        switch (statusFilter) {
-          case 'active': return property.is_active;
-          case 'inactive': return !property.is_active;
-          case 'new': return property.status === 'משופצת';
-          default: return true;
-        }
-      })();
+  // Initial load
+  useEffect(() => {
+    fetchProperties(1, filters);
+  }, []);
 
-      return matchesSearch && matchesCity && matchesPrice && matchesRooms && matchesStatus;
-    });
-  }, [properties, searchTerm, cityFilter, priceFilter, roomsFilter, statusFilter]);
+  // Handle filter changes
+  const handleFilterChange = (newFilters: Partial<FilterState>) => {
+    const updatedFilters = { ...filters, ...newFilters };
+    setFilters(updatedFilters);
+    fetchProperties(1, updatedFilters);
+  };
 
-  // Calculate stats
-  const totalProperties = properties.length;
-  const activeProperties = properties.filter(p => p.is_active).length;
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    fetchProperties(newPage, filters);
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    const clearedFilters: FilterState = {
+      search: '',
+      city: '',
+      priceMin: '',
+      priceMax: '',
+      roomsMin: '',
+      roomsMax: '',
+      isActive: '',
+      amenities: []
+    };
+    setFilters(clearedFilters);
+    fetchProperties(1, clearedFilters);
+  };
+
+  // Handle amenity toggle
+  const toggleAmenity = (amenity: string) => {
+    const newAmenities = filters.amenities.includes(amenity)
+      ? filters.amenities.filter(a => a !== amenity)
+      : [...filters.amenities, amenity];
+    handleFilterChange({ amenities: newAmenities });
+  };
+
+  // Calculate stats from all properties (total count from pagination)
+  const totalProperties = pagination.total;
+  const activeProperties = properties.filter(p => p.is_active).length; // This is for current page only
   const avgPrice = properties.length > 0 
     ? Math.round(properties.reduce((sum, p) => sum + (p.price || 0), 0) / properties.length)
     : 0;
   const avgSize = properties.length > 0 
     ? Math.round(properties.reduce((sum, p) => sum + (p.sqm || 0), 0) / properties.length)
     : 0;
+
+  // Available amenities
+  const availableAmenities = [
+    { key: 'elevator', label: 'מעלית' },
+    { key: 'parking', label: 'חניה' },
+    { key: 'balcony', label: 'מרפסת' },
+    { key: 'airConditioner', label: 'מזגן' },
+    { key: 'storage', label: 'מחסן' },
+    { key: 'mamad', label: 'ממ״ד' }
+  ];
 
   return (
     <main className="pb-20 space-y-6">
@@ -168,8 +250,8 @@ export default function ModernPropertiesPage({ properties }: ModernPropertiesPag
               <input
                 type="text"
                 placeholder="חיפוש לפי כותרת, עיר, שכונה או כתובת..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={filters.search}
+                onChange={(e) => handleFilterChange({ search: e.target.value })}
                 className="w-full pr-10 pl-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
               />
             </div>
@@ -203,58 +285,63 @@ export default function ModernPropertiesPage({ properties }: ModernPropertiesPag
           {/* Bottom Row - Filters */}
           <div className="flex flex-col sm:flex-row gap-4">
             <select
-              value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
+              value={filters.city}
+              onChange={(e) => handleFilterChange({ city: e.target.value })}
               className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
             >
-              <option value="all">כל הערים</option>
-              {uniqueCities.map(city => (
+              <option value="">כל הערים</option>
+              {allCities.map(city => (
                 <option key={city} value={city}>{city}</option>
               ))}
             </select>
 
-            <select
-              value={priceFilter}
-              onChange={(e) => setPriceFilter(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-            >
-              <option value="all">כל המחירים</option>
-              <option value="low">עד ₪4,000</option>
-              <option value="medium">₪4,000-₪7,000</option>
-              <option value="high">מעל ₪7,000</option>
-            </select>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="מחיר מינימום"
+                value={filters.priceMin}
+                onChange={(e) => handleFilterChange({ priceMin: e.target.value })}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+              />
+              <input
+                type="number"
+                placeholder="מחיר מקסימום"
+                value={filters.priceMax}
+                onChange={(e) => handleFilterChange({ priceMax: e.target.value })}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="חדרים מינימום"
+                value={filters.roomsMin}
+                onChange={(e) => handleFilterChange({ roomsMin: e.target.value })}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+              />
+              <input
+                type="number"
+                placeholder="חדרים מקסימום"
+                value={filters.roomsMax}
+                onChange={(e) => handleFilterChange({ roomsMax: e.target.value })}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+              />
+            </div>
 
             <select
-              value={roomsFilter}
-              onChange={(e) => setRoomsFilter(e.target.value)}
+              value={filters.isActive}
+              onChange={(e) => handleFilterChange({ isActive: e.target.value })}
               className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
             >
-              <option value="all">כל מספרי החדרים</option>
-              <option value="1-2">1-2 חדרים</option>
-              <option value="3-4">3-4 חדרים</option>
-              <option value="5+">5+ חדרים</option>
+              <option value="">כל הסטטוסים</option>
+              <option value="true">פעיל</option>
+              <option value="false">לא פעיל</option>
             </select>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-            >
-              <option value="all">כל הסטטוסים</option>
-              <option value="active">פעיל</option>
-              <option value="inactive">לא פעיל</option>
-              <option value="new">משופץ</option>
-            </select>
-
-            {(searchTerm || cityFilter !== 'all' || priceFilter !== 'all' || roomsFilter !== 'all' || statusFilter !== 'all') && (
+            {(filters.search || filters.city || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive || filters.amenities.length > 0) && (
               <button
-                onClick={() => {
-                  setSearchTerm('');
-                  setCityFilter('all');
-                  setPriceFilter('all');
-                  setRoomsFilter('all');
-                  setStatusFilter('all');
-                }}
+                onClick={clearFilters}
                 className="px-4 py-3 text-brand-primary border border-brand-primary rounded-lg hover:bg-brand-primary hover:text-white transition-colors"
               >
                 נקה פילטרים
@@ -262,14 +349,46 @@ export default function ModernPropertiesPage({ properties }: ModernPropertiesPag
             )}
           </div>
 
+          {/* Amenities Filter */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-gray-700">מאפיינים</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {availableAmenities.map((amenity) => (
+                <label
+                  key={amenity.key}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={filters.amenities.includes(amenity.key)}
+                    onChange={() => toggleAmenity(amenity.key)}
+                    className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary focus:ring-offset-0"
+                  />
+                  <span className="text-sm font-medium text-gray-700">{amenity.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>מציג {filteredProperties.length} מתוך {totalProperties} נכסים</span>
+            <span>מציג {properties.length} מתוך {totalProperties} נכסים</span>
+            {loading && (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>טוען...</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Properties Grid/List */}
-      {filteredProperties.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <Loader2 className="h-16 w-16 text-gray-300 mx-auto mb-4 animate-spin" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">טוען נכסים...</h3>
+        </div>
+      ) : properties.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <Home className="h-16 w-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -291,63 +410,134 @@ export default function ModernPropertiesPage({ properties }: ModernPropertiesPag
             </Link>
           )}
         </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredProperties.map((property) => (
-            <Link key={property.id} href={`/properties/${property.id}`}>
-              <PropertyCard item={property} />
-            </Link>
-          ))}
-        </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">נכס</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מיקום</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מחיר</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">חדרים</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">שטח</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סטטוס</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredProperties.map((property) => (
-                  <tr key={property.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Link href={`/properties/${property.id}`} className="text-brand-primary hover:text-brand-primaryMuted font-medium">
-                        {property.title}
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {property.city}{property.neighborhood && ` · ${property.neighborhood}`}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ₪{(property.price || 0).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {property.rooms || '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {property.sqm ? `${property.sqm} מ״ר` : '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        property.is_active 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {property.is_active ? 'פעיל' : 'לא פעיל'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <>
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {properties.map((property) => (
+                <Link key={property.id} href={`/properties/${property.id}`}>
+                  <PropertyCard item={property} />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">נכס</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מיקום</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מחיר</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">חדרים</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">שטח</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סטטוס</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {properties.map((property) => (
+                      <tr key={property.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Link href={`/properties/${property.id}`} className="text-brand-primary hover:text-brand-primaryMuted font-medium">
+                            {property.title}
+                          </Link>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {property.city}{property.neighborhood && ` · ${property.neighborhood}`}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          ₪{(property.price || 0).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {property.rooms || '—'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {property.sqm ? `${property.sqm} מ״ר` : '—'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                            property.is_active 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {property.is_active ? 'פעיל' : 'לא פעיל'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  עמוד {pagination.page} מתוך {pagination.totalPages} (סך הכל {totalProperties} נכסים)
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={!pagination.hasPrev || loading}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                    הקודם
+                  </button>
+                  
+                  {/* Page numbers */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                      const pageNum = i + 1;
+                      const isCurrentPage = pageNum === pagination.page;
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => handlePageChange(pageNum)}
+                          disabled={loading}
+                          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            isCurrentPage
+                              ? 'bg-brand-primary text-white'
+                              : 'text-gray-700 hover:bg-gray-100 disabled:opacity-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    
+                    {pagination.totalPages > 5 && (
+                      <>
+                        <span className="px-2 text-gray-500">...</span>
+                        <button
+                          onClick={() => handlePageChange(pagination.totalPages)}
+                          disabled={loading}
+                          className="px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+                        >
+                          {pagination.totalPages}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  
+                  <button
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={!pagination.hasNext || loading}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    הבא
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </main>
   );
