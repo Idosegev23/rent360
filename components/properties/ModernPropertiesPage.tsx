@@ -114,6 +114,7 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
   // Initial load
   useEffect(() => {
     fetchProperties(1, filters);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle filter changes

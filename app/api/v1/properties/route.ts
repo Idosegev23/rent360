@@ -148,9 +148,10 @@ export async function GET(req: NextRequest){
     // Parse amenities filter
     const amenitiesList = amenities.split(',').filter(Boolean)
     if(amenitiesList.length > 0) {
-      // Build the JSON query for each amenity
-      const amenityFilters = amenitiesList.map(amenity => `amenities->${amenity}.eq.true`)
-      query = query.and(amenityFilters.join(','))
+      // Apply each amenity filter separately
+      for(const amenity of amenitiesList) {
+        query = query.eq(`amenities->${amenity}`, true)
+      }
     }
   }
   
