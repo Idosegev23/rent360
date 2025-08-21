@@ -16,17 +16,24 @@ export async function GET(){
   const orgId = user.org_id
 
   try {
-    // Get all properties data (no limit to show real count)
-    const { data: properties, error: propsError } = await sb
+    // Get all properties data (override default 1000 limit)
+    const { data: properties, error: propsError, count } = await sb
       .from('properties')
-      .select('city, price, sqm, is_active, created_at, source')
+      .select('city, price, sqm, is_active, created_at, source', { count: 'exact' })
       .eq('org_id', orgId)
+      .limit(10000) // Set high limit to get all properties
 
     if(propsError) throw propsError
 
     // Calculate aggregations
     const propertiesData = properties || []
-    console.log(`Dashboard aggregations: Found ${propertiesData.length} properties for org ${orgId}`)
+    console.log(`Dashboard aggregations: Found ${propertiesData.length} properties in data array for org ${orgId}`)
+    console.log(`Dashboard aggregations: Total count from DB: ${count}`)
+    
+    // Check if we got all properties or hit the limit
+    if (propertiesData.length === 10000 && count && count > 10000) {
+      console.warn(`Warning: Hit limit of 10000 properties. Total in DB: ${count}. Need to implement pagination.`)
+    }
     
     // Properties by city
     const cityMap = new Map<string, number>()
@@ -55,16 +62,17 @@ export async function GET(){
       else priceRanges[3]!.count++
     })
 
-    // Stats
-    const properties_total = propertiesData.length
+    // Stats - use actual count if available, otherwise use data length
+    const properties_total = count || propertiesData.length
     const active_properties = propertiesData.filter(p => p.is_active).length
     const brokerage_properties = propertiesData.filter(p => p.source && p.source.includes('יד 2 תיווך')).length
     const direct_properties = properties_total - brokerage_properties
-    const avg_price = properties_total > 0 
-      ? Math.round(propertiesData.reduce((sum, p) => sum + (p.price || 0), 0) / properties_total)
+    // For averages, use the actual data we have (sample)
+    const avg_price = propertiesData.length > 0 
+      ? Math.round(propertiesData.reduce((sum, p) => sum + (p.price || 0), 0) / propertiesData.length)
       : 0
-    const avg_size = properties_total > 0 
-      ? Math.round(propertiesData.reduce((sum, p) => sum + (p.sqm || 0), 0) / properties_total)
+    const avg_size = propertiesData.length > 0 
+      ? Math.round(propertiesData.reduce((sum, p) => sum + (p.sqm || 0), 0) / propertiesData.length)
       : 0
 
     // Weekly activity (last 7 days)
