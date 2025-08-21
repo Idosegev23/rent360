@@ -19,7 +19,7 @@ export async function GET(){
     // Get all properties data
     const { data: properties, error: propsError } = await sb
       .from('properties')
-      .select('city, price, sqm, is_active, created_at')
+      .select('city, price, sqm, is_active, created_at, source')
       .eq('org_id', orgId)
       .limit(5000)
 
@@ -58,6 +58,8 @@ export async function GET(){
     // Stats
     const properties_total = propertiesData.length
     const active_properties = propertiesData.filter(p => p.is_active).length
+    const brokerage_properties = propertiesData.filter(p => p.source && p.source.includes('יד 2 תיווך')).length
+    const direct_properties = properties_total - brokerage_properties
     const avg_price = properties_total > 0 
       ? Math.round(propertiesData.reduce((sum, p) => sum + (p.price || 0), 0) / properties_total)
       : 0
@@ -96,6 +98,8 @@ export async function GET(){
       price_ranges: priceRanges,
       properties_total,
       active_properties,
+      brokerage_properties,
+      direct_properties,
       avg_price,
       avg_size,
       weekly_activity

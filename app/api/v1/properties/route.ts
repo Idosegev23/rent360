@@ -103,6 +103,7 @@ export async function GET(req: NextRequest){
   const rooms_max = url.searchParams.get('rooms_max')
   const is_active = url.searchParams.get('is_active')
   const amenities = url.searchParams.get('amenities') // comma-separated list
+  const is_brokerage = url.searchParams.get('is_brokerage') // true/false
   
   // Get user's org_id from cookie
   const cookie = cookies().get('sb-access-token')?.value
@@ -152,6 +153,14 @@ export async function GET(req: NextRequest){
       for(const amenity of amenitiesList) {
         query = query.eq(`amenities->${amenity}`, true)
       }
+    }
+  }
+  if(is_brokerage !== null && is_brokerage !== '') {
+    // Check if source contains "יד 2 תיווך" for brokerage
+    if(is_brokerage === 'true') {
+      query = query.ilike('source', '%יד 2 תיווך%')
+    } else {
+      query = query.not('source', 'ilike', '%יד 2 תיווך%')
     }
   }
   

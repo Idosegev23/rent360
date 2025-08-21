@@ -12,6 +12,7 @@ import {
   List,
   TrendingUp,
   Building,
+  Building2,
   Star,
   Eye,
   LayoutGrid,
@@ -48,6 +49,7 @@ interface FilterState {
   roomsMax: string;
   isActive: string;
   amenities: string[];
+  isBrokerage: string;
 }
 
 export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
@@ -69,7 +71,8 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
     roomsMin: '',
     roomsMax: '',
     isActive: '',
-    amenities: []
+    amenities: [],
+    isBrokerage: ''
   });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [allCities, setAllCities] = useState<string[]>([]);
@@ -91,6 +94,7 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
       if (currentFilters.roomsMax) searchParams.set('rooms_max', currentFilters.roomsMax);
       if (currentFilters.isActive) searchParams.set('is_active', currentFilters.isActive);
       if (currentFilters.amenities.length > 0) searchParams.set('amenities', currentFilters.amenities.join(','));
+      if (currentFilters.isBrokerage) searchParams.set('is_brokerage', currentFilters.isBrokerage);
 
       const response = await fetch(`/api/v1/properties?${searchParams}`);
       if (!response.ok) throw new Error('Failed to fetch properties');
@@ -139,7 +143,8 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
       roomsMin: '',
       roomsMax: '',
       isActive: '',
-      amenities: []
+      amenities: [],
+      isBrokerage: ''
     };
     setFilters(clearedFilters);
     fetchProperties(1, clearedFilters);
@@ -340,7 +345,17 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
               <option value="false">לא פעיל</option>
             </select>
 
-            {(filters.search || filters.city || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive || filters.amenities.length > 0) && (
+            <select
+              value={filters.isBrokerage}
+              onChange={(e) => handleFilterChange({ isBrokerage: e.target.value })}
+              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+            >
+              <option value="">הכל</option>
+              <option value="false">ישיר (ללא תיווך)</option>
+              <option value="true">יד 2 תיווך</option>
+            </select>
+
+            {(filters.search || filters.city || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive || filters.isBrokerage || filters.amenities.length > 0) && (
               <button
                 onClick={clearFilters}
                 className="px-4 py-3 text-brand-primary border border-brand-primary rounded-lg hover:bg-brand-primary hover:text-white transition-colors"
@@ -427,12 +442,13 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">נכס</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מיקום</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מחיר</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">חדרים</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">שטח</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סטטוס</th>
+                                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">נכס</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מיקום</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מחיר</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">חדרים</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">שטח</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סטטוס</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מקור</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -463,6 +479,18 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
                           }`}>
                             {property.is_active ? 'פעיל' : 'לא פעיל'}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {property.source && property.source.includes('יד 2 תיווך') ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
+                              <Building2 className="h-3 w-3" />
+                              יד 2 תיווך
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                              ישיר
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

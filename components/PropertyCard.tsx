@@ -1,5 +1,5 @@
 import { type ExtendedProperty } from '../types/property';
-import { Calendar, MapPin, Phone, Clock, Info } from 'lucide-react';
+import { Calendar, MapPin, Phone, Clock, Info, Building2 } from 'lucide-react';
 
 interface PropertyCardProps {
   item: ExtendedProperty;
@@ -33,6 +33,9 @@ export default function PropertyCard({ item }: PropertyCardProps) {
   };
 
   const amenities = getAmenitiesList();
+  
+  // Check if this is a brokerage property
+  const isBrokerage = item.source && item.source.includes('יד 2 תיווך');
 
   return (
     <div className="overflow-hidden rounded-lg border border-brand-border bg-white shadow-sm hover:shadow-md transition-shadow">
@@ -45,11 +48,19 @@ export default function PropertyCard({ item }: PropertyCardProps) {
         )}
         
         {/* Status Badge */}
-        {item.status && (
-          <div className="absolute top-2 right-2 rounded-md bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
-            {item.status}
-          </div>
-        )}
+        <div className="absolute top-2 right-2 flex gap-2">
+          {item.status && (
+            <div className="rounded-md bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
+              {item.status}
+            </div>
+          )}
+          {isBrokerage && (
+            <div className="rounded-md bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800 flex items-center gap-1">
+              <Building2 className="h-3 w-3" />
+              תיווך
+            </div>
+          )}
+        </div>
         
         {/* Images Count */}
         {item.images && item.images.length > 1 && (
