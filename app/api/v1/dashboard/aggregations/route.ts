@@ -1,61 +1,110 @@
 import { cookies } from 'next/headers'
-import { NextResponse, NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
 
-function aggregate<T>(rows: T[], getLabel: (r: T) => string | number | null | undefined) {
-  const map = new Map<string, number>()
-  for (const r of rows) {
-    const labelRaw = getLabel(r)
-    const label = labelRaw === null || labelRaw === undefined || labelRaw === '' ? 'לא צוין' : String(labelRaw)
-    map.set(label, (map.get(label) || 0) + 1)
-  }
-  return Array.from(map.entries()).map(([label, value]) => ({ label, value }))
-}
-
-export async function GET(req: NextRequest){
+export async function GET(){
   const cookie = cookies().get('sb-access-token')?.value
   const userId = getUserIdFromSupabaseCookie(cookie)
   if(!userId) return NextResponse.json({ error:{ code:'NO_SESSION' } }, { status: 401 })
+  
   const sb = supabaseService()
-  const { searchParams } = new URL(req.url)
-  const entity = searchParams.get('entity') || 'properties' // properties|leads|messages
-  const dim = searchParams.get('dim') || 'city' // city|rooms|status|preferred_city|preferred_rooms
-  const range = searchParams.get('range') || '7d' // 7d|30d
-
-  const since = new Date(Date.now() - (range==='30d' ? 30 : 7)*24*60*60*1000).toISOString()
 
   // Resolve org
   const { data: user } = await sb.from('users').select('org_id').eq('id', userId).maybeSingle()
   if(!user) return NextResponse.json({ error:{ code:'NO_USER' } }, { status: 401 })
   const orgId = user.org_id
 
-  if(entity === 'properties'){
-    const { data, error } = await sb.from('properties').select('city, rooms, created_at').eq('org_id', orgId).gte('created_at', since).limit(5000)
-    if(error) return NextResponse.json({ error:{ code:'DB', message: error.message } }, { status: 500 })
-    if(dim === 'city') return NextResponse.json({ series: aggregate(data || [], r => (r as any).city).slice(0,10) })
-    if(dim === 'rooms') return NextResponse.json({ series: aggregate(data || [], r => (r as any).rooms).slice(0,12) })
-  }
+  try {
+    // Get all properties data
+    const { data: properties, error: propsError } = await sb
+      .from('properties')
+      .select('city, price, sqm, is_active, created_at')
+      .eq('org_id', orgId)
+      .limit(5000)
 
-  if(entity === 'leads'){
-    const { data, error } = await sb.from('leads').select('preferred_cities, preferred_rooms, created_at').eq('org_id', orgId).gte('created_at', since).limit(5000)
-    if(error) return NextResponse.json({ error:{ code:'DB', message: error.message } }, { status: 500 })
-    if(dim === 'preferred_city'){
-      const flat: any[] = []
-      for(const r of data || []){
-        const arr = (r as any).preferred_cities as string[] | null
-        if(Array.isArray(arr)) arr.forEach(c => flat.push({ city: c }))
-      }
-      return NextResponse.json({ series: aggregate(flat, r => (r as any).city).slice(0,10) })
+    if(propsError) throw propsError
+
+    // Calculate aggregations
+    const propertiesData = properties || []
+    
+    // Properties by city
+    const cityMap = new Map<string, number>()
+    propertiesData.forEach(p => {
+      const city = p.city || 'לא צוין'
+      cityMap.set(city, (cityMap.get(city) || 0) + 1)
+    })
+    const properties_by_city = Array.from(cityMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+
+    // Price ranges
+    const priceRanges = [
+      { range: '0-3,000', count: 0 },
+      { range: '3,000-5,000', count: 0 },
+      { range: '5,000-7,000', count: 0 },
+      { range: '7,000+', count: 0 }
+    ]
+    
+    propertiesData.forEach(p => {
+      const price = p.price || 0
+      if (price <= 3000) priceRanges[0].count++
+      else if (price <= 5000) priceRanges[1].count++
+      else if (price <= 7000) priceRanges[2].count++
+      else priceRanges[3].count++
+    })
+
+    // Stats
+    const properties_total = propertiesData.length
+    const active_properties = propertiesData.filter(p => p.is_active).length
+    const avg_price = properties_total > 0 
+      ? Math.round(propertiesData.reduce((sum, p) => sum + (p.price || 0), 0) / properties_total)
+      : 0
+    const avg_size = properties_total > 0 
+      ? Math.round(propertiesData.reduce((sum, p) => sum + (p.sqm || 0), 0) / properties_total)
+      : 0
+
+    // Weekly activity (last 7 days)
+    const now = new Date()
+    const weekly_activity = []
+    const dayNames = ['ש', 'א', 'ב', 'ג', 'ד', 'ה', 'ו']
+    
+    for(let i = 6; i >= 0; i--) {
+      const date = new Date(now)
+      date.setDate(date.getDate() - i)
+      const dayStart = new Date(date)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(date)
+      dayEnd.setHours(23, 59, 59, 999)
+      
+      const propertiesCount = propertiesData.filter(p => {
+        const created = new Date(p.created_at)
+        return created >= dayStart && created <= dayEnd
+      }).length
+
+      weekly_activity.push({
+        day: dayNames[date.getDay()],
+        properties: propertiesCount,
+        leads: 0, // Could add leads data here
+        messages: 0 // Could add messages data here
+      })
     }
-    if(dim === 'preferred_rooms') return NextResponse.json({ series: aggregate(data || [], r => (r as any).preferred_rooms).slice(0,12) })
-  }
 
-  if(entity === 'messages'){
-    const { data, error } = await sb.from('messages').select('status, created_at').eq('org_id', orgId).gte('created_at', since).limit(5000)
-    if(error) return NextResponse.json({ error:{ code:'DB', message: error.message } }, { status: 500 })
-    if(dim === 'status') return NextResponse.json({ series: aggregate(data || [], r => (r as any).status) })
-  }
+    return NextResponse.json({
+      properties_by_city,
+      price_ranges: priceRanges,
+      properties_total,
+      active_properties,
+      avg_price,
+      avg_size,
+      weekly_activity
+    })
 
-  return NextResponse.json({ series: [] })
+  } catch (error: any) {
+    console.error('Error fetching dashboard analytics:', error)
+    return NextResponse.json({ 
+      error: { code: 'DB', message: error.message } 
+    }, { status: 500 })
+  }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   Users, 
@@ -12,7 +12,8 @@ import {
   Eye,
   BarChart3,
   PieChart,
-  Activity
+  Activity,
+  Loader2
 } from 'lucide-react';
 import ModernKpiCard from './ModernKpiCard';
 import CompactChart from './CompactChart';
@@ -23,10 +24,21 @@ interface DashboardData {
     leads_last_7d?: number;
     matches_waiting?: number;
     import_errors_7d?: number;
+    response_rate_7d?: number;
     median_response_minutes?: string | number;
+    user_role?: string;
+    user_name?: string;
   };
   needs_attention?: {
     failed_messages?: any[];
+  };
+  analytics?: {
+    properties_by_city?: Array<{name: string, value: number}>;
+    price_ranges?: Array<{range: string, count: number}>;
+    properties_total?: number;
+    avg_price?: number;
+    avg_size?: number;
+    active_properties?: number;
   };
 }
 
@@ -36,27 +48,44 @@ interface ModernDashboardProps {
 
 export default function ModernDashboard({ data }: ModernDashboardProps) {
   const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const k = data?.kpis || {};
 
-  // Mock data for charts - in real app this would come from API
-  const propertiesByCity = [
-    { name: 'קרית ביאליק', value: 3, color: '#F2811D' },
-    { name: 'תל אביב', value: 0, color: '#F27127' },
-    { name: 'רמת גן', value: 0, color: '#732002' }
+  // Fetch additional analytics data
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const response = await fetch('/api/v1/dashboard/aggregations');
+        if (response.ok) {
+          const analyticsData = await response.json();
+          setAnalytics(analyticsData);
+        }
+      } catch (error) {
+        console.error('Error fetching analytics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, []);
+
+  // Real data from API or fallback to defaults
+  const propertiesByCity = analytics?.properties_by_city || [
+    { name: 'אין נתונים', value: 0, color: '#F2811D' }
   ];
 
-  const priceRanges = [
-    { range: '2000-4000', count: 2, color: '#F2811D' },
-    { range: '4000-6000', count: 1, color: '#F27127' },
-    { range: '6000+', count: 1, color: '#732002' }
+  const priceRanges = analytics?.price_ranges || [
+    { range: 'אין נתונים', count: 0, color: '#F2811D' }
   ];
 
-  const weeklyActivity = [
-    { day: 'א', properties: 1, leads: 0, messages: 0 },
+  const weeklyActivity = analytics?.weekly_activity || [
+    { day: 'א', properties: 0, leads: 0, messages: 0 },
     { day: 'ב', properties: 0, leads: 0, messages: 0 },
-    { day: 'ג', properties: 1, leads: 0, messages: 0 },
+    { day: 'ג', properties: 0, leads: 0, messages: 0 },
     { day: 'ד', properties: 0, leads: 0, messages: 0 },
-    { day: 'ה', properties: 1, leads: 0, messages: 0 },
+    { day: 'ה', properties: 0, leads: 0, messages: 0 },
     { day: 'ו', properties: 0, leads: 0, messages: 0 },
     { day: 'ש', properties: 0, leads: 0, messages: 0 }
   ];
@@ -98,70 +127,104 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <ModernKpiCard
-          title="נכסים פעילים"
-          value="3"
-          change="+3 השבוע"
-          trend="up"
-          icon={Home}
-          color="blue"
-          href="/properties"
-        />
-        <ModernKpiCard
-          title="לידים חדשים"
-          value={k.leads_last_7d?.toString() || '0'}
-          change="7 ימים אחרונים"
-          trend="neutral"
-          icon={Users}
-          color="green"
-          href="/leads"
-        />
-        <ModernKpiCard
-          title="התאמות ממתינות"
-          value={k.matches_waiting?.toString() || '0'}
-          change="צריך טיפול"
-          trend="neutral"
-          icon={TrendingUp}
-          color="purple"
-          href="/matches"
-        />
-        <ModernKpiCard
-          title="הודעות היום"
-          value="0"
-          change="תגובה ממוצעת"
-          trend="neutral"
-          icon={MessageSquare}
-          color="orange"
-          href="/inbox"
-        />
+        {loading ? (
+          // Loading skeletons
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
+              <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+            </div>
+          ))
+        ) : (
+          <>
+            <ModernKpiCard
+              title="נכסים פעילים"
+              value={analytics?.active_properties?.toString() || '0'}
+              change={`מתוך ${analytics?.properties_total || 0} סה״כ`}
+              trend={analytics?.active_properties > 0 ? "up" : "neutral"}
+              icon={Home}
+              color="blue"
+              href="/properties"
+            />
+            <ModernKpiCard
+              title="לידים חדשים"
+              value={k.leads_last_7d?.toString() || '0'}
+              change="7 ימים אחרונים"
+              trend={k.leads_last_7d > 0 ? "up" : "neutral"}
+              icon={Users}
+              color="green"
+              href="/leads"
+            />
+            <ModernKpiCard
+              title="התאמות ממתינות"
+              value={k.matches_waiting?.toString() || '0'}
+              change="צריך טיפול"
+              trend={k.matches_waiting > 0 ? "attention" : "neutral"}
+              icon={TrendingUp}
+              color="purple"
+              href="/matches"
+            />
+            <ModernKpiCard
+              title="שגיאות יבוא"
+              value={k.import_errors_7d?.toString() || '0'}
+              change="7 ימים אחרונים"
+              trend={k.import_errors_7d > 0 ? "down" : "neutral"}
+              icon={MessageSquare}
+              color="orange"
+              href="/inbox"
+            />
+          </>
+        )}
       </div>
 
       {/* Charts Grid */}
       {viewMode === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Properties by City */}
-          <CompactChart
-            title="נכסים לפי עיר"
-            type="pie"
-            data={propertiesByCity}
-            height={200}
-          />
+          {loading ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
+              <div className="h-40 bg-gray-200 rounded"></div>
+            </div>
+          ) : (
+            <CompactChart
+              title="נכסים לפי עיר"
+              type="pie"
+              data={propertiesByCity}
+              height={200}
+            />
+          )}
           
           {/* Price Ranges */}
-          <CompactChart
-            title="טווחי מחירים"
-            type="bar"
-            data={priceRanges.map(item => ({ name: item.range, value: item.count }))}
-            height={200}
-          />
+          {loading ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
+              <div className="h-40 bg-gray-200 rounded"></div>
+            </div>
+          ) : (
+            <CompactChart
+              title="טווחי מחירים"
+              type="bar"
+              data={priceRanges.map(item => ({ name: item.range, value: item.count }))}
+              height={200}
+            />
+          )}
           
           {/* Weekly Activity */}
-          <CompactChart
-            title="פעילות שבועית"
-            type="line"
-            data={weeklyActivity}
-            height={200}
-          />
+          {loading ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
+              <div className="h-40 bg-gray-200 rounded"></div>
+            </div>
+          ) : (
+            <CompactChart
+              title="פעילות שבועית"
+              type="line"
+              data={weeklyActivity}
+              height={200}
+            />
+          )}
         </div>
       )}
 
@@ -200,7 +263,13 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
             </div>
             <div>
               <p className="text-xs text-brand-inkMuted">שטח ממוצע</p>
-              <p className="text-lg font-bold text-brand-accent">132 מ״ר</p>
+              <p className="text-lg font-bold text-brand-accent">
+                {loading ? (
+                  <span className="animate-pulse bg-gray-200 rounded h-6 w-16 inline-block"></span>
+                ) : (
+                  `${analytics?.avg_size || 0} מ״ר`
+                )}
+              </p>
             </div>
           </div>
         </div>
@@ -212,7 +281,13 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
             </div>
             <div>
               <p className="text-xs text-brand-primaryMuted">מחיר ממוצע</p>
-              <p className="text-lg font-bold text-brand-accent">₪4,900</p>
+              <p className="text-lg font-bold text-brand-accent">
+                {loading ? (
+                  <span className="animate-pulse bg-gray-200 rounded h-6 w-20 inline-block"></span>
+                ) : (
+                  `₪${analytics?.avg_price?.toLocaleString() || 0}`
+                )}
+              </p>
             </div>
           </div>
         </div>
