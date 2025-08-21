@@ -151,7 +151,7 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
               title="לידים חדשים"
               value={k.leads_last_7d?.toString() || '0'}
               change="7 ימים אחרונים"
-              trend={k.leads_last_7d > 0 ? "up" : "neutral"}
+              trend={(k.leads_last_7d || 0) > 0 ? "up" : "neutral"}
               icon={Users}
               color="green"
               href="/leads"
@@ -160,7 +160,7 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
               title="התאמות ממתינות"
               value={k.matches_waiting?.toString() || '0'}
               change="צריך טיפול"
-              trend={k.matches_waiting > 0 ? "attention" : "neutral"}
+              trend={(k.matches_waiting || 0) > 0 ? "up" : "neutral"}
               icon={TrendingUp}
               color="purple"
               href="/matches"
@@ -169,7 +169,7 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
               title="שגיאות יבוא"
               value={k.import_errors_7d?.toString() || '0'}
               change="7 ימים אחרונים"
-              trend={k.import_errors_7d > 0 ? "down" : "neutral"}
+              trend={(k.import_errors_7d || 0) > 0 ? "down" : "neutral"}
               icon={MessageSquare}
               color="orange"
               href="/inbox"
@@ -206,7 +206,7 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
             <CompactChart
               title="טווחי מחירים"
               type="bar"
-              data={priceRanges.map(item => ({ name: item.range, value: item.count }))}
+              data={priceRanges.map((item: any) => ({ name: item.range, value: item.count }))}
               height={200}
             />
           )}

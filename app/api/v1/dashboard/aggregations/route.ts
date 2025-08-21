@@ -49,10 +49,10 @@ export async function GET(){
     
     propertiesData.forEach(p => {
       const price = p.price || 0
-      if (price <= 3000) priceRanges[0].count++
-      else if (price <= 5000) priceRanges[1].count++
-      else if (price <= 7000) priceRanges[2].count++
-      else priceRanges[3].count++
+      if (price <= 3000) priceRanges[0]!.count++
+      else if (price <= 5000) priceRanges[1]!.count++
+      else if (price <= 7000) priceRanges[2]!.count++
+      else priceRanges[3]!.count++
     })
 
     // Stats
