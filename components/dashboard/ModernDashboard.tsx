@@ -56,10 +56,15 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const response = await fetch('/api/v1/dashboard/aggregations');
+        const response = await fetch('/api/v1/dashboard/aggregations', {
+          cache: 'no-store' // Force fresh data
+        });
         if (response.ok) {
           const analyticsData = await response.json();
+          console.log('Dashboard analytics received:', analyticsData);
           setAnalytics(analyticsData);
+        } else {
+          console.error('Failed to fetch analytics:', response.status);
         }
       } catch (error) {
         console.error('Error fetching analytics:', error);
@@ -142,7 +147,7 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
               title="נכסים פעילים"
               value={analytics?.active_properties?.toString() || '0'}
               change={`מתוך ${analytics?.properties_total || 0} סה״כ`}
-              trend={analytics?.active_properties > 0 ? "up" : "neutral"}
+              trend={(analytics?.active_properties || 0) > 0 ? "up" : "neutral"}
               icon={Home}
               color="blue"
               href="/properties"

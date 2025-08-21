@@ -16,17 +16,17 @@ export async function GET(){
   const orgId = user.org_id
 
   try {
-    // Get all properties data
+    // Get all properties data (no limit to show real count)
     const { data: properties, error: propsError } = await sb
       .from('properties')
       .select('city, price, sqm, is_active, created_at, source')
       .eq('org_id', orgId)
-      .limit(5000)
 
     if(propsError) throw propsError
 
     // Calculate aggregations
     const propertiesData = properties || []
+    console.log(`Dashboard aggregations: Found ${propertiesData.length} properties for org ${orgId}`)
     
     // Properties by city
     const cityMap = new Map<string, number>()
