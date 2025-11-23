@@ -202,7 +202,7 @@ export default function LeadFormDialog({
               </button>
 
               <p className="text-xs text-gray-500 text-center">
-                הפרטים שלך יישלחו לסוכן הנדל"ן ונחזור אליך בהקדם
+                הפרטים שלך יישלחו לסוכן הנדל&quot;ן ונחזור אליך בהקדם
               </p>
             </form>
           </>

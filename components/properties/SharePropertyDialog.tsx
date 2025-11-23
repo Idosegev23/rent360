@@ -36,6 +36,7 @@ export default function SharePropertyDialog({
     if (isOpen) {
       fetchOrCreateShare();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, propertyId]);
 
   const fetchOrCreateShare = async () => {
