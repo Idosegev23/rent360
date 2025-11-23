@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { type ExtendedProperty } from '../../../types/property'
-import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight } from 'lucide-react'
+import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight, Share2 } from 'lucide-react'
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
+import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
 
 async function fetchProperty(id: string): Promise<ExtendedProperty | null> {
   try {
@@ -44,6 +45,7 @@ function getAmenitiesDisplay(amenities: any) {
 export default function PropertyPage({ params }: { params: { id: string } }) {
   const [item, setItem] = useState<ExtendedProperty | null>(null)
   const [loading, setLoading] = useState(true)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -108,11 +110,20 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-3xl font-bold leading-tight text-gray-900">{item.title}</h1>
-          {item.status && (
-            <div className="inline-block rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-800 shadow-sm">
-              {item.status}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShareDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors shadow-sm"
+            >
+              <Share2 className="h-4 w-4" />
+              <span>שתף נכס</span>
+            </button>
+            {item.status && (
+              <div className="inline-block rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-800 shadow-sm">
+                {item.status}
+              </div>
+            )}
+          </div>
         </div>
         
         {/* Quick Info Bar */}
@@ -310,6 +321,14 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
+
+      {/* Share Dialog */}
+      <SharePropertyDialog
+        propertyId={params.id}
+        propertyTitle={item.title}
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+      />
     </main>
   )
 }

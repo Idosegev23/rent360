@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation'
 const tabs = [
   { href: '/dashboard', label: 'דשבורד' },
   { href: '/properties', label: 'נכסים' },
+  { href: '/approved-properties', label: 'מאושרים' },
   { href: '/leads', label: 'לידים' },
+  { href: '/whatsapp-leads', label: 'וואטסאפ' },
   { href: '/matches', label: 'התאמות' },
   { href: '/inbox', label: 'הודעות' },
 ]

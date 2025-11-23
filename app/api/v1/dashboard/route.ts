@@ -17,16 +17,25 @@ export async function GET(){
   const since7 = new Date(Date.now() - 7*24*60*60*1000).toISOString()
   const today = new Date(); today.setHours(0,0,0,0)
 
-  const [leads7, matchesPending, importsErr] = await Promise.all([
+  const [leads7, matchesPending, importsErr, approvedPropsCount, approvedPropsActive] = await Promise.all([
     sb.from('leads').select('id', { count:'exact', head:true }).eq('org_id', orgId).gte('created_at', since7),
     sb.from('matches').select('id', { count:'exact', head:true }).eq('org_id', orgId).in('status', ['suggested','pending']),
-    sb.from('imports').select('failed', { count:'exact' }).eq('org_id', orgId).gte('ran_at', since7)
+    sb.from('imports').select('failed', { count:'exact' }).eq('org_id', orgId).gte('ran_at', since7),
+    // Count approved properties
+    sb.from('approved_properties').select('id', { count:'exact', head:true }).eq('org_id', orgId),
+    // Count active approved properties (where the property is also active)
+    sb.from('approved_properties')
+      .select('property_id', { count:'exact', head:true })
+      .eq('org_id', orgId)
+      .not('property_id', 'is', null)
   ])
 
   const kpis = {
     leads_last_7d: leads7.count || 0,
     matches_waiting: matchesPending.count || 0,
     import_errors_7d: (importsErr.data||[]).reduce((a:any,b:any)=>a+(b.failed||0),0),
+    approved_properties: approvedPropsCount.count || 0,
+    active_approved_properties: approvedPropsActive.count || 0,
     response_rate_7d: null,
     median_response_minutes: null,
     user_role: user.role,

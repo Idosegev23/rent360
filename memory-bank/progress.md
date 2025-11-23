@@ -6,12 +6,15 @@
 - הודעות: שליחת WhatsApp דרך GreenAPI, רישום בטבלת messages.
 - Auth: Supabase Auth, Login/Change Password, Middleware.
 - **נכסים מורחבים**: תמיכה בנתונים מוכנים מ-scraping (סטטוס, תאריך פינוי, קשר, timeline, גלריה, metadata).
+- **Inbound Webhook**: נוסף מסלול OpenAPI ל‑`/webhooks/leads-ingest` + פונקציית Edge `leads-ingest` (אימות Bearer, נרמול טלפון E.164, פרסינג price_range, מיפוי העדפות, upsert ל‑leads, דה‑דופ לפי (org_id, source_id, phone)).
+- **לידים מוואטסאפ**: טבלת `whatsapp_leads`, API endpoint `/api/v1/whatsapp/leads` לקליטת JSON מבוט, מנוע התאמה מתקדם `WhatsAppMatcher`, UI לניהול לידים מוואטסאפ עם חיפוש התאמות.
 
 ## מה נשאר
 - Template Editor והגדרות ברמת ארגון; ניהול תבניות הודעה.
 - Import Wizard מלא + דוחות + **אינטגרציה עם נתונים מוכנים מ-scraping**.
 - Matches גלובלי; Inbox מאוחד.
 - מסך Admin לניהול משתמשים/תפקידים/מפתחות API.
+ - הנפקת טוקן ייעודי ל‑LeadMeCMS, פרסום URL והדרכת קונפיג.
 
 ## נוסף לאחרונה (השדות החדשים)
 - **מיגרציה 0002**: השדות החדשים בטבלת properties - status, evacuation_date, contact_name/phone, timeline, full_text, scraped_metadata.

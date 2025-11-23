@@ -16,11 +16,41 @@ export async function GET(){
   const orgId = user.org_id
 
   try {
-    // Get all properties data (override default 1000 limit)
+    // Get only approved properties data
+    // First get approved property IDs
+    const { data: approvedProps } = await sb
+      .from('approved_properties')
+      .select('property_id')
+      .eq('org_id', orgId)
+    
+    const approvedPropertyIds = approvedProps?.map(ap => ap.property_id) || []
+    
+    if (approvedPropertyIds.length === 0) {
+      // No approved properties yet, return empty data
+      return NextResponse.json({
+        properties_by_city: [],
+        price_ranges: [
+          { range: '0-3,000', count: 0 },
+          { range: '3,000-5,000', count: 0 },
+          { range: '5,000-7,000', count: 0 },
+          { range: '7,000+', count: 0 }
+        ],
+        properties_total: 0,
+        active_properties: 0,
+        brokerage_properties: 0,
+        direct_properties: 0,
+        avg_price: 0,
+        avg_size: 0,
+        weekly_activity: []
+      })
+    }
+    
+    // Get all approved properties data
     const { data: properties, error: propsError, count } = await sb
       .from('properties')
       .select('city, price, sqm, is_active, created_at, source', { count: 'exact' })
       .eq('org_id', orgId)
+      .in('id', approvedPropertyIds)
       .limit(10000) // Set high limit to get all properties
 
     if(propsError) throw propsError

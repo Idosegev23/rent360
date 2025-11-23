@@ -24,6 +24,8 @@ interface DashboardData {
     leads_last_7d?: number;
     matches_waiting?: number;
     import_errors_7d?: number;
+    approved_properties?: number;
+    active_approved_properties?: number;
     response_rate_7d?: number;
     median_response_minutes?: string | number;
     user_role?: string;
@@ -144,13 +146,13 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
         ) : (
           <>
             <ModernKpiCard
-              title="נכסים פעילים"
-              value={analytics?.active_properties?.toString() || '0'}
-              change={`מתוך ${analytics?.properties_total || 0} סה״כ`}
-              trend={(analytics?.active_properties || 0) > 0 ? "up" : "neutral"}
+              title="נכסים מאושרים"
+              value={k.approved_properties?.toString() || '0'}
+              change={`${k.active_approved_properties || 0} פעילים`}
+              trend={(k.approved_properties || 0) > 0 ? "up" : "neutral"}
               icon={Home}
               color="blue"
-              href="/properties"
+              href="/approved-properties"
             />
             <ModernKpiCard
               title="לידים חדשים"

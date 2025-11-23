@@ -38,7 +38,10 @@ interface PropertiesResponse {
   pagination: PaginationInfo;
 }
 
-interface ModernPropertiesPageProps {}
+interface ModernPropertiesPageProps {
+  apiEndpoint?: string;
+  pageTitle?: string;
+}
 
 interface FilterState {
   search: string;
@@ -52,7 +55,10 @@ interface FilterState {
   isBrokerage: string;
 }
 
-export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
+export default function ModernPropertiesPage({
+  apiEndpoint = '/api/v1/properties',
+  pageTitle = 'נכסים'
+}: ModernPropertiesPageProps) {
   const [properties, setProperties] = useState<ExtendedProperty[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
@@ -96,7 +102,7 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
       if (currentFilters.amenities.length > 0) searchParams.set('amenities', currentFilters.amenities.join(','));
       if (currentFilters.isBrokerage) searchParams.set('is_brokerage', currentFilters.isBrokerage);
 
-      const response = await fetch(`/api/v1/properties?${searchParams}`);
+      const response = await fetch(`${apiEndpoint}?${searchParams}`);
       if (!response.ok) throw new Error('Failed to fetch properties');
       
       const data: PropertiesResponse = await response.json();
@@ -183,7 +189,7 @@ export default function ModernPropertiesPage({}: ModernPropertiesPageProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">נכסים</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{pageTitle}</h1>
           <p className="text-gray-600 mt-1">ניהול וצפייה בנכסי השכירות</p>
         </div>
         <Link 
