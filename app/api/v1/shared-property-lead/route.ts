@@ -82,12 +82,12 @@ export async function POST(req: NextRequest) {
         contactName: property.contact_name,
         contactPhone: property.contact_phone,
         // Internal app link
-        appUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/properties/${property.id}`,
+        appUrl: `${req.headers.get('x-forwarded-proto') || 'http'}://${req.headers.get('host') || 'localhost:3000'}/properties/${property.id}`,
       },
       // Share context
       share: {
         token: shareToken,
-        sharedUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/share/${shareToken}`,
+        sharedUrl: `${req.headers.get('x-forwarded-proto') || 'http'}://${req.headers.get('host') || 'localhost:3000'}/share/${shareToken}`,
       },
     };
 

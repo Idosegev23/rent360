@@ -44,9 +44,14 @@ export async function POST(
     .maybeSingle()
   
   if(existingShare) {
+    // Get current domain from request
+    const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const host = req.headers.get('host') || 'localhost:3000';
+    const baseUrl = `${protocol}://${host}`;
+    
     return NextResponse.json({
       share: existingShare,
-      url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/share/${existingShare.token}`
+      url: `${baseUrl}/share/${existingShare.token}`
     })
   }
   
@@ -96,9 +101,14 @@ export async function POST(
     return NextResponse.json({ error: { code: 'CREATE_FAILED', message: error.message } }, { status: 500 })
   }
   
+  // Get current domain from request
+  const protocol = req.headers.get('x-forwarded-proto') || 'http';
+  const host = req.headers.get('host') || 'localhost:3000';
+  const baseUrl = `${protocol}://${host}`;
+  
   return NextResponse.json({
     share: newShare,
-    url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/share/${newShare.token}`
+    url: `${baseUrl}/share/${newShare.token}`
   }, { status: 201 })
 }
 
@@ -132,9 +142,14 @@ export async function GET(
     return NextResponse.json({ share: null })
   }
   
+  // Get current domain from request
+  const protocol = req.headers.get('x-forwarded-proto') || 'http';
+  const host = req.headers.get('host') || 'localhost:3000';
+  const baseUrl = `${protocol}://${host}`;
+  
   return NextResponse.json({
     share,
-    url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/share/${share.token}`
+    url: `${baseUrl}/share/${share.token}`
   })
 }
 
