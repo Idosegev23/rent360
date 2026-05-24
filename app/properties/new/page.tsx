@@ -7,7 +7,8 @@ import { useAddressSearch } from '../../../lib/hooks/useAddressSearch'
 import { useDraftAutosave, loadDraft, clearDraft } from '../../../lib/hooks/useDraftAutosave'
 import {
   ArrowRight, User, Phone, MapPin, Home, Ruler, Building, Calendar, Camera,
-  Check, Loader2, AlertCircle, X, Sparkles, Search, Save,
+  Check, Loader2, AlertCircle, X, Sparkles, Search, Save, Wand2, RotateCcw,
+  ClipboardPaste, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 type Amenities = {
@@ -123,6 +124,38 @@ export default function NewPropertyPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [descriptionImproved, setDescriptionImproved] = useState(false)
+
+  // Smart-paste extraction state
+  function applyExtracted(d: any) {
+    if (!d || typeof d !== 'object') return
+    setForm(v => {
+      const next = { ...v }
+      const cityVal = typeof d.city === 'string' ? d.city : ''
+      if (cityVal) {
+        if (CITIES.includes(cityVal)) next.city = cityVal
+        else { next.city = '__other__'; next.customCity = cityVal }
+      }
+      if (typeof d.contact_name === 'string' && d.contact_name) next.contact_name = d.contact_name
+      if (typeof d.contact_phone === 'string' && d.contact_phone) next.contact_phone = d.contact_phone
+      if (typeof d.neighborhood === 'string' && d.neighborhood) next.neighborhood = d.neighborhood
+      if (typeof d.street === 'string' && d.street) next.street = d.street
+      if (typeof d.floor === 'number') next.floor = String(d.floor)
+      if (typeof d.rooms === 'number') next.rooms = String(d.rooms)
+      if (typeof d.sqm === 'number') next.sqm = String(d.sqm)
+      if (typeof d.price === 'number') next.price = String(d.price)
+      if (typeof d.available_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.available_from)) {
+        next.available_from = d.available_from
+      }
+      if (typeof d.description === 'string' && d.description) next.description = d.description
+      if (typeof d.pets_allowed === 'boolean') next.pets_allowed = d.pets_allowed
+      if (typeof d.smokers_allowed === 'boolean') next.smokers_allowed = d.smokers_allowed
+      return next
+    })
+    if (d.amenities && typeof d.amenities === 'object') {
+      setAmenities(prev => ({ ...prev, ...d.amenities }))
+    }
+  }
 
   function addFiles(list: FileList | null) {
     if (!list) return
@@ -199,8 +232,9 @@ export default function NewPropertyPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error?.message || data?.error?.code || 'שמירה נכשלה')
       clearDraft(DRAFT_KEY)
+      setDescriptionImproved(Boolean(data.description_improved))
       setSuccess(true)
-      setTimeout(() => router.push(autoApprove ? '/approved-properties' : '/properties'), 800)
+      setTimeout(() => router.push(autoApprove ? '/approved-properties' : '/properties'), data.description_improved ? 1500 : 800)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שמירה נכשלה')
     } finally {
@@ -215,6 +249,12 @@ export default function NewPropertyPage() {
           <Check className="h-8 w-8 text-emerald-600" />
         </div>
         <h2 className="text-xl font-bold">הנכס נוסף בהצלחה 🎉</h2>
+        {descriptionImproved && (
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1 text-xs text-purple-700">
+            <Sparkles className="h-3.5 w-3.5" />
+            התיאור נוקה אוטומטית עם AI
+          </div>
+        )}
         <p className="text-sm text-gray-600 mt-2">{autoApprove ? 'מועבר לדף נכסים מאושרים...' : 'מועבר לדף נכסים...'}</p>
       </div>
     )
@@ -235,6 +275,8 @@ export default function NewPropertyPage() {
       </p>
 
       <form onSubmit={onSubmit} className="space-y-6">
+        <SmartPastePanel onExtracted={applyExtracted} />
+
         {/* Section: Landlord */}
         <Section title="בעל הנכס" icon={<User className="h-5 w-5" />}>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -423,15 +465,10 @@ export default function NewPropertyPage() {
 
         {/* Section: Description */}
         <Section title="תיאור" icon={<Building className="h-5 w-5" />}>
-          <Field label="תיאור חופשי" hint="מה שהבוט יכול להשתמש בו בשיחות עם בעלי דירות + שוכרים">
-            <textarea
-              value={form.description}
-              onChange={e => setForm(v => ({ ...v, description: e.target.value }))}
-              rows={4}
-              placeholder="דירה משופצת, מטבח חדש, נוף לים, חניה בטאבו..."
-              className="input"
-            />
-          </Field>
+          <DescriptionWithAi
+            value={form.description}
+            onChange={description => setForm(v => ({ ...v, description }))}
+          />
         </Section>
 
         {/* Section: Images */}
@@ -536,6 +573,247 @@ export default function NewPropertyPage() {
         }
       `}</style>
     </div>
+  )
+}
+
+function SmartPastePanel({ onExtracted }: { onExtracted: (data: any) => void }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [lastCount, setLastCount] = useState<number | null>(null)
+
+  async function handleExtract() {
+    if (loading || !text.trim()) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/v1/ai/extract-property', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error?.message || 'חילוץ נכשל')
+      onExtracted(data.data || {})
+      setLastCount(data.fieldCount || 0)
+      // Keep panel open so the employee can see how many fields were filled
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'חילוץ נכשל')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <section className="rounded-lg border-2 border-dashed border-purple-300 bg-purple-50/50 p-4">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 text-right"
+      >
+        <div className="flex items-center gap-2">
+          <div className="rounded-full bg-purple-100 p-1.5">
+            <ClipboardPaste className="h-4 w-4 text-purple-700" />
+          </div>
+          <div>
+            <div className="font-semibold text-purple-900">מילוי אוטומטי מטקסט עם AI</div>
+            <div className="text-xs text-purple-700">
+              {lastCount !== null
+                ? `✓ מולאו ${lastCount} שדות — בדוק והגש`
+                : 'הדבק מודעה / הודעה / הערות והבוט ימלא את כל הטופס'
+              }
+            </div>
+          </div>
+        </div>
+        {open ? <ChevronUp className="h-5 w-5 text-purple-700" /> : <ChevronDown className="h-5 w-5 text-purple-700" />}
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            rows={6}
+            placeholder={`לדוגמה:\nיש לי דירה ברחוב הרצל 23 בקריית מוצקין, 3.5 חדרים, 75 מ"ר, קומה 2, מבוקש 4500 לחודש. יש מעלית וחניה, אפשר חיות מחמד. בעלים: דני 050-1234567. פנוי מ-1.7.`}
+            className="input text-sm"
+            disabled={loading}
+          />
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-xs text-purple-700">
+              {text.length > 0 && `${text.length} תווים`}
+              {text.length > 8000 && <span className="text-red-600"> (מקסימום 8000)</span>}
+            </div>
+            <div className="flex gap-2">
+              {text && (
+                <button
+                  type="button"
+                  onClick={() => { setText(''); setError(null); setLastCount(null) }}
+                  disabled={loading}
+                  className="rounded-md border border-purple-200 bg-white px-3 py-1.5 text-sm text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+                >
+                  נקה
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleExtract}
+                disabled={loading || !text.trim() || text.length > 8000}
+                className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                {loading ? 'מנתח...' : 'נתח ומלא טופס'}
+              </button>
+            </div>
+          </div>
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800 flex items-start gap-1">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              {error}
+            </div>
+          )}
+          {lastCount !== null && !error && (
+            <div className="text-xs text-purple-700 bg-purple-100 rounded-md p-2">
+              💡 השדות שמולאו נשמרים כטיוטה אוטומטית. אפשר לערוך כל שדה לפני שמירה.
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function DescriptionWithAi({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [improving, setImproving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [improved, setImproved] = useState<string | null>(null)
+  const [originalSnapshot, setOriginalSnapshot] = useState<string | null>(null)
+
+  async function handleImprove() {
+    setError(null)
+    setImproved(null)
+    const text = value.trim()
+    if (text.length < 10) {
+      setError('כתוב לפחות משפט קצר לפני שיפור')
+      return
+    }
+    setImproving(true)
+    try {
+      const res = await fetch('/api/v1/ai/improve-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, kind: 'description' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error?.message || 'שיפור נכשל')
+      setImproved(data.improved)
+      setOriginalSnapshot(text)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שיפור נכשל')
+    } finally {
+      setImproving(false)
+    }
+  }
+
+  function accept() {
+    if (improved) onChange(improved)
+    setImproved(null)
+    // Keep `originalSnapshot` so the "שחזר טקסט מקורי" button stays visible
+    // until the user either reverts, navigates away, or edits the field manually.
+  }
+
+  function reject() {
+    setImproved(null)
+    setOriginalSnapshot(null)
+  }
+
+  function revertToOriginal() {
+    if (originalSnapshot !== null) {
+      onChange(originalSnapshot)
+      setImproved(null)
+      setOriginalSnapshot(null)
+    }
+  }
+
+  return (
+    <Field label="תיאור חופשי" hint="הטקסט מנוקה אוטומטית עם AI בשמירה. אפשר גם להעתיק טקסט גולמי ולשפר ידנית בלחיצה למטה.">
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        rows={5}
+        placeholder="דירה משופצת, מטבח חדש, נוף לים, חניה בטאבו..."
+        className="input"
+      />
+
+      <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={handleImprove}
+          disabled={improving || !value.trim()}
+          className="inline-flex items-center gap-1.5 rounded-md border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+        >
+          {improving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+          {improving ? 'משפר...' : 'שפר עם AI'}
+        </button>
+        {originalSnapshot !== null && !improved && (
+          <button
+            type="button"
+            onClick={revertToOriginal}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            שחזר טקסט מקורי
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800 flex items-start gap-1">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {improved && (
+        <div className="mt-3 rounded-md border border-purple-200 bg-purple-50/50 p-3">
+          <div className="text-xs text-purple-700 font-medium mb-2 flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
+            הצעת שיפור — השווה והחלט
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">מקור</div>
+              <div className="rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-auto">
+                {value}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-purple-600 uppercase tracking-wide mb-1">משופר</div>
+              <div className="rounded border border-purple-300 bg-white p-2 text-xs text-gray-900 whitespace-pre-wrap max-h-40 overflow-auto">
+                {improved}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={accept}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700"
+            >
+              <Check className="h-4 w-4" />
+              החלף לטקסט המשופר
+            </button>
+            <button
+              type="button"
+              onClick={reject}
+              className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
+    </Field>
   )
 }
 

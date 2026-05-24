@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../../lib/auth'
+import { embedInBackground, embedPropertyIfChanged } from '../../../../../../lib/ai/embeddings'
 
 // Manual approval flow: agent confirms brokerage with the owner over the phone
 // and clicks "אשר תיווך" — adds the property to approved_properties with approval_method='manual'.
@@ -44,6 +45,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: { code: 'INSERT_FAILED', message: error.message } }, { status: 500 })
   }
 
+  // Approval is the *only* trigger that lets a property into the RAG index.
+  // Fire-and-forget so we don't block the UI response on OpenAI latency.
+  embedInBackground(() => embedPropertyIfChanged(propertyId), `approve:${propertyId}`)
+
   return NextResponse.json({ ok: true, status: 'approved', approval: inserted })
 }
 
@@ -80,9 +85,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: { code: 'DELETE_FAILED', message: delErr.message } }, { status: 500 })
   }
 
+  // Soft-delete: mark inactive AND clear the embedding so this property
+  // disappears from the RAG index. Re-approving regenerates the embedding.
   const { error: updErr } = await sb
     .from('properties')
-    .update({ is_active: false })
+    .update({ is_active: false, embedding: null, embedding_source_hash: null })
     .eq('id', propertyId)
     .eq('org_id', orgId)
   if (updErr) {

@@ -24,10 +24,24 @@ export async function POST(req: NextRequest) {
   const url = new URL(req.url)
   const limit = Math.max(1, Math.min(parseInt(url.searchParams.get('limit') || '50'), 200))
 
+  // Backfill ONLY approved properties — unapproved ones don't get embedded
+  // since the bot never talks about them. Saves OpenAI tokens + keeps the
+  // pgvector index small (= fast).
+  const { data: approvedRows, error: approvedErr } = await sb
+    .from('approved_properties')
+    .select('property_id')
+    .eq('org_id', orgId)
+  if (approvedErr) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: approvedErr.message } }, { status: 500 })
+  const approvedIds = (approvedRows || []).map(r => r.property_id).filter(Boolean) as string[]
+  if (approvedIds.length === 0) {
+    return NextResponse.json({ ok: true, total: 0, embedded: 0, skipped: 0, note: 'no approved properties yet' })
+  }
+
   const { data: properties, error } = await sb
     .from('properties')
     .select('id, title')
     .eq('org_id', orgId)
+    .in('id', approvedIds)
     .is('embedding', null)
     .order('created_at', { ascending: true })
     .limit(limit)

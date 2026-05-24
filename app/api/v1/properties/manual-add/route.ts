@@ -4,6 +4,7 @@ import { supabaseService } from '../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
 import { normalizePhone } from '../../../../../lib/whatsapp/meta-provider'
 import { embedInBackground, embedPropertyIfChanged } from '../../../../../lib/ai/embeddings'
+import { improveTextOrFallback } from '../../../../../lib/ai/text-improve'
 
 /**
  * Employee-facing endpoint to manually add a property the company has already
@@ -48,6 +49,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: { code: 'BAD_PHONE', message: 'מספר טלפון לא תקין' } }, { status: 422 })
   }
 
+  // Auto-improve description before insert (employees often paste messy text).
+  // Fails open: if OpenAI is down, the raw text is kept and `improved=false`
+  // is returned so the UI can show a toast.
+  const rawDescription = body.description ? String(body.description).trim() : ''
+  const skipImprove = body.skip_ai_improve === true
+  const improveResult = (!skipImprove && rawDescription)
+    ? await improveTextOrFallback(rawDescription, 'description')
+    : { text: rawDescription, improved: false }
+  const finalDescription = improveResult.text || null
+
   // Build property payload — every field is optional except the required ones above.
   const now = new Date().toISOString()
   const propertyRow: Record<string, unknown> = {
@@ -64,8 +75,8 @@ export async function POST(req: NextRequest) {
     floor: body.floor !== undefined && body.floor !== '' && body.floor !== null ? Number(body.floor) : null,
     contact_name: String(body.contact_name).trim(),
     contact_phone: phone,
-    description: body.description ? String(body.description).trim() : null,
-    full_text: body.description ? String(body.description).trim() : null,
+    description: finalDescription,
+    full_text: rawDescription || null,
     available_from: body.available_from || null,
     evacuation_date: body.evacuation_date || body.available_from || null,
     amenities: typeof body.amenities === 'object' && body.amenities ? body.amenities : {},
@@ -111,12 +122,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fire-and-forget embedding so RAG works on this property right away.
-  embedInBackground(() => embedPropertyIfChanged(inserted.id), `manual-add:${inserted.id}`)
+  // Embedding fires ONLY when the property is auto-approved. Unapproved
+  // properties stay out of the RAG index (per design — bot only talks
+  // about properties we're actually brokering).
+  if (autoApprove) {
+    embedInBackground(() => embedPropertyIfChanged(inserted.id), `manual-add:${inserted.id}`)
+  }
 
   return NextResponse.json({
     ok: true,
     property_id: inserted.id,
     approved: autoApprove,
+    description_improved: improveResult.improved,
   })
 }
