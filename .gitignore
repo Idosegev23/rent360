@@ -125,3 +125,14 @@ playwright/.cache/
 
 # Sentry
 .sentryclirc
+.vercel
+.env*.local
+
+# Supabase CLI local cache
+supabase/.temp/
+
+# Local scratch / personal exports / handoff notes
+*.xlsx
+*.csv
+SESSION_HANDOFF.md
+rent360-landlord-bot-prompt.txt

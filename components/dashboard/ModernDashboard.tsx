@@ -1,38 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-  TrendingUp, 
-  Users, 
-  Home, 
-  MessageSquare, 
-  AlertTriangle, 
+import {
+  TrendingUp,
+  Home,
+  AlertTriangle,
   Clock,
-  Filter,
   Eye,
   BarChart3,
-  PieChart,
   Activity,
-  Loader2
 } from 'lucide-react';
 import ModernKpiCard from './ModernKpiCard';
 import CompactChart from './CompactChart';
-import NeedsAttention from './NeedsAttention';
 
 interface DashboardData {
   kpis?: {
-    leads_last_7d?: number;
-    matches_waiting?: number;
     import_errors_7d?: number;
     approved_properties?: number;
     active_approved_properties?: number;
-    response_rate_7d?: number;
-    median_response_minutes?: string | number;
     user_role?: string;
     user_name?: string;
-  };
-  needs_attention?: {
-    failed_messages?: any[];
   };
   analytics?: {
     properties_by_city?: Array<{name: string, value: number}>;
@@ -88,13 +75,13 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
   ];
 
   const weeklyActivity = analytics?.weekly_activity || [
-    { day: 'א', properties: 0, leads: 0, messages: 0 },
-    { day: 'ב', properties: 0, leads: 0, messages: 0 },
-    { day: 'ג', properties: 0, leads: 0, messages: 0 },
-    { day: 'ד', properties: 0, leads: 0, messages: 0 },
-    { day: 'ה', properties: 0, leads: 0, messages: 0 },
-    { day: 'ו', properties: 0, leads: 0, messages: 0 },
-    { day: 'ש', properties: 0, leads: 0, messages: 0 }
+    { day: 'א', properties: 0 },
+    { day: 'ב', properties: 0 },
+    { day: 'ג', properties: 0 },
+    { day: 'ד', properties: 0 },
+    { day: 'ה', properties: 0 },
+    { day: 'ו', properties: 0 },
+    { day: 'ש', properties: 0 }
   ];
 
   return (
@@ -133,10 +120,9 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         {loading ? (
-          // Loading skeletons
-          Array.from({ length: 4 }).map((_, i) => (
+          Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
               <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
               <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
@@ -155,31 +141,12 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
               href="/approved-properties"
             />
             <ModernKpiCard
-              title="לידים חדשים"
-              value={k.leads_last_7d?.toString() || '0'}
-              change="7 ימים אחרונים"
-              trend={(k.leads_last_7d || 0) > 0 ? "up" : "neutral"}
-              icon={Users}
-              color="green"
-              href="/leads"
-            />
-            <ModernKpiCard
-              title="התאמות ממתינות"
-              value={k.matches_waiting?.toString() || '0'}
-              change="צריך טיפול"
-              trend={(k.matches_waiting || 0) > 0 ? "up" : "neutral"}
-              icon={TrendingUp}
-              color="purple"
-              href="/matches"
-            />
-            <ModernKpiCard
               title="שגיאות יבוא"
               value={k.import_errors_7d?.toString() || '0'}
               change="7 ימים אחרונים"
               trend={(k.import_errors_7d || 0) > 0 ? "down" : "neutral"}
-              icon={MessageSquare}
+              icon={AlertTriangle}
               color="orange"
-              href="/inbox"
             />
           </>
         )}
@@ -317,15 +284,12 @@ export default function ModernDashboard({ data }: ModernDashboardProps) {
               <Clock className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs text-brand-inkMuted">תגובה</p>
-              <p className="text-lg font-bold text-brand-accent">{k.median_response_minutes || '—'}</p>
+              <p className="text-xs text-brand-inkMuted">פעילים</p>
+              <p className="text-lg font-bold text-brand-accent">{analytics?.active_properties ?? '—'}</p>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Needs Attention */}
-      <NeedsAttention items={data?.needs_attention?.failed_messages || []} />
     </main>
   );
 }

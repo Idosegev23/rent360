@@ -125,7 +125,7 @@ export async function GET(req: NextRequest){
   
   // Apply filters
   if(search) {
-    query = query.or(`title.ilike.%${search}%,city.ilike.%${search}%,neighborhood.ilike.%${search}%,address.ilike.%${search}%`)
+    query = query.or(`title.ilike.%${search}%,city.ilike.%${search}%,neighborhood.ilike.%${search}%,address.ilike.%${search}%,contact_phone.ilike.%${search}%,contact_name.ilike.%${search}%`)
   }
   if(city) {
     query = query.eq('city', city)
@@ -170,15 +170,28 @@ export async function GET(req: NextRequest){
     .range(offset, offset + limit - 1)
   
   const { data, error, count } = await query
-  
+
   if(error) {
     return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
   }
-  
+
+  // Flag which of these properties are already approved so the UI can hide the approve button
+  const propertyIds = (data || []).map(p => p.id)
+  let approvedSet = new Set<string>()
+  if (propertyIds.length > 0) {
+    const { data: approved } = await sb
+      .from('approved_properties')
+      .select('property_id')
+      .eq('org_id', orgId)
+      .in('property_id', propertyIds)
+    approvedSet = new Set((approved || []).map(a => a.property_id))
+  }
+  const enriched = (data || []).map(p => ({ ...p, is_approved: approvedSet.has(p.id) }))
+
   const totalPages = Math.ceil((count || 0) / limit)
-  
+
   return NextResponse.json({
-    properties: data || [],
+    properties: enriched,
     pagination: {
       page,
       limit,

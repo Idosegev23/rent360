@@ -55,6 +55,24 @@ export interface ExtendedProperty {
   contact_name?: string | null;
   contact_phone?: string | null;
   full_text?: string | null;
+
+  // Set when fetched via /api/v1/approved-properties
+  approved_at?: string | null;
+  approval_id?: string | null;
+  approval_method?: 'questionnaire' | 'manual';
+  approved_by?: string | null;
+  approved_by_name?: string | null;
+
+  // Set when fetched via /api/v1/properties — true if the property already exists in approved_properties
+  is_approved?: boolean;
+
+  // Outreach state — used by the "פנייה ראשונה" button
+  initial_message_sent?: boolean;
+  outreach_blocked?: boolean;
+  outreach_skip_reason?: string | null;
+  street?: string | null;
+  floor?: number | null;
+
   scraped_metadata?: ScrapedMetadata | null;
   last_updated_external?: string | null;
 }

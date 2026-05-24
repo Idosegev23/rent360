@@ -7,7 +7,6 @@ export default function Header(){
         <span className="font-semibold">Rent360</span>
         <div className="flex items-center gap-2 text-sm text-brand-inkMuted">
           <Link href="/properties/new" className="rounded-md bg-brand-primary px-3 py-1.5 text-white hover:opacity-90">הוסף נכס</Link>
-          <Link href="/leads/new" className="rounded-md border border-brand-border px-3 py-1.5 hover:bg-brand-bg">הוסף לקוח</Link>
         </div>
       </div>
     </header>

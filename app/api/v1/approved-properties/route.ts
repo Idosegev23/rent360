@@ -32,7 +32,7 @@ export async function GET(req: NextRequest){
   // Step 1: Get approved property IDs with pagination and count
   let approvedQuery = sb
     .from('approved_properties')
-    .select('id, property_id, approved_at, org_id', { count: 'exact' })
+    .select('id, property_id, approved_at, org_id, approval_method, approved_by', { count: 'exact' })
     .eq('org_id', orgId)
     .order('approved_at', { ascending: false })
     .range(offset, offset + limit - 1)
@@ -111,15 +111,41 @@ export async function GET(req: NextRequest){
     return NextResponse.json({ error: { code: 'QUERY_FAILED', message: propertiesError.message } }, { status: 500 })
   }
   
-  // Step 4: Merge approved metadata with property data
-  const enrichedProperties = propertiesData?.map(property => {
-    const approval = approvedData.find(ap => ap.property_id === property.id)
-    return {
-      ...property,
-      approval_id: approval?.id,
-      approved_at: approval?.approved_at
+  // Step 3.5: Resolve approver names for manual approvals
+  const approverIds = Array.from(
+    new Set(
+      approvedData
+        .map(ap => ap.approved_by)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    )
+  )
+  const approverNameById = new Map<string, string>()
+  if (approverIds.length > 0) {
+    const { data: approvers } = await sb
+      .from('users')
+      .select('id, name')
+      .in('id', approverIds)
+    for (const u of approvers || []) {
+      if (u?.id) approverNameById.set(u.id, u.name || '')
     }
-  }) || []
+  }
+
+  // Step 4: Merge approved metadata with property data, preserving approved_at desc order from Step 1
+  const propertiesById = new Map((propertiesData || []).map(p => [p.id, p]))
+  const enrichedProperties = approvedData
+    .map(approval => {
+      const property = propertiesById.get(approval.property_id)
+      if (!property) return null
+      return {
+        ...property,
+        approval_id: approval.id,
+        approved_at: approval.approved_at,
+        approval_method: approval.approval_method || 'questionnaire',
+        approved_by: approval.approved_by || null,
+        approved_by_name: approval.approved_by ? approverNameById.get(approval.approved_by) || null : null
+      }
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null)
   
   const totalPages = Math.ceil((count || 0) / limit)
   

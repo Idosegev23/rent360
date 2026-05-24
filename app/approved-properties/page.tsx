@@ -2,9 +2,10 @@ import ModernPropertiesPage from '../../components/properties/ModernPropertiesPa
 
 export default function ApprovedPropertiesPage() {
   return (
-    <ModernPropertiesPage 
+    <ModernPropertiesPage
       apiEndpoint="/api/v1/approved-properties"
       pageTitle="נכסים מאושרים לתיווך"
+      showDeleteButton
     />
   );
 }

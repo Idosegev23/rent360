@@ -125,9 +125,7 @@ export async function GET(){
 
       weekly_activity.push({
         day: dayNames[date.getDay()],
-        properties: propertiesCount,
-        leads: 0, // Could add leads data here
-        messages: 0 // Could add messages data here
+        properties: propertiesCount
       })
     }
 

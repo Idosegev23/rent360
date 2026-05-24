@@ -41,6 +41,9 @@ interface PropertiesResponse {
 interface ModernPropertiesPageProps {
   apiEndpoint?: string;
   pageTitle?: string;
+  showApproveButton?: boolean;
+  showDeleteButton?: boolean;
+  showOutreachButton?: boolean;
 }
 
 interface FilterState {
@@ -57,7 +60,10 @@ interface FilterState {
 
 export default function ModernPropertiesPage({
   apiEndpoint = '/api/v1/properties',
-  pageTitle = 'נכסים'
+  pageTitle = 'נכסים',
+  showApproveButton = false,
+  showDeleteButton = false,
+  showOutreachButton = false
 }: ModernPropertiesPageProps) {
   const [properties, setProperties] = useState<ExtendedProperty[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -261,7 +267,7 @@ export default function ModernPropertiesPage({
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
               <input
                 type="text"
-                placeholder="חיפוש לפי כותרת, עיר, שכונה או כתובת..."
+                placeholder="חיפוש לפי כותרת, עיר, שכונה, כתובת, טלפון או שם..."
                 value={filters.search}
                 onChange={(e) => handleFilterChange({ search: e.target.value })}
                 className="w-full pr-10 pl-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
@@ -438,7 +444,22 @@ export default function ModernPropertiesPage({
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {properties.map((property) => (
                 <Link key={property.id} href={`/properties/${property.id}`}>
-                  <PropertyCard item={property} />
+                  <PropertyCard
+                    item={property}
+                    showApproveButton={showApproveButton}
+                    showDeleteButton={showDeleteButton}
+                    showOutreachButton={showOutreachButton}
+                    onApproved={(id) => {
+                      setProperties(prev => prev.map(p => p.id === id ? { ...p, is_approved: true } : p));
+                    }}
+                    onDeleted={(id) => {
+                      setProperties(prev => prev.filter(p => p.id !== id));
+                      setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
+                    }}
+                    onOutreachSent={(id) => {
+                      setProperties(prev => prev.map(p => p.id === id ? { ...p, initial_message_sent: true } : p));
+                    }}
+                  />
                 </Link>
               ))}
             </div>

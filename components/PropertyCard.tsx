@@ -1,12 +1,113 @@
+'use client';
+
+import { useState } from 'react';
 import { type ExtendedProperty } from '../types/property';
-import { Calendar, MapPin, Phone, Clock, Info, Building2 } from 'lucide-react';
+import { Calendar, MapPin, Phone, Clock, Info, Building2, Check, Loader2, Trash2, MessageCircle } from 'lucide-react';
 
 interface PropertyCardProps {
   item: ExtendedProperty;
+  showApproveButton?: boolean;
+  showDeleteButton?: boolean;
+  showOutreachButton?: boolean;
+  onApproved?: (propertyId: string) => void;
+  onDeleted?: (propertyId: string) => void;
+  onOutreachSent?: (propertyId: string) => void;
 }
 
-export default function PropertyCard({ item }: PropertyCardProps) {
+export default function PropertyCard({ item, showApproveButton = false, showDeleteButton = false, showOutreachButton = false, onApproved, onDeleted, onOutreachSent }: PropertyCardProps) {
   const image = Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : null;
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [justApproved, setJustApproved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [sendingOutreach, setSendingOutreach] = useState(false);
+  const [outreachError, setOutreachError] = useState<string | null>(null);
+  const [justSentOutreach, setJustSentOutreach] = useState(false);
+
+  const handleConfirmDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/v1/properties/${item.id}/approve`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || 'מחיקה נכשלה');
+      onDeleted?.(item.id);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'מחיקה נכשלה');
+      setDeleting(false);
+    }
+  };
+
+  const openConfirm = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmingDelete(true);
+  };
+
+  const closeConfirm = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmingDelete(false);
+  };
+
+  const handleSendOutreach = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (sendingOutreach || justSentOutreach || item.initial_message_sent) return;
+    setSendingOutreach(true);
+    setOutreachError(null);
+    try {
+      const res = await fetch('/api/v1/outreach/send-initial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyId: item.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || 'שליחה נכשלה');
+      setJustSentOutreach(true);
+      onOutreachSent?.(item.id);
+    } catch (err) {
+      setOutreachError(err instanceof Error ? err.message : 'שליחה נכשלה');
+    } finally {
+      setSendingOutreach(false);
+    }
+  };
+
+  const outreachBlockReason: string | null = (() => {
+    if (!showOutreachButton) return null;
+    if (item.outreach_blocked) return 'בעל הנכס ביקש שלא לקבל פניות';
+    if (item.initial_message_sent || justSentOutreach) return 'כבר נשלחה פנייה ראשונה';
+    if (!item.contact_phone) return 'אין מספר טלפון';
+    if (!item.contact_name) return 'אין שם של בעל הנכס — נא לתקן ידנית';
+    if (!Array.isArray(item.images) || item.images.length === 0) return 'אין תמונות לדירה — נא להוסיף תמונה';
+    return null;
+  })();
+
+  const handleApprove = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (approving || justApproved || item.is_approved) return;
+    setApproving(true);
+    setApproveError(null);
+    try {
+      const res = await fetch(`/api/v1/properties/${item.id}/approve`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || 'אישור נכשל');
+      setJustApproved(true);
+      onApproved?.(item.id);
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : 'אישור נכשל');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const isApproved = item.is_approved || justApproved;
   
   // Format evacuation date
   const formatEvacuationDate = (dateStr: string | null) => {
@@ -98,12 +199,24 @@ export default function PropertyCard({ item }: PropertyCardProps) {
           <span className="rounded-md bg-brand-bg px-2 py-0.5">{item.sqm || '—'} מ״ר</span>
         </div>
 
-        {/* Evacuation Date */}
-        {item.evacuation_date && (
+        {/* Move-in Date — prefer evacuation_date, fall back to available_from */}
+        {(item.evacuation_date || item.available_from) && (
           <div className="flex items-center gap-1 mb-2">
             <Calendar className="h-3 w-3 text-brand-inkMuted" />
             <span className="text-xs text-brand-inkMuted">
-              כניסה: {formatEvacuationDate(item.evacuation_date)}
+              כניסה: {formatEvacuationDate(item.evacuation_date || item.available_from || null)}
+            </span>
+          </div>
+        )}
+
+        {/* Approval line — only on approved-properties endpoint. Manual approvals show approver + date; questionnaire approvals show submission date. */}
+        {item.approved_at && (
+          <div className="flex items-center gap-1 mb-2">
+            <Calendar className="h-3 w-3 text-brand-primary" />
+            <span className="text-xs text-brand-primary font-medium">
+              {item.approval_method === 'manual'
+                ? `אישור ידני: ${formatEvacuationDate(item.approved_at)}${item.approved_by_name ? ` · ${item.approved_by_name}` : ''}`
+                : `מילוי שאלון: ${formatEvacuationDate(item.approved_at)}`}
             </span>
           </div>
         )}
@@ -159,6 +272,107 @@ export default function PropertyCard({ item }: PropertyCardProps) {
             <div className="text-xs text-brand-inkMuted">
               {item.timeline.length} עדכונים אחרונים
             </div>
+          </div>
+        )}
+
+        {/* Outreach button (send WhatsApp template to landlord) */}
+        {showOutreachButton && (
+          <div className="mt-3 pt-3 border-t border-brand-border">
+            {justSentOutreach || item.initial_message_sent ? (
+              <div className="flex items-center justify-center gap-1.5 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                <Check className="h-4 w-4" />
+                <span>פנייה נשלחה</span>
+              </div>
+            ) : outreachBlockReason ? (
+              <div className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600 text-center" title={outreachBlockReason}>
+                {outreachBlockReason}
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSendOutreach}
+                  disabled={sendingOutreach}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {sendingOutreach ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                  <span>{sendingOutreach ? 'שולח...' : 'שלח פנייה ראשונה'}</span>
+                </button>
+                {outreachError && (
+                  <p className="mt-1 text-xs text-red-600">{outreachError}</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Approve button (manual phone-call approval flow) */}
+        {showApproveButton && (
+          <div className="mt-3 pt-3 border-t border-brand-border">
+            {isApproved ? (
+              <div className="flex items-center justify-center gap-1.5 rounded-md bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+                <Check className="h-4 w-4" />
+                <span>מאושר</span>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleApprove}
+                  disabled={approving}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md bg-brand-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  <span>{approving ? 'מאשר...' : 'אשר תיווך'}</span>
+                </button>
+                {approveError && (
+                  <p className="mt-1 text-xs text-red-600">{approveError}</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Delete button (soft-delete from approved list) */}
+        {showDeleteButton && (
+          <div className="mt-3 pt-3 border-t border-brand-border">
+            {confirmingDelete ? (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                <p className="text-sm font-medium text-red-800 mb-2">למחוק את הנכס מרשימת המאושרים?</p>
+                <p className="text-xs text-red-700 mb-3">פעולה זו תסיר את הנכס מהדף הזה ותסמן אותו כלא-פעיל. אפשר לשחזר ידנית.</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmDelete}
+                    disabled={deleting}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    <span>{deleting ? 'מוחק...' : 'כן, מחק'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeConfirm}
+                    disabled={deleting}
+                    className="flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                  >
+                    ביטול
+                  </button>
+                </div>
+                {deleteError && (
+                  <p className="mt-2 text-xs text-red-700">{deleteError}</p>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={openConfirm}
+                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>מחק נכס</span>
+              </button>
+            )}
           </div>
         )}
       </div>

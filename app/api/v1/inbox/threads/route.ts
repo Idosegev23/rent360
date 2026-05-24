@@ -1,0 +1,94 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { supabaseService } from '../../../../../lib/supabase'
+import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
+
+const STATUS_FILTER: Record<string, string[]> = {
+  all: [],
+  awaiting_reply: ['awaiting_reply'],
+  human_takeover: ['human_takeover'],
+  closed: ['closed_won', 'closed_lost', 'opted_out'],
+  active: ['active', 'awaiting_reply'],
+}
+
+export async function GET(req: NextRequest) {
+  const cookie = cookies().get('sb-access-token')?.value
+  const userId = getUserIdFromSupabaseCookie(cookie)
+  if (!userId) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
+
+  const sb = supabaseService()
+  const { data: user } = await sb.from('users').select('org_id').eq('id', userId).maybeSingle()
+  if (!user) return NextResponse.json({ error: { code: 'NO_USER' } }, { status: 401 })
+  const orgId = user.org_id
+
+  const url = new URL(req.url)
+  const filter = url.searchParams.get('filter') || 'all'
+  const statuses = STATUS_FILTER[filter] ?? []
+
+  let query = sb
+    .from('threads')
+    .select('id, phone, status, last_message_at, last_inbound_at, last_outbound_at, tags, property_id, opted_out_at')
+    .eq('org_id', orgId)
+    .eq('channel', 'whatsapp')
+    .neq('status', 'admin_alerts')
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(100)
+
+  if (statuses.length > 0) query = query.in('status', statuses)
+
+  const { data: threads, error } = await query
+  if (error) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
+
+  // Hydrate anchor property titles + last message previews in a single round-trip each
+  const propertyIds = Array.from(new Set((threads || []).map(t => t.property_id).filter((x): x is string => !!x)))
+  const propertyById = new Map<string, { title: string; city: string | null; contact_name: string | null }>()
+  if (propertyIds.length > 0) {
+    const { data: props } = await sb
+      .from('properties')
+      .select('id, title, city, contact_name')
+      .in('id', propertyIds)
+    for (const p of props || []) propertyById.set(p.id, { title: p.title, city: p.city, contact_name: p.contact_name })
+  }
+
+  const threadIds = (threads || []).map(t => t.id)
+  const previewByThread = new Map<string, { body: string | null; direction: string; created_at: string }>()
+  if (threadIds.length > 0) {
+    const { data: previews } = await sb
+      .from('messages')
+      .select('thread_id, body, direction, created_at')
+      .in('thread_id', threadIds)
+      .order('created_at', { ascending: false })
+      .limit(threadIds.length * 5) // fetch generously, we'll dedupe to last-per-thread
+    for (const m of previews || []) {
+      if (!previewByThread.has(m.thread_id)) {
+        previewByThread.set(m.thread_id, { body: m.body, direction: m.direction, created_at: m.created_at })
+      }
+    }
+  }
+
+  const rows = (threads || []).map(t => {
+    const prop = t.property_id ? propertyById.get(t.property_id) : undefined
+    const preview = previewByThread.get(t.id)
+    const tags = (t.tags && typeof t.tags === 'object') ? (t.tags as Record<string, unknown>) : {}
+    return {
+      id: t.id,
+      phone: t.phone,
+      status: t.status,
+      last_message_at: t.last_message_at,
+      last_inbound_at: t.last_inbound_at,
+      last_outbound_at: t.last_outbound_at,
+      opted_out_at: t.opted_out_at,
+      intent: typeof tags.intent === 'string' ? tags.intent : null,
+      landlord_name: prop?.contact_name || null,
+      property_title: prop?.title || null,
+      property_city: prop?.city || null,
+      preview: preview ? {
+        body: preview.body,
+        direction: preview.direction,
+        created_at: preview.created_at,
+      } : null,
+    }
+  })
+
+  return NextResponse.json({ threads: rows, filter })
+}

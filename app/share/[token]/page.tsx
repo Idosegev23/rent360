@@ -2,19 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { 
-  Home, 
-  MapPin, 
-  DollarSign, 
-  Maximize, 
+import {
+  Home,
+  MapPin,
+  DollarSign,
+  Maximize,
   Calendar,
   Check,
   X,
-  Loader2,
-  MessageCircle
+  Loader2
 } from 'lucide-react';
 import Image from 'next/image';
-import LeadFormDialog from '../../../components/share/LeadFormDialog';
 
 interface SharedProperty {
   id: string;
@@ -37,13 +35,12 @@ interface SharedProperty {
 
 export default function SharedPropertyPage() {
   const params = useParams();
-  const token = params.token as string;
+  const token = params?.token as string;
   
   const [property, setProperty] = useState<SharedProperty | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [leadFormOpen, setLeadFormOpen] = useState(false);
 
   useEffect(() => {
     async function fetchProperty() {
@@ -124,10 +121,6 @@ export default function SharedPropertyPage() {
     cleanLocation(property.city),
     cleanLocation(property.neighborhood)
   ].filter(Boolean).join(', ');
-
-  const handleInterestedClick = () => {
-    setLeadFormOpen(true);
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -291,27 +284,6 @@ export default function SharedPropertyPage() {
         </div>
       </div>
 
-      {/* Fixed Bottom CTA */}
-      <div className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 p-4 shadow-lg">
-        <div className="max-w-4xl mx-auto">
-          <button
-            onClick={handleInterestedClick}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-xl flex items-center justify-center gap-2 transition-colors"
-          >
-            <MessageCircle className="h-5 w-5" />
-            <span>אני מעוניין/ת - השאר/י פרטים</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Lead Form Dialog */}
-      <LeadFormDialog
-        isOpen={leadFormOpen}
-        onClose={() => setLeadFormOpen(false)}
-        propertyId={property.id}
-        propertyTitle={property.title}
-        shareToken={token}
-      />
     </div>
   );
 }
