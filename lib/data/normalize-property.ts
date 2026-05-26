@@ -5,13 +5,21 @@
  *   - city often carries a " - מגורים" suffix (e.g. "חיפה - מגורים")
  *   - the whole "<street> <number> קומה <floor> <actual nbh>" string lands
  *     in BOTH neighborhood and street, leaving floor empty
+ *   - some rows have "<street> <num> <nbh>" (no floor) — same problem
  *
- * Historical rows were repaired by a one-off migration. This module is the
+ * Two cleanup stages run in order:
+ *   1. Strip " - מגורים" from city.
+ *   2. Parse the scraped concatenation. First try the "<street> <num> קומה
+ *      <floor> <nbh>" pattern (more specific). If that fails, fall back to
+ *      `extractCanonicalNeighborhood` which suffix-matches against the
+ *      known-neighborhoods directory.
+ *
+ * Historical rows are repaired by one-off migrations. This module is the
  * forward-going equivalent: any code that ingests or approves a property
- * should pass it through `normalizePropertyData()` so the same cleaning
- * happens at write time. Keep this in sync with the migration's regexes —
- * if the scraper format changes, fix both here and in the parser.
+ * should pass it through `normalizePropertyData()` so new data lands clean.
+ * Keep this in sync with the migrations.
  */
+import { extractCanonicalNeighborhood } from './known-neighborhoods'
 
 export type RawPropertyFields = {
   city?: string | null
@@ -66,18 +74,40 @@ export function parseScrapedNeighborhood(neighborhood: string | null | undefined
  */
 export function normalizePropertyData(raw: RawPropertyFields): NormalizedPropertyFields {
   const city = normalizeCity(raw.city ?? null)
-
   const nbh = raw.neighborhood?.trim() ?? null
-  // Only run the scraped-neighborhood parser when it looks like the
-  // concatenated format. Otherwise treat the neighborhood as-is so we
-  // don't mangle clean values like "הדר מרכז" or "רמת בן גוריון".
+
+  // 1) "<street> <num> קומה <floor> <nbh>" — the most common form, has its
+  // own dedicated parser because it also gives us the floor.
   if (nbh && FLOOR_REGEX.test(nbh)) {
     const parsed = parseScrapedNeighborhood(nbh)
+    // Even after the floor parse the trailing field could still be a
+    // canonical neighborhood concatenated with something else — fall through
+    // to the canonical extractor with whatever the parser left.
+    const canonical = extractCanonicalNeighborhood(parsed.neighborhood, city)
     return {
       city,
-      neighborhood: parsed.neighborhood,
+      neighborhood: canonical.neighborhood ?? parsed.neighborhood,
       street: parsed.street ?? raw.street ?? null,
       floor: raw.floor ?? parsed.floor,
+    }
+  }
+
+  // 2) No "קומה" marker — could be either clean ("הדר מרכז") or the
+  // shorter dirty form ("אורן 13 רוממה החדשה"). Suffix-match against the
+  // canonical directory. When we find a match, the prefix becomes the
+  // street (unless the row already has a non-redundant street).
+  if (nbh) {
+    const canonical = extractCanonicalNeighborhood(nbh, city)
+    if (canonical.neighborhood) {
+      const incomingStreet = raw.street?.trim() || null
+      const street =
+        incomingStreet && incomingStreet !== nbh ? incomingStreet : canonical.prefix
+      return {
+        city,
+        neighborhood: canonical.neighborhood,
+        street,
+        floor: raw.floor ?? null,
+      }
     }
   }
 

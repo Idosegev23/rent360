@@ -24,6 +24,7 @@ export function middleware(req: NextRequest) {
   // Without this allowlist Vercel Cron / curl can't reach them through the session middleware.
   const isCronAuthed =
     pathname === '/api/v1/matches/backfill' ||
+    pathname === '/api/v1/neighborhoods/backfill' ||
     pathname === '/api/v1/outreach/batch-pending'
 
   if (
