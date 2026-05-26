@@ -411,10 +411,15 @@ function toLowerSet(arr: Array<string | null | undefined>): Set<string> {
   return out
 }
 
-// Soft match for Hebrew city variants ("קרית" vs "קריית", trailing punctuation, neighborhood vs city).
+// Soft match for Hebrew city variants ("קרית" vs "קריית" vs "ק\"ית", trailing punctuation, neighborhood vs city).
 function hasFuzzyCityMatch(propertyCities: Set<string>, preferred: string[]): boolean {
+  // Collapse the "קרית" prefix in all its written forms:
+  //   "קריית"  (ק-ר-י-י-ת, two yods)
+  //   "קרית"   (ק-ר-י-ת)
+  //   "ק\"ית" / "ק'ית" / "ק.ית" (apostrophe/quote/dot between ק and י)
+  // Everything maps to canonical "קרית" before the rest of the city name.
   const normalize = (s: string) => s
-    .replace(/^ק"?\s?י?\s?ר?\s?י?\s?ת?\s?/, 'קרית ')   // "קריית"/"ק\"ית"/"קרית" → "קרית"
+    .replace(/^ק[\s"'.]*ר?\s*י{1,3}\s*ת\s*/, 'קרית ')
     .replace(/[\s"',.()-]/g, '')
     .trim()
   const propSet = new Set(Array.from(propertyCities).map(normalize))
