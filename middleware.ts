@@ -16,12 +16,19 @@ export function middleware(req: NextRequest) {
     pathname === '/api/v1/renters/submit' ||
     /^\/api\/v1\/renters\/invite\/[^/]+$/.test(pathname)
 
+  // Cron-authenticated endpoints — they verify Authorization: Bearer <CRON_SECRET> themselves.
+  // Without this allowlist Vercel Cron / curl can't reach them through the session middleware.
+  const isCronAuthed =
+    pathname === '/api/v1/matches/backfill' ||
+    pathname === '/api/v1/outreach/batch-pending'
+
   if (
     PUBLIC_PATHS.has(pathname) ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/v1/integrations') ||
-    isPublicRenter
+    isPublicRenter ||
+    isCronAuthed
   ) {
     return NextResponse.next()
   }

@@ -71,12 +71,31 @@ function fmtTimeAgo(iso: string): string {
 
 export default function RentersPage() {
   const [tab, setTab] = useState<'pool' | 'invites'>('pool')
+  const [showCreateFromPool, setShowCreateFromPool] = useState(false)
+  const [poolRefreshKey, setPoolRefreshKey] = useState(0)
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Users className="h-6 w-6 text-brand-primary" />
-        <h1 className="text-2xl font-bold">שוכרים</h1>
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Users className="h-6 w-6 text-brand-primary" />
+          <h1 className="text-2xl font-bold">שוכרים</h1>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (tab !== 'invites') {
+              setShowCreateFromPool(true)
+              setTab('invites')
+            } else {
+              setShowCreateFromPool(s => !s)
+            }
+          }}
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 shadow-sm"
+        >
+          <Send className="h-4 w-4" />
+          שלח שאלון לשוכר
+        </button>
       </div>
 
       <div className="flex gap-2 mb-4 border-b border-brand-border">
@@ -102,14 +121,22 @@ export default function RentersPage() {
         ))}
       </div>
 
-      {tab === 'pool' ? <RenterPool /> : <InvitesPanel />}
+      {tab === 'pool' ? (
+        <RenterPool refreshKey={poolRefreshKey} />
+      ) : (
+        <InvitesPanel
+          initialShowCreate={showCreateFromPool}
+          onCreateClosed={() => setShowCreateFromPool(false)}
+          onCreated={() => { setPoolRefreshKey(k => k + 1) }}
+        />
+      )}
     </div>
   )
 }
 
 // ---------- Pool ----------------------------------------------------------
 
-function RenterPool() {
+function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
   const [renters, setRenters] = useState<Renter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +168,7 @@ function RenterPool() {
       .catch(err => { if (!cancel) setError(err.message) })
       .finally(() => { if (!cancel) setLoading(false) })
     return () => { cancel = true }
-  }, [search, sort, dir])
+  }, [search, sort, dir, refreshKey])
 
   function toggleSort(col: typeof sort) {
     if (sort === col) setDir(d => (d === 'desc' ? 'asc' : 'desc'))
@@ -281,12 +308,24 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 // ---------- Invites panel ---------------------------------------------------
 
-function InvitesPanel() {
+function InvitesPanel({
+  initialShowCreate = false,
+  onCreateClosed,
+  onCreated: onCreatedExt,
+}: {
+  initialShowCreate?: boolean
+  onCreateClosed?: () => void
+  onCreated?: () => void
+}) {
   const [invites, setInvites] = useState<Invite[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate, setShowCreate] = useState(initialShowCreate)
+
+  useEffect(() => {
+    if (initialShowCreate) setShowCreate(true)
+  }, [initialShowCreate])
 
   async function load() {
     setLoading(true)
@@ -325,7 +364,12 @@ function InvitesPanel() {
         </button>
       </div>
 
-      {showCreate && <CreateInviteForm onCreated={() => { load(); setShowCreate(false) }} onCancel={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateInviteForm
+          onCreated={() => { load(); setShowCreate(false); onCreateClosed?.(); onCreatedExt?.() }}
+          onCancel={() => { setShowCreate(false); onCreateClosed?.() }}
+        />
+      )}
 
       {loading && <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-brand-primary" /></div>}
       {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="inline h-4 w-4 ml-1" />{error}</div>}

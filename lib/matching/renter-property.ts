@@ -95,16 +95,12 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   const disqualifyingReasons: string[] = []
 
   // ----- Hard disqualifiers --------------------------------------------------
+  // Only TRUE blockers (pet/smoker conflicts where the property explicitly forbids).
+  // City mismatch is intentionally NOT a DQ — it shows up as a low city score
+  // so admins can still see "close but wrong area" candidates with a low %.
   const propertyCities = toLowerSet([property.city, property.neighborhood])
   const preferredCities = toStringArray(renter.preferred_cities).map(s => s.toLowerCase())
   const hasCityList = preferredCities.length > 0
-
-  if (hasCityList && !preferredCities.some(c => propertyCities.has(c) || propertyCities.has(c.replace(/^ק"?\s?י?\s?ת?\s?י?\s?/, '')))) {
-    // City not in renter's preferences
-    if (!hasFuzzyCityMatch(propertyCities, preferredCities)) {
-      disqualifyingReasons.push(`העיר ${property.city || ''} לא ברשימת הערים המועדפות`)
-    }
-  }
 
   if (renter.has_pets === true && property.pets_allowed === false) {
     disqualifyingReasons.push('השוכר עם חיות מחמד אבל הנכס לא מאפשר חיות')
@@ -195,7 +191,9 @@ function scoreCity(_r: RenterRow, property: PropertyRow, weight: number, hasList
   if (exact) return { weight, raw: 1, weighted: weight, note: `${property.city} ברשימה המועדפת` }
   const fuzzy = hasFuzzyCityMatch(propertyCities, preferred)
   if (fuzzy) return { weight, raw: 0.75, weighted: 0.75 * weight, note: `התאמה חלקית לעיר (${property.city})` }
-  return { weight, raw: 0, weighted: 0, note: `העיר ${property.city} לא ברשימה — DQ` }
+  // Soft penalty rather than DQ — landlord sees the candidate at a low score and
+  // can still decide to contact ("close enough" / "they might consider this area").
+  return { weight, raw: 0.15, weighted: 0.15 * weight, note: `${property.city} לא ברשימה המועדפת` }
 }
 
 function scoreRooms(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
