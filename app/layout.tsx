@@ -1,22 +1,39 @@
 import '../styles/globals.css'
 import Providers from './providers'
 import type { Metadata } from 'next'
+import { Heebo, Frank_Ruhl_Libre, JetBrains_Mono } from 'next/font/google'
+
+const heebo = Heebo({
+  subsets: ['hebrew', 'latin'],
+  weight: ['300', '400', '500', '600', '700', '800'],
+  variable: '--font-ui',
+  display: 'swap',
+})
+
+const frankRuhl = Frank_Ruhl_Libre({
+  subsets: ['hebrew', 'latin'],
+  weight: ['300', '400', '500', '700', '900'],
+  variable: '--font-display',
+  display: 'swap',
+})
+
+const jetMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-mono',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
-  title: 'Rent360',
-  description: 'ניהול נכסי שכירות ולידים',
+  title: 'rent360 — real estate ops',
+  description: 'ניהול נכסי שכירות, שוכרים והתאמות',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl">
-      <body className="min-h-screen bg-brand-bg text-brand-ink">
-        <Providers>
-          <div className="container py-4">
-            {children}
-          </div>
-          <div className="h-16" />
-        </Providers>
+    <html lang="he" dir="rtl" className={`${heebo.variable} ${frankRuhl.variable} ${jetMono.variable}`}>
+      <body>
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

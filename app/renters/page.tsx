@@ -6,6 +6,7 @@ import {
   Users, Phone, Plus, Search, Loader2, AlertCircle, ChevronDown, ChevronUp,
   Send, Copy, ExternalLink, CheckCircle2, Clock, MailOpen, Inbox as InboxIcon,
 } from 'lucide-react'
+import Topbar from '../../components/shell/Topbar'
 
 type Renter = {
   id: string
@@ -75,30 +76,25 @@ export default function RentersPage() {
   const [poolRefreshKey, setPoolRefreshKey] = useState(0)
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Users className="h-6 w-6 text-brand-primary" />
-          <h1 className="text-2xl font-bold">שוכרים</h1>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (tab !== 'invites') {
-              setShowCreateFromPool(true)
-              setTab('invites')
-            } else {
-              setShowCreateFromPool(s => !s)
-            }
-          }}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 shadow-sm"
-        >
-          <Send className="h-4 w-4" />
-          שלח שאלון לשוכר
-        </button>
-      </div>
-
-      <div className="flex gap-2 mb-4 border-b border-brand-border">
+    <>
+      <Topbar
+        crumb="בית · שוכרים"
+        title="שוכרים"
+        action={
+          <button
+            type="button"
+            onClick={() => {
+              if (tab !== 'invites') { setShowCreateFromPool(true); setTab('invites') }
+              else { setShowCreateFromPool(s => !s) }
+            }}
+            className="btn btn-brand"
+          >
+            <Send size={14} /> שלח שאלון לשוכר
+          </button>
+        }
+      />
+      <div className="page-wrap">
+      <div className="flex gap-2 mb-4 border-b" style={{ borderColor: 'var(--line)' }}>
         {[
           { id: 'pool' as const, label: 'מאגר שוכרים', icon: Users },
           { id: 'invites' as const, label: 'שאלונים שנשלחו', icon: Send },
@@ -130,7 +126,8 @@ export default function RentersPage() {
           onCreated={() => { setPoolRefreshKey(k => k + 1) }}
         />
       )}
-    </div>
+      </div>
+    </>
   )
 }
 

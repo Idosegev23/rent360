@@ -23,6 +23,7 @@ import {
 import Link from 'next/link';
 import { type ExtendedProperty } from '../../types/property';
 import PropertyCard from '../PropertyCard';
+import Topbar from '../shell/Topbar';
 
 interface PaginationInfo {
   page: number;
@@ -191,24 +192,19 @@ export default function ModernPropertiesPage({
   ];
 
   return (
-    <main className="pb-20 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{pageTitle}</h1>
-          <p className="text-gray-600 mt-1">ניהול וצפייה בנכסי השכירות</p>
-        </div>
-        <Link 
-          href="/properties/new"
-          className="flex items-center gap-2 bg-brand-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-brand-primaryMuted transition-colors"
-        >
-          <Plus className="h-5 w-5" />
-          נכס חדש
-        </Link>
-      </div>
-
+    <>
+      <Topbar
+        crumb={`בית · ${pageTitle}`}
+        title={pageTitle}
+        action={
+          <Link href="/properties/new" className="btn btn-brand">
+            <Plus size={14} /> נכס חדש
+          </Link>
+        }
+      />
+      <div className="page-wrap space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gradient-to-br from-brand-bg to-orange-50 rounded-xl p-6 border border-brand-border">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-brand-primary text-white rounded-lg">
@@ -595,6 +591,7 @@ export default function ModernPropertiesPage({
           )}
         </>
       )}
-    </main>
+      </div>
+    </>
   );
 }

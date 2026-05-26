@@ -43,17 +43,8 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
     }
   };
 
-  const openConfirm = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setConfirmingDelete(true);
-  };
-
-  const closeConfirm = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setConfirmingDelete(false);
-  };
+  const openConfirm = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setConfirmingDelete(true); };
+  const closeConfirm = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setConfirmingDelete(false); };
 
   const handleSendOutreach = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -108,194 +99,146 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
   };
 
   const isApproved = item.is_approved || justApproved;
-  
-  // Format evacuation date
-  const formatEvacuationDate = (dateStr: string | null) => {
+
+  const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'מיידי';
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('he-IL');
-    } catch {
-      return dateStr;
-    }
+    try { return new Date(dateStr).toLocaleDateString('he-IL'); } catch { return dateStr; }
   };
 
-  // Format amenities list
   const getAmenitiesList = () => {
     if (!item.amenities) return [];
-    const amenities = [];
-    if (item.amenities.elevator) amenities.push('מעלית');
-    if (item.amenities.parking) amenities.push('חניה');
-    if (item.amenities.balcony) amenities.push('מרפסת');
-    if (item.amenities.airConditioner) amenities.push('מזגן');
-    if (item.amenities.storage) amenities.push('מחסן');
-    if (item.amenities.mamad) amenities.push('ממ״ד');
-    return amenities;
+    const a = [];
+    if (item.amenities.elevator) a.push('מעלית');
+    if (item.amenities.parking) a.push('חניה');
+    if (item.amenities.balcony) a.push('מרפסת');
+    if (item.amenities.airConditioner) a.push('מזגן');
+    if (item.amenities.storage) a.push('מחסן');
+    if (item.amenities.mamad) a.push('ממ״ד');
+    return a;
   };
 
   const amenities = getAmenitiesList();
-  
-  // Check if this is a brokerage property
   const isBrokerage = item.source && item.source.includes('יד 2 תיווך');
 
   return (
-    <div className="overflow-hidden rounded-lg border border-brand-border bg-white shadow-sm hover:shadow-md transition-shadow">
-      {/* Image Section */}
-      <div className="aspect-[16/9] w-full bg-brand-bg relative">
+    <div className="prop-card">
+      {/* Photo */}
+      <div className="photo">
         {image ? (
-          <img src={image} alt={item.title} className="h-full w-full object-cover" />
+          <img src={image} alt={item.title} />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-sm text-brand-inkMuted">אין תמונה</div>
+          <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--ink-4)', fontSize: 13 }}>אין תמונה</div>
         )}
-        
-        {/* Status Badge */}
-        <div className="absolute top-2 right-2 flex gap-2">
-          {item.status && (
-            <div className="rounded-md bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
-              {item.status}
-            </div>
-          )}
+
+        {/* Corner badges */}
+        <div className="corner" style={{ display: 'flex', gap: 6 }}>
+          {item.status && <span className="pill pill-green">{item.status}</span>}
           {isBrokerage && (
-            <div className="rounded-md bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800 flex items-center gap-1">
-              <Building2 className="h-3 w-3" />
-              תיווך
-            </div>
+            <span className="pill pill-brand"><Building2 size={11} />תיווך</span>
           )}
         </div>
 
-        {/* Matches badge (top-left) */}
+        {/* Matches badge (top-end) */}
         {typeof item.matches_count === 'number' && item.matches_count > 0 && (
           <div
-            className="absolute top-2 left-2 rounded-full bg-emerald-600/95 text-white px-2.5 py-1 text-xs font-semibold flex items-center gap-1 shadow"
+            style={{
+              position: 'absolute', top: 12, insetInlineEnd: 12, zIndex: 2,
+              background: 'rgba(20, 130, 110, 0.92)', color: '#fff',
+              borderRadius: 999, padding: '4px 10px', fontSize: 11.5, fontWeight: 700,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              boxShadow: 'var(--sh-2)',
+            }}
             title={item.matches_top_score ? `ציון מקסימלי: ${Math.round(item.matches_top_score)}` : undefined}
           >
-            <Target className="h-3 w-3" />
-            {item.matches_count} שוכרים מתאימים
+            <Target size={11} />
+            {item.matches_count} מתאימים
           </div>
         )}
-        
-        {/* Images Count */}
+
+        {/* Price overlay */}
+        <div className="price-overlay">
+          ₪{Number(item.price || 0).toLocaleString('he-IL')}
+          <small>/ חודש</small>
+        </div>
+
+        {/* Images count */}
         {item.images && item.images.length > 1 && (
-          <div className="absolute bottom-2 right-2 rounded-md bg-black/70 px-2 py-1 text-xs text-white">
+          <div style={{ position: 'absolute', bottom: 12, insetInlineStart: 12, zIndex: 2, background: 'rgba(0,0,0,0.55)', color: '#fff', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>
             {item.images.length} תמונות
           </div>
         )}
       </div>
 
-      <div className="p-4">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="line-clamp-2 text-base font-semibold leading-tight">{item.title}</h3>
-          <span className="shrink-0 rounded-md bg-brand-bg px-2 py-0.5 text-xs text-brand-inkMuted">{item.city}</span>
+      {/* Body */}
+      <div className="body">
+        <div className="ttl" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {item.title}
+        </div>
+        <div className="loc">
+          <MapPin size={11} style={{ display: 'inline', marginInlineEnd: 4, verticalAlign: '-1px' }} />
+          {item.neighborhood && <span>{item.neighborhood} · </span>}
+          {item.city}
+          {item.address && <span style={{ color: 'var(--ink-4)' }}> · {item.address}</span>}
         </div>
 
-        {/* Address */}
-        {(item.neighborhood || item.address) && (
-          <div className="flex items-center gap-1 mb-3">
-            <MapPin className="h-3 w-3 text-brand-inkMuted" />
-            <div className="line-clamp-1 text-sm text-brand-inkMuted">
-              {item.neighborhood && <span>{item.neighborhood}</span>}
-              {item.neighborhood && item.address && <span> • </span>}
-              {item.address && <span>{item.address}</span>}
-            </div>
-          </div>
-        )}
-
-        {/* Price and Basic Info */}
-        <div className="flex flex-wrap items-center gap-2 text-sm mb-3">
-          <span className="rounded-md bg-brand-primary/10 px-2 py-0.5 font-semibold text-brand-primary">
-            ₪{Number(item.price || 0).toLocaleString()}
-          </span>
-          <span className="rounded-md bg-brand-bg px-2 py-0.5">{item.rooms || '—'} חדרים</span>
-          <span className="rounded-md bg-brand-bg px-2 py-0.5">{item.sqm || '—'} מ״ר</span>
-        </div>
-
-        {/* Move-in Date — prefer evacuation_date, fall back to available_from */}
-        {(item.evacuation_date || item.available_from) && (
-          <div className="flex items-center gap-1 mb-2">
-            <Calendar className="h-3 w-3 text-brand-inkMuted" />
-            <span className="text-xs text-brand-inkMuted">
-              כניסה: {formatEvacuationDate(item.evacuation_date || item.available_from || null)}
+        {/* Specs */}
+        <div className="specs">
+          <span><strong>{item.rooms || '—'}</strong> חדרים</span>
+          <span><strong>{item.sqm || '—'}</strong> מ״ר</span>
+          {(item.evacuation_date || item.available_from) && (
+            <span style={{ marginInlineStart: 'auto', color: 'var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Calendar size={11} />
+              {formatDate(item.evacuation_date || item.available_from || null)}
             </span>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Approval line — only on approved-properties endpoint. Manual approvals show approver + date; questionnaire approvals show submission date. */}
+        {/* Approval line */}
         {item.approved_at && (
-          <div className="flex items-center gap-1 mb-2">
-            <Calendar className="h-3 w-3 text-brand-primary" />
-            <span className="text-xs text-brand-primary font-medium">
-              {item.approval_method === 'manual'
-                ? `אישור ידני: ${formatEvacuationDate(item.approved_at)}${item.approved_by_name ? ` · ${item.approved_by_name}` : ''}`
-                : `מילוי שאלון: ${formatEvacuationDate(item.approved_at)}`}
-            </span>
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--brand-deep)', fontWeight: 600 }}>
+            <Check size={12} />
+            {item.approval_method === 'manual'
+              ? `אישור ידני · ${formatDate(item.approved_at)}${item.approved_by_name ? ` · ${item.approved_by_name}` : ''}`
+              : `שאלון · ${formatDate(item.approved_at)}`}
           </div>
         )}
 
         {/* Contact */}
         {item.contact_name && (
-          <div className="flex items-center gap-1 mb-2">
-            <Phone className="h-3 w-3 text-brand-inkMuted" />
-            <span className="text-xs text-brand-inkMuted">
-              {item.contact_name}
-              {item.contact_phone && ` • ${item.contact_phone}`}
-            </span>
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-3)' }}>
+            <Phone size={11} />
+            <span>{item.contact_name}{item.contact_phone && ` · ${item.contact_phone}`}</span>
           </div>
         )}
 
         {/* Amenities */}
         {amenities.length > 0 && (
-          <div className="mb-2">
-            <div className="flex flex-wrap gap-1">
-              {amenities.slice(0, 3).map((amenity, index) => (
-                <span key={index} className="rounded-md bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
-                  {amenity}
-                </span>
-              ))}
-              {amenities.length > 3 && (
-                <span className="rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600">
-                  +{amenities.length - 3} נוספים
-                </span>
-              )}
-            </div>
+          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {amenities.slice(0, 3).map((a, i) => (
+              <span key={i} className="pill pill-blue" style={{ fontSize: 10.5 }}>{a}</span>
+            ))}
+            {amenities.length > 3 && <span className="pill pill-outline" style={{ fontSize: 10.5 }}>+{amenities.length - 3}</span>}
           </div>
         )}
 
-        {/* Source and Last Updated */}
-        <div className="flex items-center justify-between text-xs text-brand-inkMuted">
-          {item.source && (
-            <div className="flex items-center gap-1">
-              <Info className="h-3 w-3" />
-              <span>{item.source}</span>
-            </div>
-          )}
-          {item.last_updated_external && (
-            <div className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              <span>עודכן {item.last_updated_external}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Timeline indicator */}
-        {item.timeline && item.timeline.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-brand-border">
-            <div className="text-xs text-brand-inkMuted">
-              {item.timeline.length} עדכונים אחרונים
-            </div>
+        {/* Source / updated */}
+        {(item.source || item.last_updated_external) && (
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--ink-4)' }}>
+            {item.source && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Info size={10} />{item.source}</span>}
+            {item.last_updated_external && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />עודכן {item.last_updated_external}</span>}
           </div>
         )}
 
-        {/* Outreach button (send WhatsApp template to landlord) */}
+        {/* Outreach button */}
         {showOutreachButton && (
-          <div className="mt-3 pt-3 border-t border-brand-border">
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
             {justSentOutreach || item.initial_message_sent ? (
-              <div className="flex items-center justify-center gap-1.5 rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-                <Check className="h-4 w-4" />
+              <div className="pill pill-blue" style={{ width: '100%', justifyContent: 'center', padding: '8px 12px', fontSize: 12.5 }}>
+                <Check size={13} />
                 <span>פנייה נשלחה</span>
               </div>
             ) : outreachBlockReason ? (
-              <div className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600 text-center" title={outreachBlockReason}>
+              <div className="pill pill-outline" style={{ width: '100%', justifyContent: 'center', padding: '8px 12px', fontSize: 11.5, textAlign: 'center' }} title={outreachBlockReason}>
                 {outreachBlockReason}
               </div>
             ) : (
@@ -304,25 +247,24 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
                   type="button"
                   onClick={handleSendOutreach}
                   disabled={sendingOutreach}
-                  className="w-full flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                  className="btn btn-brand"
+                  style={{ width: '100%', justifyContent: 'center' }}
                 >
-                  {sendingOutreach ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                  {sendingOutreach ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
                   <span>{sendingOutreach ? 'שולח...' : 'שלח פנייה ראשונה'}</span>
                 </button>
-                {outreachError && (
-                  <p className="mt-1 text-xs text-red-600">{outreachError}</p>
-                )}
+                {outreachError && <p style={{ marginTop: 6, fontSize: 11, color: 'var(--red)' }}>{outreachError}</p>}
               </>
             )}
           </div>
         )}
 
-        {/* Approve button (manual phone-call approval flow) */}
+        {/* Approve button */}
         {showApproveButton && (
-          <div className="mt-3 pt-3 border-t border-brand-border">
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
             {isApproved ? (
-              <div className="flex items-center justify-center gap-1.5 rounded-md bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
-                <Check className="h-4 w-4" />
+              <div className="pill pill-green" style={{ width: '100%', justifyContent: 'center', padding: '8px 12px', fontSize: 12.5 }}>
+                <Check size={13} />
                 <span>מאושר</span>
               </div>
             ) : (
@@ -331,56 +273,37 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
                   type="button"
                   onClick={handleApprove}
                   disabled={approving}
-                  className="w-full flex items-center justify-center gap-1.5 rounded-md bg-brand-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+                  className="btn btn-primary"
+                  style={{ width: '100%', justifyContent: 'center' }}
                 >
-                  {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {approving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   <span>{approving ? 'מאשר...' : 'אשר תיווך'}</span>
                 </button>
-                {approveError && (
-                  <p className="mt-1 text-xs text-red-600">{approveError}</p>
-                )}
+                {approveError && <p style={{ marginTop: 6, fontSize: 11, color: 'var(--red)' }}>{approveError}</p>}
               </>
             )}
           </div>
         )}
 
-        {/* Delete button (soft-delete from approved list) */}
+        {/* Delete button */}
         {showDeleteButton && (
-          <div className="mt-3 pt-3 border-t border-brand-border">
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
             {confirmingDelete ? (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3">
-                <p className="text-sm font-medium text-red-800 mb-2">למחוק את הנכס מרשימת המאושרים?</p>
-                <p className="text-xs text-red-700 mb-3">פעולה זו תסיר את הנכס מהדף הזה ותסמן אותו כלא-פעיל. אפשר לשחזר ידנית.</p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleConfirmDelete}
-                    disabled={deleting}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
-                  >
-                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              <div style={{ borderRadius: 'var(--r-sm)', border: '1px solid var(--red-soft)', background: 'var(--red-soft)', padding: 12 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)', margin: '0 0 6px' }}>למחוק את הנכס מרשימת המאושרים?</p>
+                <p style={{ fontSize: 11.5, color: 'var(--red)', margin: '0 0 10px' }}>הנכס יסומן כלא-פעיל. אפשר לשחזר ידנית.</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={handleConfirmDelete} disabled={deleting} className="btn" style={{ flex: 1, background: 'var(--red)', color: 'white', justifyContent: 'center' }}>
+                    {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                     <span>{deleting ? 'מוחק...' : 'כן, מחק'}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={closeConfirm}
-                    disabled={deleting}
-                    className="flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
-                  >
-                    ביטול
-                  </button>
+                  <button type="button" onClick={closeConfirm} disabled={deleting} className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>ביטול</button>
                 </div>
-                {deleteError && (
-                  <p className="mt-2 text-xs text-red-700">{deleteError}</p>
-                )}
+                {deleteError && <p style={{ marginTop: 8, fontSize: 11, color: 'var(--red)' }}>{deleteError}</p>}
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={openConfirm}
-                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4" />
+              <button type="button" onClick={openConfirm} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center', color: 'var(--red)', borderColor: 'var(--red-soft)' }}>
+                <Trash2 size={14} />
                 <span>מחק נכס</span>
               </button>
             )}

@@ -5,9 +5,6 @@ import {
   TrendingUp,
   Home,
   AlertTriangle,
-  Clock,
-  Eye,
-  BarChart3,
   Activity,
   Users,
   Target,
@@ -17,10 +14,10 @@ import {
   Inbox as InboxIcon,
   CheckCircle2,
   ExternalLink,
+  Plus,
 } from 'lucide-react';
 import Link from 'next/link';
-import ModernKpiCard from './ModernKpiCard';
-import CompactChart from './CompactChart';
+import Topbar from '../shell/Topbar';
 
 interface DashboardData {
   kpis?: {
@@ -43,8 +40,8 @@ interface DashboardData {
   };
   history?: Array<{ ts: string; kind: string; label: string; ref?: string }>;
   analytics?: {
-    properties_by_city?: Array<{name: string, value: number}>;
-    price_ranges?: Array<{range: string, count: number}>;
+    properties_by_city?: Array<{ name: string; value: number }>;
+    price_ranges?: Array<{ range: string; count: number }>;
     properties_total?: number;
     avg_price?: number;
     avg_size?: number;
@@ -52,355 +49,243 @@ interface DashboardData {
   };
 }
 
-interface ModernDashboardProps {
-  data: DashboardData;
-}
-
-export default function ModernDashboard({ data }: ModernDashboardProps) {
-  const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
+export default function ModernDashboard({ data }: { data: DashboardData }) {
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const k = data?.kpis || {};
 
-  // Fetch additional analytics data
   useEffect(() => {
-    const fetchAnalytics = async () => {
+    (async () => {
       try {
-        const response = await fetch('/api/v1/dashboard/aggregations', {
-          cache: 'no-store' // Force fresh data
-        });
-        if (response.ok) {
-          const analyticsData = await response.json();
-          console.log('Dashboard analytics received:', analyticsData);
-          setAnalytics(analyticsData);
-        } else {
-          console.error('Failed to fetch analytics:', response.status);
-        }
-      } catch (error) {
-        console.error('Error fetching analytics:', error);
-      } finally {
+        const response = await fetch('/api/v1/dashboard/aggregations', { cache: 'no-store' });
+        if (response.ok) setAnalytics(await response.json());
+      } catch {} finally {
         setLoading(false);
       }
-    };
-
-    fetchAnalytics();
+    })();
   }, []);
 
-  // Real data from API or fallback to defaults
-  const propertiesByCity = analytics?.properties_by_city || [
-    { name: 'אין נתונים', value: 0, color: '#F2811D' }
-  ];
-
-  const priceRanges = analytics?.price_ranges || [
-    { range: 'אין נתונים', count: 0, color: '#F2811D' }
-  ];
-
-  const weeklyActivity = analytics?.weekly_activity || [
-    { day: 'א', properties: 0 },
-    { day: 'ב', properties: 0 },
-    { day: 'ג', properties: 0 },
-    { day: 'ד', properties: 0 },
-    { day: 'ה', properties: 0 },
-    { day: 'ו', properties: 0 },
-    { day: 'ש', properties: 0 }
-  ];
+  const propertiesByCity = analytics?.properties_by_city || [];
 
   return (
-    <main className="pb-20 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">דשבורד</h1>
-          <p className="text-gray-600 mt-1">סקירה כללית של המערכת שלך</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setViewMode('overview')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewMode === 'overview'
-                ? 'bg-brand-primary text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <Eye className="h-4 w-4 inline-block ml-2" />
-            סקירה
-          </button>
-          <button
-            onClick={() => setViewMode('detailed')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewMode === 'detailed'
-                ? 'bg-brand-primary text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <BarChart3 className="h-4 w-4 inline-block ml-2" />
-            מפורט
-          </button>
-        </div>
-      </div>
+    <>
+      <Topbar
+        crumb="בית"
+        title="דשבורד"
+        action={
+          <Link href="/properties/new" className="btn btn-brand">
+            <Plus size={14} /> נכס חדש
+          </Link>
+        }
+      />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {loading ? (
-          Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-              <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
-              <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-            </div>
-          ))
-        ) : (
-          <>
-            <ModernKpiCard
-              title="נכסים מאושרים"
-              value={k.approved_properties?.toString() || '0'}
-              change={`${k.active_approved_properties || 0} פעילים`}
-              trend={(k.approved_properties || 0) > 0 ? "up" : "neutral"}
-              icon={Home}
-              color="blue"
-              href="/approved-properties"
-            />
-            <ModernKpiCard
-              title="שגיאות יבוא"
-              value={k.import_errors_7d?.toString() || '0'}
-              change="7 ימים אחרונים"
-              trend={(k.import_errors_7d || 0) > 0 ? "down" : "neutral"}
-              icon={AlertTriangle}
-              color="orange"
-            />
-          </>
-        )}
-      </div>
+      <div className="page-wrap">
+        {/* KPI Hero Row */}
+        <section className="grid gap-4 mb-7" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)' }}>
+          <Link href="/approved-properties" className="kpi kpi-hero block no-underline">
+            <div className="label">נכסים מאושרים</div>
+            <div className="value">{loading ? '—' : (k.approved_properties ?? 0).toLocaleString('he-IL')}</div>
+            <div className="delta positive"><strong>{k.active_approved_properties ?? 0}</strong> פעילים כרגע</div>
+          </Link>
 
-      {/* Renters + Matching */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SmallStat icon={<Users className="h-4 w-4" />} label="מאגר שוכרים" value={k.renters_pool ?? 0} hint={`+${k.renters_new_7d ?? 0} ב-7 ימים`} href="/renters" tone="purple" />
-        <SmallStat icon={<Target className="h-4 w-4" />} label="התאמות פעילות" value={k.matches_active ?? 0} hint={`ציון ממוצע: ${k.matches_avg_score ?? '—'}`} tone="emerald" />
-        <SmallStat icon={<Send className="h-4 w-4" />} label="פניות שיצאו היום" value={k.outreach_sent_today ?? 0} hint={`סה"כ ${k.outreach_sent_total ?? 0}`} tone="blue" />
-        <SmallStat icon={<MessageCircle className="h-4 w-4" />} label="הודעות נכנסות (24ש׳)" value={k.inbound_24h ?? 0} hint={`${k.active_threads ?? 0} שיחות פעילות`} href="/inbox" tone="amber" />
-      </section>
-
-      {/* Operational status */}
-      <section className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <SmallStat icon={<UserCheck className="h-4 w-4" />} label="ממתינות לאדם" value={k.handoff_pending ?? 0} hint="בקשות handoff פתוחות" href="/inbox?filter=human_takeover" tone="red" />
-        <SmallStat icon={<CheckCircle2 className="h-4 w-4" />} label="הסירו אותם" value={k.opted_out ?? 0} hint="הצטרפו לרשימת חסומים" tone="gray" />
-        <SmallStat icon={<InboxIcon className="h-4 w-4" />} label="שיחות פעילות" value={k.active_threads ?? 0} hint="בוואטסאפ" href="/inbox" tone="indigo" />
-      </section>
-
-      {/* Recent activity history */}
-      {data?.history && data.history.length > 0 && (
-        <section className="rounded-xl border border-brand-border bg-white p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-lg flex items-center gap-2"><Activity className="h-5 w-5 text-brand-primary" /> פעילות אחרונה</h2>
-            <span className="text-xs text-gray-500">{data.history.length} אירועים אחרונים</span>
-          </div>
-          <ul className="space-y-2">
-            {data.history.map((h, i) => (
-              <HistoryRow key={i} item={h} />
-            ))}
-          </ul>
+          <KpiCard
+            label="מאגר שוכרים"
+            value={k.renters_pool ?? 0}
+            delta={`+${k.renters_new_7d ?? 0} ב-7 ימים`}
+            href="/renters"
+            positive
+          />
+          <KpiCard
+            label="פניות היום"
+            value={k.outreach_sent_today ?? 0}
+            delta={`סה״כ ${(k.outreach_sent_total ?? 0).toLocaleString('he-IL')}`}
+          />
         </section>
-      )}
 
-      {/* Charts Grid */}
-      {viewMode === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Properties by City */}
-          {loading ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-              <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
-              <div className="h-40 bg-gray-200 rounded"></div>
-            </div>
-          ) : (
-            <CompactChart
-              title="נכסים לפי עיר"
-              type="pie"
-              data={propertiesByCity}
-              height={200}
-            />
-          )}
-          
-          {/* Price Ranges */}
-          {loading ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-              <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
-              <div className="h-40 bg-gray-200 rounded"></div>
-            </div>
-          ) : (
-            <CompactChart
-              title="טווחי מחירים"
-              type="bar"
-              data={priceRanges.map((item: any) => ({ name: item.range, value: item.count }))}
-              height={200}
-            />
-          )}
-          
-          {/* Weekly Activity */}
-          {loading ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-              <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
-              <div className="h-40 bg-gray-200 rounded"></div>
-            </div>
-          ) : (
-            <CompactChart
-              title="פעילות שבועית"
-              type="line"
-              data={weeklyActivity}
-              height={200}
-            />
-          )}
-        </div>
-      )}
+        {/* Ops row */}
+        <section className="section-h">
+          <div>
+            <h2>סטטוס תפעולי</h2>
+            <div className="subtitle">מצב חי של פניות, שיחות והתאמות</div>
+          </div>
+        </section>
+        <section className="grid gap-3 mb-7" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
+          <SmallStat icon={<Target size={14} />} label="התאמות פעילות" value={k.matches_active ?? 0} hint={`ציון ממוצע: ${k.matches_avg_score ?? '—'}`} tone="brand" />
+          <SmallStat icon={<MessageCircle size={14} />} label="הודעות (24ש׳)" value={k.inbound_24h ?? 0} hint={`${k.active_threads ?? 0} שיחות פעילות`} href="/inbox" tone="blue" />
+          <SmallStat icon={<UserCheck size={14} />} label="ממתינות לאדם" value={k.handoff_pending ?? 0} hint="handoff פתוחים" href="/inbox?filter=human_takeover" tone="red" />
+          <SmallStat icon={<CheckCircle2 size={14} />} label="הסירו אותם" value={k.opted_out ?? 0} hint="ברשימה החסומה" tone="amber" />
+          <SmallStat icon={<AlertTriangle size={14} />} label="שגיאות יבוא" value={k.import_errors_7d ?? 0} hint="7 ימים אחרונים" tone="red" />
+        </section>
 
-      {/* Detailed Analytics */}
-      {viewMode === 'detailed' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Larger detailed charts would go here */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold mb-4">ניתוח נכסים מפורט</h3>
-            <CompactChart
-              title="התפלגות נכסים"
-              type="bar"
-              data={propertiesByCity}
-              height={300}
-            />
-          </div>
-          
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold mb-4">מגמות שבועיות</h3>
-            <CompactChart
-              title="פעילות"
-              type="line"
-              data={weeklyActivity}
-              height={300}
-            />
-          </div>
-        </div>
-      )}
+        {/* Activity history */}
+        {data?.history && data.history.length > 0 && (
+          <section className="surface-card mb-7">
+            <div className="section-h" style={{ marginBottom: 8 }}>
+              <div>
+                <h2 style={{ fontSize: 17 }}>פעילות אחרונה</h2>
+              </div>
+              <span className="eyebrow">{data.history.length} אירועים</span>
+            </div>
+            <ul className="space-y-1">
+              {data.history.map((h, i) => (
+                <HistoryRow key={i} item={h} />
+              ))}
+            </ul>
+          </section>
+        )}
 
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-r from-brand-bg to-orange-50 rounded-lg p-4 border border-brand-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-primary text-white rounded-lg">
-              <Home className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs text-brand-inkMuted">שטח ממוצע</p>
-              <p className="text-lg font-bold text-brand-accent">
-                {loading ? (
-                  <span className="animate-pulse bg-gray-200 rounded h-6 w-16 inline-block"></span>
-                ) : (
-                  `${analytics?.avg_size || 0} מ״ר`
-                )}
-              </p>
-            </div>
+        {/* Aggregations */}
+        <section className="section-h">
+          <div>
+            <h2>פילוח</h2>
+            <div className="subtitle">נכסים לפי עיר וטווחי מחיר</div>
           </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-primaryMuted text-white rounded-lg">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs text-brand-primaryMuted">מחיר ממוצע</p>
-              <p className="text-lg font-bold text-brand-accent">
-                {loading ? (
-                  <span className="animate-pulse bg-gray-200 rounded h-6 w-20 inline-block"></span>
-                ) : (
-                  `₪${analytics?.avg_price?.toLocaleString() || 0}`
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-green-50 to-brand-bg rounded-lg p-4 border border-brand-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-success text-white rounded-lg">
-              <Activity className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs text-brand-inkMuted">תפוסה</p>
-              <p className="text-lg font-bold text-brand-accent">100%</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-brand-bg to-yellow-50 rounded-lg p-4 border border-brand-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-warning text-white rounded-lg">
-              <Clock className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs text-brand-inkMuted">פעילים</p>
-              <p className="text-lg font-bold text-brand-accent">{analytics?.active_properties ?? '—'}</p>
-            </div>
-          </div>
-        </div>
+        </section>
+        <section className="grid gap-4 mb-7" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+          <BreakdownCard title="נכסים לפי עיר" items={(propertiesByCity || []).map((p: any) => ({ label: p.name, value: p.value }))} loading={loading} />
+          <BreakdownCard
+            title="טווחי מחיר"
+            items={(analytics?.price_ranges || []).map((r: any) => ({ label: r.range, value: r.count }))}
+            loading={loading}
+          />
+          <StatTrio
+            avgSize={analytics?.avg_size}
+            avgPrice={analytics?.avg_price}
+            activeProperties={analytics?.active_properties}
+            loading={loading}
+          />
+        </section>
       </div>
-    </main>
+    </>
   );
 }
 
-const TONE_CLASSES: Record<string, { wrap: string; icon: string }> = {
-  purple: { wrap: 'border-purple-200 bg-purple-50/40', icon: 'text-purple-700' },
-  emerald: { wrap: 'border-emerald-200 bg-emerald-50/40', icon: 'text-emerald-700' },
-  blue: { wrap: 'border-blue-200 bg-blue-50/40', icon: 'text-blue-700' },
-  amber: { wrap: 'border-amber-200 bg-amber-50/40', icon: 'text-amber-700' },
-  red: { wrap: 'border-red-200 bg-red-50/40', icon: 'text-red-700' },
-  gray: { wrap: 'border-gray-200 bg-gray-50/60', icon: 'text-gray-600' },
-  indigo: { wrap: 'border-indigo-200 bg-indigo-50/40', icon: 'text-indigo-700' },
-}
-
-function SmallStat({ icon, label, value, hint, href, tone = 'gray' }: {
-  icon: React.ReactNode
-  label: string
-  value: number | string
-  hint?: string
-  href?: string
-  tone?: keyof typeof TONE_CLASSES
-}) {
-  const t = TONE_CLASSES[tone] || TONE_CLASSES.gray
+function KpiCard({ label, value, delta, href, positive }: { label: string; value: number | string; delta?: string; href?: string; positive?: boolean }) {
   const inner = (
-    <div className={`rounded-lg border p-3 ${t?.wrap} ${href ? 'hover:shadow-sm transition-shadow' : ''}`}>
-      <div className={`flex items-center gap-1.5 mb-1 text-xs font-medium ${t?.icon}`}>
-        {icon}
-        {label}
-      </div>
-      <div className="text-2xl font-bold text-gray-900">{typeof value === 'number' ? value.toLocaleString('he-IL') : value}</div>
-      {hint && <div className="text-xs text-gray-500 mt-0.5">{hint}</div>}
+    <div className="kpi">
+      <div className="label">{label}</div>
+      <div className="value">{typeof value === 'number' ? value.toLocaleString('he-IL') : value}</div>
+      {delta && <div className={`delta ${positive ? 'positive' : ''}`}><strong>{delta}</strong></div>}
     </div>
-  )
-  return href ? <Link href={href} className="block">{inner}</Link> : inner
+  );
+  return href ? <Link href={href} className="block no-underline">{inner}</Link> : inner;
 }
 
-const KIND_META: Record<string, { dot: string; label: string }> = {
-  approval: { dot: 'bg-emerald-500', label: 'אישור' },
-  outreach: { dot: 'bg-blue-500', label: 'פנייה' },
-  renter: { dot: 'bg-purple-500', label: 'שוכר' },
-  alert: { dot: 'bg-red-500', label: 'התראה' },
+const TONE_FILL: Record<string, string> = {
+  brand: 'var(--brand)',
+  blue: 'var(--blue)',
+  green: 'var(--green)',
+  amber: 'var(--amber)',
+  red: 'var(--red)',
+  purple: 'var(--purple)',
+  ink: 'var(--ink)',
+};
+
+function SmallStat({ icon, label, value, hint, href, tone = 'ink' }: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | string;
+  hint?: string;
+  href?: string;
+  tone?: keyof typeof TONE_FILL;
+}) {
+  const accent = TONE_FILL[tone] || 'var(--ink)';
+  const inner = (
+    <div
+      className="surface-card surface-card-interactive"
+      style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: accent, fontSize: 11.5, fontWeight: 600, letterSpacing: '0.04em' }}>
+        {icon}
+        <span style={{ textTransform: 'uppercase' }}>{label}</span>
+      </div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>
+        {typeof value === 'number' ? value.toLocaleString('he-IL') : value}
+      </div>
+      {hint && <div style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>{hint}</div>}
+    </div>
+  );
+  return href ? <Link href={href} className="block no-underline">{inner}</Link> : inner;
 }
+
+function BreakdownCard({ title, items, loading }: { title: string; items: Array<{ label: string; value: number }>; loading: boolean }) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  return (
+    <div className="surface-card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em', margin: 0 }}>{title}</h3>
+        <span className="eyebrow">{items.length}</span>
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => <div key={i} style={{ height: 18, background: 'var(--paper-2)', borderRadius: 6 }} />)}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-muted" style={{ fontSize: 12.5 }}>אין נתונים</div>
+      ) : (
+        <ul className="space-y-2">
+          {items.slice(0, 6).map((item, i) => (
+            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5 }}>
+              <span style={{ width: 90, color: 'var(--ink-2)' }}>{item.label}</span>
+              <span style={{ flex: 1, height: 6, background: 'var(--paper-2)', borderRadius: 999, overflow: 'hidden', position: 'relative' }}>
+                <span style={{ position: 'absolute', insetInlineEnd: 0, top: 0, bottom: 0, width: `${(item.value / max) * 100}%`, background: 'linear-gradient(to left, var(--brand), var(--brand-glow))', borderRadius: 999 }} />
+              </span>
+              <span style={{ width: 36, textAlign: 'start', fontWeight: 600, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{item.value}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function StatTrio({ avgSize, avgPrice, activeProperties, loading }: { avgSize?: number; avgPrice?: number; activeProperties?: number; loading: boolean }) {
+  return (
+    <div className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em', margin: 0 }}>מבט-על</h3>
+      <Trio icon={<Home size={14} />} label="שטח ממוצע" value={loading ? '—' : `${avgSize ?? 0} מ״ר`} />
+      <Trio icon={<TrendingUp size={14} />} label="מחיר ממוצע" value={loading ? '—' : `₪${(avgPrice ?? 0).toLocaleString('he-IL')}`} />
+      <Trio icon={<Activity size={14} />} label="נכסים פעילים" value={loading ? '—' : (activeProperties ?? 0)} />
+    </div>
+  );
+}
+
+function Trio({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--brand-tint)', color: 'var(--brand-deep)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>{icon}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, color: 'var(--ink-4)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+const KIND_META: Record<string, { tone: string; label: string }> = {
+  approval: { tone: 'green',  label: 'אישור' },
+  outreach: { tone: 'blue',   label: 'פנייה' },
+  renter:   { tone: 'purple', label: 'שוכר' },
+  alert:    { tone: 'red',    label: 'התראה' },
+};
 
 function HistoryRow({ item }: { item: { ts: string; kind: string; label: string; ref?: string } }) {
-  const meta = KIND_META[item.kind] || { dot: 'bg-gray-400', label: item.kind }
-  const ts = item.ts ? new Date(item.ts) : null
-  const timeStr = ts ? ts.toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
+  const meta = KIND_META[item.kind] || { tone: 'outline', label: item.kind };
+  const ts = item.ts ? new Date(item.ts) : null;
+  const timeStr = ts ? ts.toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
   const body = (
-    <div className="flex items-start gap-2 text-sm">
-      <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${meta.dot}`} />
-      <div className="flex-1 min-w-0">
-        <div className="text-gray-800 truncate">{item.label}</div>
-        <div className="text-xs text-gray-500">{meta.label} · {timeStr}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 4px' }}>
+      <span className={`pill pill-${meta.tone}`} style={{ minWidth: 56, justifyContent: 'center' }}>{meta.label}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: 'var(--ink-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
       </div>
-      {item.ref && <ExternalLink className="h-3 w-3 text-gray-400 shrink-0 mt-1.5" />}
+      <span style={{ fontSize: 11.5, color: 'var(--ink-4)', fontVariantNumeric: 'tabular-nums' }}>{timeStr}</span>
+      {item.ref && <ExternalLink size={12} style={{ color: 'var(--ink-4)' }} />}
     </div>
-  )
+  );
   return item.ref ? (
-    <li><Link href={item.ref} className="block hover:bg-gray-50 rounded px-2 py-1 -mx-2">{body}</Link></li>
+    <li><Link href={item.ref} className="block hover:bg-[var(--paper-2)] rounded-md no-underline">{body}</Link></li>
   ) : (
-    <li className="px-2 py-1 -mx-2">{body}</li>
-  )
+    <li>{body}</li>
+  );
 }

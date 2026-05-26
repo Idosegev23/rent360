@@ -1,19 +1,25 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import BottomTabs from '../components/BottomTabs'
-import Header from '../components/Header'
+import Sidebar from '../components/shell/Sidebar'
 
-export default function Providers({ children }: { children: React.ReactNode }){
+const FULL_BLEED_PREFIXES = ['/share/', '/r/', '/auth/']
+
+export default function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  
-  // Hide navigation for public share pages
-  const isPublicSharePage = pathname?.startsWith('/share/')
-  
+  const isFullBleed = FULL_BLEED_PREFIXES.some(p => pathname?.startsWith(p))
+
+  if (isFullBleed) {
+    return <>{children}</>
+  }
+
   return (
-    <>
-      {!isPublicSharePage && <Header />}
-      {children}
-      {!isPublicSharePage && <BottomTabs />}
-    </>
+    <div className="app-shell">
+      <Sidebar />
+      <main className="main-pane">
+        {children}
+      </main>
+      <BottomTabs />
+    </div>
   )
 }
