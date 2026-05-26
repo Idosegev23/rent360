@@ -11,15 +11,14 @@ import { sendTemplate, normalizePhone } from '../whatsapp/meta-provider'
 import { isSuppressed } from './suppression'
 import {
   buildLandlordHookVariables,
-  hookVariablesToTemplateComponents,
+  pickTemplateAndComponents,
   PersonalizationError,
 } from './personalization'
 
 export type DispatchResult =
-  | { ok: true; messageId: string; threadId: string; phone: string }
+  | { ok: true; messageId: string; threadId: string; phone: string; templateName: string }
   | { ok: false; code: string; message: string }
 
-const TEMPLATE_NAME = 'landlord_outreach_v1'
 const TEMPLATE_LANG = 'he'
 
 export async function dispatchInitialOutreach(opts: {
@@ -65,29 +64,30 @@ export async function dispatchInitialOutreach(opts: {
     return { ok: false, code: 'SUPPRESSED', message: 'הטלפון בעל הנכס ברשימת הסירוב' }
   }
 
-  // Verify the template is approved before we burn a send attempt.
+  // Pick rich vs basic template based on whether we have a personal hook.
+  const { templateName, components } = pickTemplateAndComponents(vars)
+
+  // Verify the chosen template is approved at Meta.
   const { data: template } = await sb
     .from('whatsapp_templates')
     .select('name, status')
-    .eq('name', TEMPLATE_NAME)
+    .eq('name', templateName)
     .eq('language', TEMPLATE_LANG)
     .maybeSingle()
-  if (!template) return { ok: false, code: 'TEMPLATE_MISSING', message: 'תבנית חסרה במסד' }
+  if (!template) return { ok: false, code: 'TEMPLATE_MISSING', message: `תבנית ${templateName} חסרה במסד` }
   if (template.status !== 'approved') {
     return {
       ok: false,
       code: 'TEMPLATE_NOT_APPROVED',
-      message: `תבנית ${TEMPLATE_NAME} עדיין בסטטוס ${template.status} ב-Meta. אשר ב-WhatsApp Manager ועדכן status='approved'.`,
+      message: `תבנית ${templateName} עדיין בסטטוס ${template.status} ב-Meta.`,
     }
   }
 
-  // Build components + send
-  const components = hookVariablesToTemplateComponents(vars)
   let sent
   try {
     sent = await sendTemplate({
       to: normalized,
-      name: TEMPLATE_NAME,
+      name: templateName,
       language: TEMPLATE_LANG,
       components: components as any,
     })
@@ -109,10 +109,13 @@ export async function dispatchInitialOutreach(opts: {
     status: 'sent',
     external_id: sent.messageId,
     meta_message_type: 'template',
-    template_name: TEMPLATE_NAME,
+    template_name: templateName,
     template_params: {
       first_name: vars.first_name,
-      street: vars.street,
+      rooms: vars.rooms_label,
+      street_city: vars.street_city,
+      personal_hook: vars.personal_hook,
+      availability: vars.availability_label,
       cover_image_url: vars.cover_image_url,
     },
   })
@@ -123,7 +126,7 @@ export async function dispatchInitialOutreach(opts: {
     property_id: property.id,
   }).eq('id', thread.id)
 
-  return { ok: true, messageId: sent.messageId, threadId: thread.id, phone: normalized }
+  return { ok: true, messageId: sent.messageId, threadId: thread.id, phone: normalized, templateName }
 }
 
 async function upsertThread(

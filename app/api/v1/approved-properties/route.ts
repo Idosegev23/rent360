@@ -130,19 +130,42 @@ export async function GET(req: NextRequest){
     }
   }
 
+  // Step 3.6: Resolve match counts (non-DQ) per property
+  const propertyIdsForMatches = (propertiesData || []).map(p => p.id)
+  const matchAggByProperty = new Map<string, { count: number; topScore: number | null }>()
+  if (propertyIdsForMatches.length > 0) {
+    const { data: matchRows } = await sb
+      .from('matches')
+      .select('property_id, score, is_disqualified')
+      .eq('org_id', orgId)
+      .in('property_id', propertyIdsForMatches)
+      .eq('is_disqualified', false)
+    for (const m of matchRows || []) {
+      const pid = (m as any).property_id as string
+      const score = Number((m as any).score) || 0
+      const cur = matchAggByProperty.get(pid) || { count: 0, topScore: null }
+      cur.count += 1
+      if (cur.topScore === null || score > cur.topScore) cur.topScore = score
+      matchAggByProperty.set(pid, cur)
+    }
+  }
+
   // Step 4: Merge approved metadata with property data, preserving approved_at desc order from Step 1
   const propertiesById = new Map((propertiesData || []).map(p => [p.id, p]))
   const enrichedProperties = approvedData
     .map(approval => {
       const property = propertiesById.get(approval.property_id)
       if (!property) return null
+      const agg = matchAggByProperty.get(property.id) || { count: 0, topScore: null }
       return {
         ...property,
         approval_id: approval.id,
         approved_at: approval.approved_at,
         approval_method: approval.approval_method || 'questionnaire',
         approved_by: approval.approved_by || null,
-        approved_by_name: approval.approved_by ? approverNameById.get(approval.approved_by) || null : null
+        approved_by_name: approval.approved_by ? approverNameById.get(approval.approved_by) || null : null,
+        matches_count: agg.count,
+        matches_top_score: agg.topScore,
       }
     })
     .filter((p): p is NonNullable<typeof p> => p !== null)

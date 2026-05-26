@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { type ExtendedProperty } from '../types/property';
-import { Calendar, MapPin, Phone, Clock, Info, Building2, Check, Loader2, Trash2, MessageCircle } from 'lucide-react';
+import { Calendar, MapPin, Phone, Clock, Info, Building2, Check, Loader2, Trash2, MessageCircle, Target } from 'lucide-react';
 
 interface PropertyCardProps {
   item: ExtendedProperty;
@@ -162,6 +162,17 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
             </div>
           )}
         </div>
+
+        {/* Matches badge (top-left) */}
+        {typeof item.matches_count === 'number' && item.matches_count > 0 && (
+          <div
+            className="absolute top-2 left-2 rounded-full bg-emerald-600/95 text-white px-2.5 py-1 text-xs font-semibold flex items-center gap-1 shadow"
+            title={item.matches_top_score ? `ציון מקסימלי: ${Math.round(item.matches_top_score)}` : undefined}
+          >
+            <Target className="h-3 w-3" />
+            {item.matches_count} שוכרים מתאימים
+          </div>
+        )}
         
         {/* Images Count */}
         {item.images && item.images.length > 1 && (

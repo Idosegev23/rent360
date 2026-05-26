@@ -134,6 +134,20 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     type: 'function',
+    name: 'get_matching_renters_for_property',
+    description: 'Return the count of currently-active renters in our pool that match this property (non-disqualified) plus a few aggregate stats. USE THIS whenever the landlord asks "how many renters do you have" / "are there renters for my apartment" — answer with the real number, never invent.',
+    parameters: {
+      type: 'object',
+      properties: {
+        property_id: { type: 'string', description: 'Defaults to the anchor property if omitted.' },
+        min_score: { type: 'integer', minimum: 0, maximum: 100, description: 'Only count matches at or above this score (default 60).' },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
     name: 'handoff_to_human',
     description: 'Hand the conversation off to the admin. Dispatches an admin WhatsApp alert and flips the thread to human_takeover. Use when the landlord asks for a human OR when you decide an admin should close.',
     parameters: {
@@ -172,6 +186,7 @@ export async function executeTool(name: string, args: any, ctx: ToolContext): Pr
     case 'search_past_conversations': return searchPastConversations(args, ctx)
     case 'record_landlord_intent': return recordIntent(args, ctx)
     case 'update_property_field': return updatePropertyField(args, ctx)
+    case 'get_matching_renters_for_property': return getMatchingRenters(args, ctx)
     case 'handoff_to_human': return handoff(args, ctx)
     case 'opt_out_landlord': return optOut(args, ctx)
     default:
@@ -288,6 +303,36 @@ async function updatePropertyField(args: { field: string; value: unknown }, ctx:
   const { error } = await sb.from('properties').update(update).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
   if (error) return { ok: false, error: error.message }
   return { ok: true, field: args.field }
+}
+
+async function getMatchingRenters(args: { property_id?: string; min_score?: number }, ctx: ToolContext) {
+  const sb = supabaseService()
+  const id = args.property_id || ctx.propertyId
+  if (!id) return { error: 'no_property_id' }
+  const minScore = typeof args.min_score === 'number' ? args.min_score : 60
+
+  const { data: matches } = await sb
+    .from('matches')
+    .select('id, score, is_disqualified, reasons')
+    .eq('org_id', ctx.orgId)
+    .eq('property_id', id)
+    .eq('is_disqualified', false)
+    .gte('score', minScore)
+    .order('score', { ascending: false })
+
+  const rows = matches || []
+  const scores = rows.map(r => Number(r.score) || 0).filter(s => s > 0)
+  const top = scores.length ? Math.max(...scores) : null
+  const avg = scores.length ? Math.round(scores.reduce((s, x) => s + x, 0) / scores.length) : null
+
+  return {
+    property_id: id,
+    min_score: minScore,
+    count: rows.length,
+    top_score: top,
+    avg_score: avg,
+    examples: rows.slice(0, 3).map(r => ({ score: Number(r.score) || 0, highlights: r.reasons || [] })),
+  }
 }
 
 async function handoff(args: { reason: string; urgency?: 'low' | 'medium' | 'high' }, ctx: ToolContext) {

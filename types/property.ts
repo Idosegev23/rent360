@@ -73,6 +73,10 @@ export interface ExtendedProperty {
   street?: string | null;
   floor?: number | null;
 
+  // Match aggregates (attached by /api/v1/approved-properties when available)
+  matches_count?: number;
+  matches_top_score?: number | null;
+
   scraped_metadata?: ScrapedMetadata | null;
   last_updated_external?: string | null;
 }

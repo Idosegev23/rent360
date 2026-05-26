@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../../lib/auth'
 import { embedInBackground, embedPropertyIfChanged } from '../../../../../../lib/ai/embeddings'
+import { generatePersonalizationInBackground } from '../../../../../../lib/ai/property-vision'
+import { computeMatchesInBackground } from '../../../../../../lib/matching/orchestrator'
 
 // Manual approval flow: agent confirms brokerage with the owner over the phone
 // and clicks "אשר תיווך" — adds the property to approved_properties with approval_method='manual'.
@@ -45,9 +47,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: { code: 'INSERT_FAILED', message: error.message } }, { status: 500 })
   }
 
-  // Approval is the *only* trigger that lets a property into the RAG index.
-  // Fire-and-forget so we don't block the UI response on OpenAI latency.
+  // Approval triggers three side-effects, all fire-and-forget:
+  //  1. RAG embedding — for `search_property_context` in the bot.
+  //  2. Personalization line for outreach templates ({{4}} in landlord_outreach_v2_rich).
+  //  3. Renter↔property matches — every renter scored against this new property.
   embedInBackground(() => embedPropertyIfChanged(propertyId), `approve:${propertyId}`)
+  generatePersonalizationInBackground(propertyId)
+  computeMatchesInBackground({ propertyId })
 
   return NextResponse.json({ ok: true, status: 'approved', approval: inserted })
 }

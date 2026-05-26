@@ -5,6 +5,8 @@ import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
 import { normalizePhone } from '../../../../../lib/whatsapp/meta-provider'
 import { embedInBackground, embedPropertyIfChanged } from '../../../../../lib/ai/embeddings'
 import { improveTextOrFallback } from '../../../../../lib/ai/text-improve'
+import { generatePersonalizationInBackground } from '../../../../../lib/ai/property-vision'
+import { computeMatchesInBackground } from '../../../../../lib/matching/orchestrator'
 
 /**
  * Employee-facing endpoint to manually add a property the company has already
@@ -122,11 +124,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Embedding fires ONLY when the property is auto-approved. Unapproved
-  // properties stay out of the RAG index (per design — bot only talks
-  // about properties we're actually brokering).
+  // Embedding + personalization-line fire ONLY when the property is auto-approved.
+  // Unapproved properties stay out of the RAG index AND don't generate vision
+  // observations (those are for outreach we never send to them).
   if (autoApprove) {
     embedInBackground(() => embedPropertyIfChanged(inserted.id), `manual-add:${inserted.id}`)
+    generatePersonalizationInBackground(inserted.id)
+    computeMatchesInBackground({ propertyId: inserted.id })
   }
 
   return NextResponse.json({

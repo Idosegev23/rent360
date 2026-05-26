@@ -6,6 +6,7 @@ const tabs = [
   { href: '/dashboard', label: 'דשבורד' },
   { href: '/properties', label: 'נכסים' },
   { href: '/approved-properties', label: 'מאושרים' },
+  { href: '/renters', label: 'שוכרים' },
   { href: '/inbox', label: 'שיחות' },
 ]
 

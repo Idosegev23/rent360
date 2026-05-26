@@ -9,11 +9,19 @@ const PUBLIC_PATHS = new Set<string>([
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
+  // Public renter form (any path under /r/...) + public renter APIs (token validation + submit).
+  // These are unauthenticated by design — renters arrive via a WhatsApp link.
+  const isPublicRenter =
+    pathname.startsWith('/r/') ||
+    pathname === '/api/v1/renters/submit' ||
+    /^\/api\/v1\/renters\/invite\/[^/]+$/.test(pathname)
+
   if (
     PUBLIC_PATHS.has(pathname) ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/api/v1/integrations')
+    pathname.startsWith('/api/v1/integrations') ||
+    isPublicRenter
   ) {
     return NextResponse.next()
   }
