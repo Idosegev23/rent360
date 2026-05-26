@@ -38,6 +38,7 @@ export type RenterRow = {
   household_size: number | null
   has_children: boolean | null
   children_count: number | null
+  preferences: unknown                  // jsonb — { balcony: {level, min_sqm}, parking: {level, type}, elevator: {level}, ... }
   match_weights: unknown                // jsonb — overrides DEFAULT_WEIGHTS
 }
 
@@ -60,13 +61,14 @@ export type PropertyRow = {
 }
 
 export const DEFAULT_WEIGHTS = {
-  budget: 0.35,
-  city: 0.25,
-  rooms: 0.15,
-  sqm: 0.10,
-  floor: 0.05,
-  timing: 0.05,
-  demographic: 0.05,  // pets/smokers compatibility — partial when not DQ
+  budget: 0.28,
+  city: 0.22,
+  rooms: 0.14,
+  amenities: 0.18,    // balcony/parking/elevator/etc. — pulled from renter.preferences
+  sqm: 0.08,
+  floor: 0.03,
+  timing: 0.04,
+  demographic: 0.03,  // pets/smokers compatibility — partial when not DQ
 } as const
 
 export type Weights = { -readonly [K in keyof typeof DEFAULT_WEIGHTS]: number }
@@ -114,6 +116,7 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   breakdown.budget = scoreBudget(renter, property, weights.budget)
   breakdown.city = scoreCity(renter, property, weights.city, hasCityList, preferredCities, propertyCities)
   breakdown.rooms = scoreRooms(renter, property, weights.rooms)
+  breakdown.amenities = scoreAmenities(renter, property, weights.amenities)
   breakdown.sqm = scoreSqm(renter, property, weights.sqm)
   breakdown.floor = scoreFloor(renter, property, weights.floor)
   breakdown.timing = scoreTiming(renter, property, weights.timing)
@@ -190,10 +193,10 @@ function scoreCity(_r: RenterRow, property: PropertyRow, weight: number, hasList
   const exact = preferred.some(c => propertyCities.has(c))
   if (exact) return { weight, raw: 1, weighted: weight, note: `${property.city} ברשימה המועדפת` }
   const fuzzy = hasFuzzyCityMatch(propertyCities, preferred)
-  if (fuzzy) return { weight, raw: 0.75, weighted: 0.75 * weight, note: `התאמה חלקית לעיר (${property.city})` }
-  // Soft penalty rather than DQ — landlord sees the candidate at a low score and
-  // can still decide to contact ("close enough" / "they might consider this area").
-  return { weight, raw: 0.15, weighted: 0.15 * weight, note: `${property.city} לא ברשימה המועדפת` }
+  if (fuzzy) return { weight, raw: 0.55, weighted: 0.55 * weight, note: `התאמה חלקית לעיר (${property.city})` }
+  // Soft penalty rather than DQ — the property surfaces with a clearly lower
+  // score so the admin still sees "close but wrong area" candidates.
+  return { weight, raw: 0, weighted: 0, note: `${property.city} לא ברשימת הערים המבוקשת` }
 }
 
 function scoreRooms(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
@@ -207,6 +210,96 @@ function scoreRooms(renter: RenterRow, property: PropertyRow, weight: number): D
   }
   if (diff <= 1) return { weight, raw: 0.55, weighted: 0.55 * weight, note: `${property.rooms} חדרים — סטייה של ${diff}` }
   return { weight, raw: 0.2, weighted: 0.2 * weight, note: `${property.rooms} חדרים — שונה משמעותית מהבקשה` }
+}
+
+// Maps the renter's preference keys (from the questionnaire) to the property's
+// `amenities` jsonb keys. Two flavors: "structural" amenities that the property
+// either has or doesn't (balcony, parking, elevator, mamad, storage, …) and
+// "any"-typed prefs we treat as informational (condition, top floor, etc.).
+const AMENITY_KEY_MAP: Record<string, string> = {
+  balcony:        'balcony',
+  parking:        'parking',
+  elevator:       'elevator',
+  aircon:         'airConditioner',
+  mamad:          'mamad',
+  storage:        'storage',
+  furnished:      'furnished',
+  accessibility:  'accessibility',
+  solar_heater:   'solarHeater',
+  bars:           'bars',
+  shelter:        'shelter',
+  fiber_internet: 'fiberInternet',
+  quiet:          'quiet',
+}
+
+const AMENITY_LABEL: Record<string, string> = {
+  balcony:        'מרפסת',
+  parking:        'חניה',
+  elevator:       'מעלית',
+  aircon:         'מזגן',
+  mamad:          'ממ״ד',
+  storage:        'מחסן',
+  furnished:      'ריהוט',
+  accessibility:  'נגישות',
+  solar_heater:   'דוד שמש',
+  bars:           'סורגים',
+  shelter:        'מקלט',
+  fiber_internet: 'אינטרנט סיבים',
+  quiet:          'שקט',
+}
+
+function scoreAmenities(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
+  const prefs = (renter.preferences && typeof renter.preferences === 'object') ? renter.preferences as Record<string, any> : null
+  const amen = (property.amenities && typeof property.amenities === 'object') ? property.amenities as Record<string, any> : {}
+
+  if (!prefs) {
+    return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'אין העדפות אמצעים בשאלון' }
+  }
+
+  // Collect each preference that's actively ranked (must/nice). Skip 'any'/null.
+  // Each preference contributes a per-item score:
+  //   must + has  → 1.0
+  //   must + miss → 0.0   (big hit — this is what they explicitly required)
+  //   nice + has  → 1.0
+  //   nice + miss → 0.55  (mild penalty — they wanted it but it's not a dealbreaker)
+  // The dimension's `raw` is the average across all ranked items, so the
+  // weight stays calibrated regardless of how many prefs a renter has.
+  const items: Array<{ key: string; level: 'must' | 'nice'; has: boolean; score: number }> = []
+
+  for (const [prefKey, propKey] of Object.entries(AMENITY_KEY_MAP)) {
+    const pref = prefs[prefKey]
+    if (!pref || typeof pref !== 'object') continue
+    const level = (pref.level as string | undefined) ?? (pref.wanted === true ? 'nice' : undefined)
+    if (level !== 'must' && level !== 'nice') continue
+
+    const propVal = amen[propKey]
+    // `has` is true for boolean true OR a truthy object/string. Some legacy
+    // properties store amenities as strings like "yes"/"private" so we treat
+    // anything truthy and non-"none" as having the feature.
+    const has = !!propVal && propVal !== 'none' && propVal !== false
+    const score = has ? 1.0 : (level === 'must' ? 0.0 : 0.55)
+    items.push({ key: prefKey, level, has, score })
+  }
+
+  if (items.length === 0) {
+    return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'אין דרישות אמצעים מוגדרות' }
+  }
+
+  const raw = items.reduce((s, i) => s + i.score, 0) / items.length
+  const missingMust = items.filter(i => i.level === 'must' && !i.has).map(i => AMENITY_LABEL[i.key] ?? i.key)
+  const matchedMust = items.filter(i => i.level === 'must' && i.has).map(i => AMENITY_LABEL[i.key] ?? i.key)
+
+  let note: string
+  if (missingMust.length > 0) {
+    note = `חסר: ${missingMust.join(', ')}`
+  } else if (matchedMust.length > 0) {
+    note = `מתאים: ${matchedMust.join(', ')}`
+  } else {
+    const matchedNice = items.filter(i => i.has).map(i => AMENITY_LABEL[i.key] ?? i.key)
+    note = matchedNice.length > 0 ? `מתאים: ${matchedNice.join(', ')}` : 'אמצעים חלקיים'
+  }
+
+  return { weight, raw, weighted: raw * weight, note }
 }
 
 function scoreSqm(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {

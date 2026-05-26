@@ -253,7 +253,23 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
                   {sendingOutreach ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
                   <span>{sendingOutreach ? 'שולח...' : 'שלח פנייה ראשונה'}</span>
                 </button>
-                {outreachError && <p style={{ marginTop: 6, fontSize: 11, color: 'var(--red)' }}>{outreachError}</p>}
+                {outreachError && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      background: 'var(--red-soft)',
+                      border: '1px solid var(--red-soft)',
+                      color: 'var(--red)',
+                      fontSize: 12,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>השליחה נכשלה</div>
+                    <div>{outreachError}</div>
+                  </div>
+                )}
               </>
             )}
           </div>

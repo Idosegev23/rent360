@@ -37,10 +37,40 @@ const DIM_LABEL: Record<string, string> = {
   budget: 'תקציב',
   city: 'עיר',
   rooms: 'חדרים',
+  amenities: 'אמצעים',
   sqm: 'שטח',
   floor: 'קומה',
   timing: 'תזמון',
   demographic: 'דמוגרפיה',
+}
+
+const PREF_LABEL: Record<string, string> = {
+  balcony: 'מרפסת',
+  parking: 'חניה',
+  elevator: 'מעלית',
+  aircon: 'מזגן',
+  mamad: 'ממ״ד',
+  storage: 'מחסן',
+  furnished: 'ריהוט',
+  accessibility: 'נגישות',
+  solar_heater: 'דוד שמש',
+  bars: 'סורגים',
+  shelter: 'מקלט',
+  fiber_internet: 'אינטרנט סיבים',
+  quiet: 'שקט',
+}
+const LEVEL_LABEL: Record<string, string> = { must: 'חובה', nice: 'רצוי', any: 'לא משנה' }
+const HOUSEHOLD_LABEL: Record<string, string> = {
+  single: 'יחיד', couple: 'זוג', family: 'משפחה', roommates: 'שותפים', students: 'סטודנטים', other: 'אחר',
+}
+const EMPLOYMENT_LABEL: Record<string, string> = {
+  employed: 'שכיר', self_employed: 'עצמאי', student: 'סטודנט', other: 'אחר',
+}
+const CONDITION_LABEL: Record<string, string> = {
+  renovated: 'משופץ', good: 'טוב', 'needs-work': 'דורש שיפוץ', any: 'לא משנה',
+}
+const CONTRACT_LABEL: Record<string, string> = {
+  '6': '6 חודשים', '12': 'שנה', flexible: 'גמיש',
 }
 
 function fmtDate(iso: string | null): string {
@@ -51,6 +81,7 @@ function fmtDate(iso: string | null): string {
 export default function RenterDetailPage({ params }: { params: { id: string } }) {
   const [renter, setRenter] = useState<Renter | null>(null)
   const [matches, setMatches] = useState<Match[]>([])
+  const [lastSubmission, setLastSubmission] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recomputing, setRecomputing] = useState(false)
@@ -63,6 +94,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       if (!res.ok) throw new Error(data?.error?.message || 'load failed')
       setRenter(data.renter)
       setMatches(data.matches || [])
+      setLastSubmission(data.last_submission || null)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'load failed')
@@ -157,6 +189,9 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           </div>
         )}
       </div>
+
+      {/* Full questionnaire details */}
+      <QuestionnaireDetails renter={renter} lastSubmission={lastSubmission} />
 
       {/* Matches */}
       <div className="mb-2 flex items-center justify-between">
@@ -254,6 +289,144 @@ function MatchRow({ match }: { match: Match }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------- Full questionnaire details -----------------------------------
+
+function QuestionnaireDetails({ renter, lastSubmission }: { renter: Renter; lastSubmission: any | null }) {
+  const [showRaw, setShowRaw] = useState(false)
+  const prefs: Record<string, any> = (renter.preferences && typeof renter.preferences === 'object') ? renter.preferences : {}
+
+  // Pull every ranked preference (must / nice / wanted)
+  const ranked: Array<{ key: string; level: string; extra: string | undefined }> = []
+  for (const k of Object.keys(PREF_LABEL)) {
+    const p = prefs[k]
+    if (!p || typeof p !== 'object') continue
+    const level = p.level ?? (p.wanted === true ? 'nice' : 'any')
+    if (level === 'any') continue
+    let extra: string | undefined
+    if (k === 'balcony' && p.min_sqm) extra = `מינ' ${p.min_sqm} מ״ר`
+    if (k === 'parking' && p.type && p.type !== 'any') extra = p.type === 'private' ? 'פרטית' : p.type === 'shared' ? 'משותפת' : 'רחוב'
+    if ((k === 'furnished' || k === 'aircon') && p.amount && p.amount !== 'any') {
+      extra = p.amount === 'full' ? 'מלא' : p.amount === 'partial' ? 'חלקי' : 'ללא'
+    }
+    if (k === 'accessibility' && p.type && p.type !== 'any') {
+      extra = p.type === 'no-stairs' ? 'ללא מדרגות' : p.type === 'ramp' ? 'רמפה' : 'דלת רחבה'
+    }
+    ranked.push({ key: k, level, extra })
+  }
+
+  const financeRaw: Array<[string, string | null]> = [
+    ['ועד בית מקס׳', renter.vaad_bayit_max ? `₪${Number(renter.vaad_bayit_max).toLocaleString('he-IL')}` : null],
+    ['ארנונה מקס׳', renter.arnona_max ? `₪${Number(renter.arnona_max).toLocaleString('he-IL')}` : null],
+    ['חוזה', renter.contract_length ? (CONTRACT_LABEL[renter.contract_length] || renter.contract_length) : null],
+    ['גמישות תקציב', renter.budget_flexibility ? `+${renter.budget_flexibility}%` : null],
+  ]
+  const finance = financeRaw.filter((kv): kv is [string, string] => kv[1] !== null)
+
+  const housingRaw: Array<[string, string | null]> = [
+    ['שטח מינ׳', renter.min_sqm ? `${renter.min_sqm} מ״ר` : null],
+    ['קומה', (renter.floor_min != null || renter.floor_max != null) ? `${renter.floor_min ?? ''}–${renter.floor_max ?? ''}` : null],
+    ['קומה עליונה', renter.top_floor_preference && renter.top_floor_preference !== 'any' ? (renter.top_floor_preference === 'yes' ? 'כן' : 'לא') : null],
+    ['מצב הנכס', renter.condition_preference && renter.condition_preference !== 'any' ? (CONDITION_LABEL[renter.condition_preference] || renter.condition_preference) : null],
+    ['גמישות בחדרים', renter.rooms_flexible ? 'כן' : null],
+    ['גמישות בכניסה', renter.move_in_flexible ? 'כן' : null],
+  ]
+  const housing = housingRaw.filter((kv): kv is [string, string] => kv[1] !== null)
+
+  const profileRaw: Array<[string, string | null]> = [
+    ['סוג משק בית', renter.household_type ? (HOUSEHOLD_LABEL[renter.household_type] || renter.household_type) : null],
+    ['ילדים', renter.has_children ? (renter.children_count ? `${renter.children_count}` : 'כן') : null],
+    ['חיות מחמד', renter.has_pets ? 'כן' : null],
+    ['מעשנים', renter.smokers ? 'כן' : null],
+    ['תעסוקה', renter.employment_status ? (EMPLOYMENT_LABEL[renter.employment_status] || renter.employment_status) : null],
+    ['מעסיק', renter.employer || null],
+    ['תלושים', renter.has_payslips ? 'יש' : null],
+    ['צ׳ק ביטחון', renter.has_security_checks ? 'יש' : null],
+    ['ערבים', renter.has_guarantors ? 'יש' : null],
+  ]
+  const profile = profileRaw.filter((kv): kv is [string, string] => kv[1] !== null)
+
+  const hasAny = ranked.length > 0 || finance.length > 0 || housing.length > 0 || profile.length > 0
+
+  return (
+    <div className="rounded-lg border border-brand-border bg-white p-5 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-semibold text-lg">פרטי השאלון המלאים</h2>
+        {lastSubmission?.submitted_at && (
+          <span className="text-xs text-gray-500">הוגש {fmtDate(lastSubmission.submitted_at)}</span>
+        )}
+      </div>
+
+      {!hasAny && (
+        <div className="text-sm text-gray-500">אין פרטים נוספים בשאלון מעבר לחלק שמעלה.</div>
+      )}
+
+      {ranked.length > 0 && (
+        <div className="mb-4">
+          <div className="text-xs font-medium text-gray-700 mb-2">אמצעים שביקש/ה</div>
+          <div className="flex flex-wrap gap-1.5">
+            {ranked.map(r => (
+              <span
+                key={r.key}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                  r.level === 'must'
+                    ? 'bg-red-50 border border-red-200 text-red-800'
+                    : 'bg-blue-50 border border-blue-200 text-blue-800'
+                }`}
+                title={LEVEL_LABEL[r.level]}
+              >
+                {r.level === 'must' && <AlertTriangle className="h-3 w-3" />}
+                {PREF_LABEL[r.key] || r.key}
+                <span className="text-[10px] opacity-70">· {LEVEL_LABEL[r.level]}</span>
+                {r.extra && <span className="text-[10px] opacity-70">· {r.extra}</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid sm:grid-cols-3 gap-4">
+        {housing.length > 0 && <DetailBlock title="דירה" items={housing} />}
+        {finance.length > 0 && <DetailBlock title="כספים" items={finance} />}
+        {profile.length > 0 && <DetailBlock title="פרופיל" items={profile} />}
+      </div>
+
+      {lastSubmission?.snapshot && (
+        <div className="mt-4 pt-3 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={() => setShowRaw(s => !s)}
+            className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1"
+          >
+            {showRaw ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            תשובה גולמית
+          </button>
+          {showRaw && (
+            <pre className="mt-2 max-h-96 overflow-auto rounded bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap" dir="ltr">
+              {JSON.stringify(lastSubmission.snapshot, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailBlock({ title, items }: { title: string; items: Array<[string, string]> }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-gray-700 mb-2">{title}</div>
+      <dl className="space-y-1.5">
+        {items.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-3 text-sm">
+            <dt className="text-gray-500">{k}</dt>
+            <dd className="text-gray-900 font-medium text-end">{v}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   )
 }
