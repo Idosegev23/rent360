@@ -142,9 +142,24 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
 
 function resolveWeights(raw: unknown): Weights {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_WEIGHTS }
+  const r = raw as Record<string, unknown>
+
+  // Legacy shape from the renter questionnaire:
+  //   { rooms, budget, location, nice_to_have, deal_breakers } summing ~100.
+  // Translate to the engine's 8-dimension shape. Without this, only `budget`
+  // and `rooms` survived the key lookup and renormalization crushed every
+  // other dimension to <1% — so city/amenities mismatches barely moved the
+  // score, which is why a wrong-city + missing-balcony property still scored 99.
+  const hasLegacy = (
+    typeof r.location === 'number' ||
+    typeof r.nice_to_have === 'number' ||
+    typeof r.deal_breakers === 'number'
+  )
+  if (hasLegacy) return translateLegacyWeights(r)
+
   const out: Weights = { ...DEFAULT_WEIGHTS }
   for (const k of Object.keys(DEFAULT_WEIGHTS) as Dimension[]) {
-    const v = (raw as any)[k]
+    const v = r[k]
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = v
   }
   // Re-normalize so total stays 1 (otherwise weights from renter could shift scale).
@@ -153,6 +168,38 @@ function resolveWeights(raw: unknown): Weights {
     for (const k of Object.keys(out) as Dimension[]) out[k] = out[k] / total
   }
   return out
+}
+
+function translateLegacyWeights(r: Record<string, unknown>): Weights {
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback
+  const budget       = num(r.budget,        35)
+  const rooms        = num(r.rooms,         20)
+  const location     = num(r.location,      30)
+  const niceToHave   = num(r.nice_to_have,   5)
+  const dealBreakers = num(r.deal_breakers, 10)
+
+  // Hold back small fixed shares for the secondary dims so they aren't crushed
+  // even when the renter heavily weights the primaries.
+  const reserveSqm = 0.06, reserveFloor = 0.03, reserveTiming = 0.04
+  const mainShare = 1 - (reserveSqm + reserveFloor + reserveTiming) // 0.87
+
+  const total = budget + rooms + location + niceToHave + dealBreakers
+  if (total <= 0) return { ...DEFAULT_WEIGHTS }
+  const factor = mainShare / total
+
+  // deal_breakers spans both demographic (pets/smokers compat) and the "must"
+  // amenities — split it half and half. nice_to_have flows fully into amenities.
+  return {
+    budget:      budget       * factor,
+    rooms:       rooms        * factor,
+    city:        location     * factor,
+    amenities:   (niceToHave + dealBreakers * 0.5) * factor,
+    demographic: (dealBreakers * 0.5) * factor,
+    sqm:         reserveSqm,
+    floor:       reserveFloor,
+    timing:      reserveTiming,
+  }
 }
 
 function scoreBudget(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
