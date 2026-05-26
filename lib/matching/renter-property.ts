@@ -79,6 +79,12 @@ export type DimensionResult = {
   raw: number          // 0-1, before weight
   weighted: number     // raw * weight
   note: string         // human-readable Hebrew note for the UI
+  items?: Array<{      // optional per-item breakdown (used by amenities)
+    key: string
+    label: string
+    level: 'must' | 'nice'
+    has: boolean
+  }>
 }
 
 export type MatchResult = {
@@ -346,7 +352,25 @@ function scoreAmenities(renter: RenterRow, property: PropertyRow, weight: number
     note = matchedNice.length > 0 ? `מתאים: ${matchedNice.join(', ')}` : 'אמצעים חלקיים'
   }
 
-  return { weight, raw, weighted: raw * weight, note }
+  // Sort so the actionable items (missing must) come first, then missing nice,
+  // then matched. UI uses this order to display per-item rows.
+  const orderForUi = items
+    .slice()
+    .sort((a, b) => {
+      const rank = (it: typeof items[0]) =>
+        (it.level === 'must' && !it.has ? 0 :
+         it.level === 'nice' && !it.has ? 1 :
+         it.level === 'must' && it.has  ? 2 : 3)
+      return rank(a) - rank(b)
+    })
+    .map(i => ({
+      key: i.key,
+      label: AMENITY_LABEL[i.key] ?? i.key,
+      level: i.level,
+      has: i.has,
+    }))
+
+  return { weight, raw, weighted: raw * weight, note, items: orderForUi }
 }
 
 function scoreSqm(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {

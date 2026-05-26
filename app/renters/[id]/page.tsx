@@ -21,13 +21,15 @@ type MatchProperty = {
   images: string[] | null
   evacuation_date: string | null
 }
+type AmenityItem = { key: string; label: string; level: 'must' | 'nice'; has: boolean }
+type BreakdownEntry = { weight: number; raw: number; weighted: number; note: string; items?: AmenityItem[] }
 type Match = {
   id: string
   property_id: string
   score: number | null
   is_disqualified: boolean
   disqualifying_reasons: string[] | null
-  breakdown: Record<string, { weight: number; raw: number; weighted: number; note: string }> | null
+  breakdown: Record<string, BreakdownEntry> | null
   reasons: string[] | null
   status: string | null
   property: MatchProperty | null
@@ -273,17 +275,10 @@ function MatchRow({ match }: { match: Match }) {
             </div>
           )}
           {match.breakdown && (
-            <div className="mt-2 space-y-1">
-              <div className="text-xs font-medium text-gray-700">פירוט ציון:</div>
+            <div className="mt-2 space-y-1.5">
+              <div className="text-xs font-medium text-gray-700 mb-1">פירוט ציון:</div>
               {Object.entries(match.breakdown).map(([dim, d]) => (
-                <div key={dim} className="text-xs flex items-center gap-2">
-                  <span className="w-20 text-gray-500">{DIM_LABEL[dim] || dim}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div className="h-full bg-brand-primary rounded-full" style={{ width: `${Math.round(d.raw * 100)}%` }} />
-                  </div>
-                  <span className="w-12 text-left text-gray-600">{Math.round(d.raw * 100)}%</span>
-                  <span className="flex-1 text-gray-500 truncate">{d.note}</span>
-                </div>
+                <BreakdownDimensionRow key={dim} dim={dim} d={d} />
               ))}
             </div>
           )}
@@ -291,6 +286,68 @@ function MatchRow({ match }: { match: Match }) {
       )}
     </div>
   )
+}
+
+// One row in the breakdown. For most dimensions: status pill + note.
+// For amenities (when items array exists): nested rows for each requested
+// amenity with its own קיים / חסר badge.
+function BreakdownDimensionRow({ dim, d }: { dim: string; d: BreakdownEntry }) {
+  const status = statusForDimension(d)
+  const isAmenities = dim === 'amenities' && Array.isArray(d.items) && d.items.length > 0
+
+  return (
+    <div className="text-xs">
+      <div className="flex items-center gap-2">
+        <span className="w-20 text-gray-500">{DIM_LABEL[dim] || dim}</span>
+        <StatusBadge tone={status.tone} label={status.label} />
+        {!isAmenities && <span className="flex-1 text-gray-500 truncate">{d.note}</span>}
+      </div>
+      {isAmenities && d.items && (
+        <div className="mt-1.5 mr-[88px] space-y-1">
+          {d.items.map(item => (
+            <div key={item.key} className="flex items-center gap-2 text-[11px]">
+              <span className="w-20 text-gray-600">{item.label}</span>
+              <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                item.level === 'must' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+              }`}>
+                {item.level === 'must' ? 'חובה' : 'רצוי'}
+              </span>
+              <StatusBadge tone={item.has ? 'green' : (item.level === 'must' ? 'red' : 'amber')} label={item.has ? 'קיים' : 'חסר'} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatusBadge({ tone, label }: { tone: 'green' | 'amber' | 'red' | 'gray'; label: string }) {
+  const cls = tone === 'green' ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+            : tone === 'amber' ? 'bg-amber-100 text-amber-700 border-amber-200'
+            : tone === 'red'   ? 'bg-red-100 text-red-700 border-red-200'
+                               : 'bg-gray-100 text-gray-600 border-gray-200'
+  return (
+    <span className={`shrink-0 inline-flex items-center justify-center w-16 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+      {label}
+    </span>
+  )
+}
+
+// Decide קיים / חסר / חלקי / לא ביקש per dimension. Neutral cases
+// (renter didn't fill in, or property data missing) are detected by the
+// engine's note phrasing so the UI doesn't claim something "exists" when
+// really there was nothing to compare against.
+function statusForDimension(d: BreakdownEntry): { label: string; tone: 'green' | 'amber' | 'red' | 'gray' } {
+  const note = d.note || ''
+  const isNeutral =
+    /^(אין |אין$|לא הוגדר|לא ידוע)/.test(note) ||
+    note.includes('לא חסום') ||
+    note.includes('בעיה בקריאת') ||
+    note.includes('חסר תאריך')
+  if (isNeutral) return { label: 'לא ביקש', tone: 'gray' }
+  if (d.raw >= 0.7) return { label: 'קיים', tone: 'green' }
+  if (d.raw >= 0.4) return { label: 'חלקי', tone: 'amber' }
+  return { label: 'חסר', tone: 'red' }
 }
 
 // ---------- Full questionnaire details -----------------------------------
