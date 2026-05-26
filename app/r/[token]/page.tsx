@@ -49,6 +49,7 @@ type FormData = {
 
   preferredCities: string[]
   customCity: string
+  preferredNeighborhoods: string[]
   budgetMin: string
   budgetMax: string
   budgetFlexibility: string
@@ -119,6 +120,7 @@ const initial: FormData = {
   email: '',
   preferredCities: [],
   customCity: '',
+  preferredNeighborhoods: [],
   budgetMin: '',
   budgetMax: '',
   budgetFlexibility: '',
@@ -221,6 +223,38 @@ export default function RenterFormPage() {
     })
   }
 
+  const toggleNeighborhood = (nbh: string) => {
+    setData(prev => {
+      const exists = prev.preferredNeighborhoods.includes(nbh)
+      return {
+        ...prev,
+        preferredNeighborhoods: exists
+          ? prev.preferredNeighborhoods.filter(n => n !== nbh)
+          : [...prev.preferredNeighborhoods, nbh],
+      }
+    })
+  }
+
+  // Live-load the neighborhoods available in the cities the renter has picked.
+  // Optional step — we don't block the form on it, and a renter can ignore
+  // this whole section (empty list = neutral on the neighborhood dimension).
+  const [neighborhoodOptions, setNeighborhoodOptions] = useState<Array<{ name: string; city: string; count: number }>>([])
+  useEffect(() => {
+    const extras = data.customCity.split(/[,\n]/).map(c => c.trim()).filter(Boolean)
+    const cities = Array.from(new Set([...data.preferredCities, ...extras]))
+    if (cities.length === 0) {
+      setNeighborhoodOptions([])
+      return
+    }
+    const ctrl = new AbortController()
+    fetch(`/api/v1/neighborhoods?cities=${encodeURIComponent(cities.join(','))}`, { signal: ctrl.signal })
+      .then(r => r.json())
+      .then(d => setNeighborhoodOptions(d?.neighborhoods || []))
+      .catch(() => {/* network/abort — silently ignore */})
+    return () => ctrl.abort()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.preferredCities.join('|'), data.customCity])
+
   const allCities = (): string[] => {
     const extras = data.customCity
       .split(/[,\n]/)
@@ -284,6 +318,7 @@ export default function RenterFormPage() {
           email: data.email.trim(),
 
           preferred_cities: allCities(),
+          preferred_neighborhoods: data.preferredNeighborhoods,
           budget_min: data.budgetMin,
           budget_max: data.budgetMax,
           budget_flexibility: data.budgetFlexibility,
@@ -518,6 +553,34 @@ export default function RenterFormPage() {
                       className={`${inputCls} mt-3 text-sm`}
                     />
                   </div>
+
+                  {neighborhoodOptions.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-brand-ink mb-1">שכונות מועדפות <span className="text-brand-inkMuted text-xs">(לא חובה — דלגו אם לא משנה לכם)</span></label>
+                      <p className="text-xs text-brand-inkMuted mb-2">{neighborhoodOptions.length} שכונות זמינות בערים שבחרתם. ככל שתבחרו פחות — נראה לכם יותר אפשרויות.</p>
+                      <div className="flex flex-wrap gap-2 max-h-56 overflow-y-auto pb-1">
+                        {neighborhoodOptions.map(nbh => {
+                          const active = data.preferredNeighborhoods.includes(nbh.name)
+                          return (
+                            <button
+                              key={`${nbh.city}::${nbh.name}`}
+                              type="button"
+                              onClick={() => toggleNeighborhood(nbh.name)}
+                              className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                                active
+                                  ? 'bg-brand-primary text-white border-brand-primary'
+                                  : 'bg-brand-surfaceMuted text-brand-inkMuted border-brand-border hover:border-brand-borderStrong'
+                              }`}
+                              title={`${nbh.city} · ${nbh.count} נכסים`}
+                            >
+                              {nbh.name}
+                              <span className="opacity-60 mr-1">· {nbh.count}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-brand-ink mb-1.5">תקציב חודשי (₪)</label>

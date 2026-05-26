@@ -97,6 +97,7 @@ export async function GET(req: NextRequest){
   const limit = parseInt(url.searchParams.get('limit') || '50')
   const search = url.searchParams.get('search') || ''
   const city = url.searchParams.get('city') || ''
+  const neighborhood = url.searchParams.get('neighborhood') || ''
   const price_min = url.searchParams.get('price_min')
   const price_max = url.searchParams.get('price_max')
   const rooms_min = url.searchParams.get('rooms_min')
@@ -129,6 +130,9 @@ export async function GET(req: NextRequest){
   }
   if(city) {
     query = query.eq('city', city)
+  }
+  if(neighborhood) {
+    query = query.eq('neighborhood', neighborhood)
   }
   if(price_min) {
     query = query.gte('price', parseInt(price_min))

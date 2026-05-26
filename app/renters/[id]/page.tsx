@@ -38,6 +38,7 @@ type Match = {
 const DIM_LABEL: Record<string, string> = {
   budget: 'תקציב',
   city: 'עיר',
+  neighborhood: 'שכונה',
   rooms: 'חדרים',
   amenities: 'אמצעים',
   sqm: 'שטח',
@@ -128,6 +129,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
 
   const fullName = [renter.first_name, renter.last_name].filter(Boolean).join(' ')
   const cities = Array.isArray(renter.preferred_cities) ? renter.preferred_cities : []
+  const neighborhoods = Array.isArray(renter.preferred_neighborhoods) ? renter.preferred_neighborhoods : []
   const vetting: string[] = []
   if (renter.has_payslips) vetting.push('תלושים')
   if (renter.has_security_checks) vetting.push('צ׳ק ביטחון')
@@ -177,6 +179,11 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           {cities.map((c: string) => (
             <span key={c} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
               <MapPin className="h-3 w-3" />{c}
+            </span>
+          ))}
+          {neighborhoods.map((n: string) => (
+            <span key={`nbh:${n}`} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700" title="שכונה מועדפת">
+              <MapPin className="h-3 w-3" />{n}
             </span>
           ))}
           {renter.has_pets && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-700">חיות מחמד</span>}

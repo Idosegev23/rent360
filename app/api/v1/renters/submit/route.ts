@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       contract_length: s(payload.contract_length),
 
       preferred_cities: toArray(payload.preferred_cities),
+      preferred_neighborhoods: toArray(payload.preferred_neighborhoods),
 
       preferred_rooms: toNum(payload.preferred_rooms),
       rooms_flexible: toBool(payload.rooms_flexible) ?? false,

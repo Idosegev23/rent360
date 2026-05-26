@@ -50,6 +50,7 @@ interface ModernPropertiesPageProps {
 interface FilterState {
   search: string;
   city: string;
+  neighborhood: string;
   priceMin: string;
   priceMax: string;
   roomsMin: string;
@@ -79,6 +80,7 @@ export default function ModernPropertiesPage({
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     city: '',
+    neighborhood: '',
     priceMin: '',
     priceMax: '',
     roomsMin: '',
@@ -89,6 +91,7 @@ export default function ModernPropertiesPage({
   });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [allCities, setAllCities] = useState<string[]>([]);
+  const [allNeighborhoods, setAllNeighborhoods] = useState<string[]>([]);
 
   // Fetch properties function
   const fetchProperties = async (page: number = 1, currentFilters: FilterState = filters) => {
@@ -101,6 +104,7 @@ export default function ModernPropertiesPage({
 
       if (currentFilters.search) searchParams.set('search', currentFilters.search);
       if (currentFilters.city) searchParams.set('city', currentFilters.city);
+      if (currentFilters.neighborhood) searchParams.set('neighborhood', currentFilters.neighborhood);
       if (currentFilters.priceMin) searchParams.set('price_min', currentFilters.priceMin);
       if (currentFilters.priceMax) searchParams.set('price_max', currentFilters.priceMax);
       if (currentFilters.roomsMin) searchParams.set('rooms_min', currentFilters.roomsMin);
@@ -134,8 +138,30 @@ export default function ModernPropertiesPage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Refresh the neighborhood dropdown whenever the city filter changes.
+  // Empty city → all neighborhoods system-wide. The endpoint is public and
+  // already returns counts, but for the simple dropdown we only need names.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const qs = filters.city ? `?cities=${encodeURIComponent(filters.city)}` : '';
+    fetch(`/api/v1/neighborhoods${qs}`, { signal: ctrl.signal })
+      .then(r => r.json())
+      .then(d => {
+        const names = Array.from(new Set((d?.neighborhoods || []).map((n: any) => n.name as string)))
+          .sort((a: any, b: any) => (a as string).localeCompare(b as string, 'he'));
+        setAllNeighborhoods(names as string[]);
+      })
+      .catch(() => {/* network/abort */});
+    return () => ctrl.abort();
+  }, [filters.city]);
+
   // Handle filter changes
   const handleFilterChange = (newFilters: Partial<FilterState>) => {
+    // If the city changes, the previously-selected neighborhood may not exist
+    // in the new city — clear it so we don't return zero rows by accident.
+    if ('city' in newFilters && newFilters.city !== filters.city) {
+      newFilters = { ...newFilters, neighborhood: '' };
+    }
     const updatedFilters = { ...filters, ...newFilters };
     setFilters(updatedFilters);
     fetchProperties(1, updatedFilters);
@@ -151,6 +177,7 @@ export default function ModernPropertiesPage({
     const clearedFilters: FilterState = {
       search: '',
       city: '',
+      neighborhood: '',
       priceMin: '',
       priceMax: '',
       roomsMin: '',
@@ -309,6 +336,19 @@ export default function ModernPropertiesPage({
               ))}
             </select>
 
+            <select
+              value={filters.neighborhood}
+              onChange={(e) => handleFilterChange({ neighborhood: e.target.value })}
+              disabled={allNeighborhoods.length === 0}
+              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              title={filters.city ? `שכונות ב${filters.city}` : 'כל השכונות'}
+            >
+              <option value="">{filters.city ? `כל השכונות ב${filters.city}` : 'כל השכונות'}</option>
+              {allNeighborhoods.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+
             <div className="flex gap-2">
               <input
                 type="number"
@@ -363,7 +403,7 @@ export default function ModernPropertiesPage({
               <option value="true">יד 2 תיווך</option>
             </select>
 
-            {(filters.search || filters.city || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive || filters.isBrokerage || filters.amenities.length > 0) && (
+            {(filters.search || filters.city || filters.neighborhood || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive || filters.isBrokerage || filters.amenities.length > 0) && (
               <button
                 onClick={clearFilters}
                 className="px-4 py-3 text-brand-primary border border-brand-primary rounded-lg hover:bg-brand-primary hover:text-white transition-colors"

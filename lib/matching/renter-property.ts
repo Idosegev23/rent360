@@ -19,6 +19,7 @@
 export type RenterRow = {
   id: string
   preferred_cities: unknown            // jsonb — array of strings
+  preferred_neighborhoods: unknown     // jsonb — array of strings (optional)
   preferred_rooms: number | null
   rooms_flexible: boolean | null
   min_sqm: number | null
@@ -61,10 +62,11 @@ export type PropertyRow = {
 }
 
 export const DEFAULT_WEIGHTS = {
-  budget: 0.28,
-  city: 0.22,
-  rooms: 0.14,
-  amenities: 0.18,    // balcony/parking/elevator/etc. — pulled from renter.preferences
+  budget: 0.25,
+  city: 0.18,
+  neighborhood: 0.10, // optional — neutral 0.7 when renter didn't pick any
+  rooms: 0.13,
+  amenities: 0.16,    // balcony/parking/elevator/etc. — pulled from renter.preferences
   sqm: 0.08,
   floor: 0.03,
   timing: 0.04,
@@ -121,6 +123,7 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   // ----- Soft dimensions -----------------------------------------------------
   breakdown.budget = scoreBudget(renter, property, weights.budget)
   breakdown.city = scoreCity(renter, property, weights.city, hasCityList, preferredCities, propertyCities)
+  breakdown.neighborhood = scoreNeighborhood(renter, property, weights.neighborhood)
   breakdown.rooms = scoreRooms(renter, property, weights.rooms)
   breakdown.amenities = scoreAmenities(renter, property, weights.amenities)
   breakdown.sqm = scoreSqm(renter, property, weights.sqm)
@@ -196,15 +199,19 @@ function translateLegacyWeights(r: Record<string, unknown>): Weights {
 
   // deal_breakers spans both demographic (pets/smokers compat) and the "must"
   // amenities — split it half and half. nice_to_have flows fully into amenities.
+  // location is split 70/30 city/neighborhood: the questionnaire only asked
+  // about cities, so we keep most of the location weight there and give
+  // neighborhood a smaller share that activates if/when the renter fills it.
   return {
-    budget:      budget       * factor,
-    rooms:       rooms        * factor,
-    city:        location     * factor,
-    amenities:   (niceToHave + dealBreakers * 0.5) * factor,
-    demographic: (dealBreakers * 0.5) * factor,
-    sqm:         reserveSqm,
-    floor:       reserveFloor,
-    timing:      reserveTiming,
+    budget:       budget       * factor,
+    rooms:        rooms        * factor,
+    city:         location * 0.70 * factor,
+    neighborhood: location * 0.30 * factor,
+    amenities:    (niceToHave + dealBreakers * 0.5) * factor,
+    demographic:  (dealBreakers * 0.5) * factor,
+    sqm:          reserveSqm,
+    floor:        reserveFloor,
+    timing:       reserveTiming,
   }
 }
 
@@ -250,6 +257,31 @@ function scoreCity(_r: RenterRow, property: PropertyRow, weight: number, hasList
   // Soft penalty rather than DQ — the property surfaces with a clearly lower
   // score so the admin still sees "close but wrong area" candidates.
   return { weight, raw: 0, weighted: 0, note: `${property.city} לא ברשימת הערים המבוקשת` }
+}
+
+function scoreNeighborhood(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
+  const preferred = toStringArray(renter.preferred_neighborhoods).map(s => s.trim()).filter(Boolean)
+  // Renter didn't pick any neighborhoods → neutral. We never penalize for a
+  // field they didn't fill in (matches the user's spec: "אם לא ביקש שכונה
+  // לא להשפיע").
+  if (preferred.length === 0) {
+    return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'לא ביקש שכונה' }
+  }
+  if (!property.neighborhood) {
+    return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'אין שכונה ידועה לנכס' }
+  }
+  const propNbh = property.neighborhood.trim().toLowerCase()
+  const wanted = preferred.map(p => p.toLowerCase())
+  if (wanted.includes(propNbh)) {
+    return { weight, raw: 1, weighted: weight, note: `${property.neighborhood} ברשימת השכונות` }
+  }
+  // Substring match for noisy data like "מרכז" matching "מרכז העיר".
+  for (const w of wanted) {
+    if (w.length >= 3 && (propNbh.includes(w) || w.includes(propNbh))) {
+      return { weight, raw: 0.55, weighted: 0.55 * weight, note: `התאמה חלקית לשכונה (${property.neighborhood})` }
+    }
+  }
+  return { weight, raw: 0, weighted: 0, note: `${property.neighborhood} לא ברשימת השכונות` }
 }
 
 function scoreRooms(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
