@@ -5,6 +5,7 @@ import { getUserIdFromSupabaseCookie } from '../../../../../../lib/auth'
 import { embedInBackground, embedPropertyIfChanged } from '../../../../../../lib/ai/embeddings'
 import { generatePersonalizationInBackground } from '../../../../../../lib/ai/property-vision'
 import { computeMatchesInBackground } from '../../../../../../lib/matching/orchestrator'
+import { normalizePropertyData } from '../../../../../../lib/data/normalize-property'
 
 // Manual approval flow: agent confirms brokerage with the owner over the phone
 // and clicks "אשר תיווך" — adds the property to approved_properties with approval_method='manual'.
@@ -22,11 +23,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: property } = await sb
     .from('properties')
-    .select('id')
+    .select('id, city, neighborhood, street, floor')
     .eq('id', propertyId)
     .eq('org_id', orgId)
     .maybeSingle()
   if (!property) return NextResponse.json({ error: { code: 'NOT_FOUND' } }, { status: 404 })
+
+  // Clean up scraper artifacts before the match engine sees it:
+  // "חיפה - מגורים" → "חיפה", and split the concatenated
+  // "<street> <num> קומה <n> <nbh>" string back into separate fields.
+  // Only writes when the normalizer actually changed something.
+  const normalized = normalizePropertyData({
+    city: property.city,
+    neighborhood: property.neighborhood,
+    street: property.street,
+    floor: property.floor,
+  })
+  const drift =
+    normalized.city !== property.city ||
+    normalized.neighborhood !== property.neighborhood ||
+    normalized.street !== property.street ||
+    normalized.floor !== property.floor
+  if (drift) {
+    await sb.from('properties').update(normalized).eq('id', propertyId)
+  }
 
   const { data: existing } = await sb
     .from('approved_properties')
