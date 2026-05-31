@@ -153,11 +153,22 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   const applicable = Object.values(breakdown).filter(d => d.applies !== false)
   const applicableWeight = applicable.reduce((s, d) => s + d.weight, 0)
   const isDisqualified = disqualifyingReasons.length > 0
-  const score = isDisqualified
+  let score = isDisqualified
     ? 0
     : applicableWeight > 0
       ? Math.round((applicable.reduce((s, d) => s + d.raw * d.weight, 0) / applicableWeight) * 100)
       : 50
+
+  // Hard cap on missing "חובה" amenities. Per user spec: if ANY item the
+  // renter explicitly marked as 'must' is missing on the property, the
+  // overall score can't exceed 50 — regardless of how generous the
+  // weighted-average came out. This makes "חובה" mean "deal breaker" in
+  // the actual scoring, not just a heavier weighted contribution.
+  const mustItems = breakdown.amenities_must?.items ?? []
+  const missingMustCount = mustItems.filter(i => !i.has).length
+  if (!isDisqualified && missingMustCount > 0) {
+    score = Math.min(score, 50)
+  }
 
   // Top positive notes — for the UI summary line
   const reasons = isDisqualified
@@ -443,8 +454,13 @@ function scoreSqm(renter: RenterRow, property: PropertyRow, weight: number): Dim
   if (renter.min_sqm == null) return { weight, raw: 0, weighted: 0, note: 'לא ביקש שטח מינימלי', applies: false }
   if (property.sqm == null) return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'שטח הנכס לא ידוע', applies: false }
   if (property.sqm >= renter.min_sqm) return { weight, raw: 1, weighted: weight, note: `${property.sqm} מ"ר ≥ ${renter.min_sqm} מבוקש` }
+  // Below the minimum the renter asked for — penalize roughly 3× the gap so
+  // a 10% shortfall drops to ~0.7 (border of "קיים"/"חלקי") and a 20% shortfall
+  // sits clearly in "חלקי". Linear-with-ratio (the previous formula) was too
+  // gentle: 60 vs 70 gave raw 0.86 → "קיים" in the UI, which read wrong.
   const ratio = property.sqm / renter.min_sqm
-  return { weight, raw: ratio, weighted: ratio * weight, note: `${property.sqm} מ"ר קטן מהמינימום (${renter.min_sqm})` }
+  const raw = Math.max(0, 1 - 3 * (1 - ratio))
+  return { weight, raw, weighted: raw * weight, note: `${property.sqm} מ"ר קטן מהמינימום (${renter.min_sqm})` }
 }
 
 function scoreFloor(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
