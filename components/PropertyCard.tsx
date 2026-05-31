@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { type ExtendedProperty } from '../types/property';
 import { Calendar, MapPin, Phone, Clock, Info, Building2, Check, Loader2, Trash2, MessageCircle, Target } from 'lucide-react';
+import { amenityLabelsFrom } from '../lib/data/amenity-labels';
 
 interface PropertyCardProps {
   item: ExtendedProperty;
@@ -105,19 +106,7 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
     try { return new Date(dateStr).toLocaleDateString('he-IL'); } catch { return dateStr; }
   };
 
-  const getAmenitiesList = () => {
-    if (!item.amenities) return [];
-    const a = [];
-    if (item.amenities.elevator) a.push('מעלית');
-    if (item.amenities.parking) a.push('חניה');
-    if (item.amenities.balcony) a.push('מרפסת');
-    if (item.amenities.airConditioner) a.push('מזגן');
-    if (item.amenities.storage) a.push('מחסן');
-    if (item.amenities.mamad) a.push('ממ״ד');
-    return a;
-  };
-
-  const amenities = getAmenitiesList();
+  const amenities = amenityLabelsFrom(item.amenities);
   const isBrokerage = item.source && item.source.includes('יד 2 תיווך');
 
   return (

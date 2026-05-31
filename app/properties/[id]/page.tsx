@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight, Share2, Target, AlertTriangle, ChevronDown, ChevronUp, Loader2, RefreshCw, User } from 'lucide-react'
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
 import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
+import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
   id: string
@@ -60,17 +61,14 @@ function formatDate(dateStr: string | null) {
   }
 }
 
+// Kept thin — defers to the shared amenity-labels module so we never have
+// two different Hebrew dictionaries to keep in sync.
 function getAmenitiesDisplay(amenities: any) {
   if (!amenities) return '—';
-  const amenitiesList = [];
-  if (amenities.elevator) amenitiesList.push('מעלית');
-  if (amenities.parking) amenitiesList.push('חניה');
-  if (amenities.balcony) amenitiesList.push('מרפסת');
-  if (amenities.airConditioner) amenitiesList.push('מזגן');
-  if (amenities.storage) amenitiesList.push('מחסן');
-  if (amenities.mamad) amenitiesList.push('ממ״ד');
-  
-  return amenitiesList.length > 0 ? amenitiesList.join(' · ') : '—';
+  const labels = Object.keys(amenities)
+    .filter(k => amenities[k] && amenities[k] !== 'none')
+    .map(amenityLabel);
+  return labels.length > 0 ? labels.join(' · ') : '—';
 }
 
 export default function PropertyPage({ params }: { params: { id: string } }) {
@@ -228,22 +226,12 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               <div className="mt-8 space-y-4">
                 <h4 className="text-lg font-medium text-gray-900">מאפיינים</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {Object.entries(item.amenities).filter(([_, v]) => v).map(([key]) => {
-                    const amenityNames: Record<string, string> = {
-                      elevator: 'מעלית',
-                      parking: 'חניה',
-                      balcony: 'מרפסת',
-                      airConditioner: 'מזגן',
-                      storage: 'מחסן',
-                      mamad: 'ממ״ד'
-                    };
-                    return (
-                      <div key={key} className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 text-blue-800">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span className="text-sm font-medium">{amenityNames[key] || key}</span>
-                      </div>
-                    );
-                  })}
+                  {Object.entries(item.amenities).filter(([_, v]) => v).map(([key]) => (
+                    <div key={key} className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 text-blue-800">
+                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                      <span className="text-sm font-medium">{amenityLabel(key)}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
