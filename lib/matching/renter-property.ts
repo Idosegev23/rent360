@@ -532,11 +532,16 @@ function scoreTextSimilarity(renter: RenterRow, property: PropertyRow, weight: n
 
   const sim = cosineSimilarity(rVec, pVec)
 
-  // Calibration: text-embedding-3-small puts loosely-related Hebrew rental
-  // text in the 0.15-0.35 band, strongly-related text 0.35-0.55+, and
-  // unrelated text near 0. Stretch the relevant range to [0, 1] so a 0.5
-  // cosine reads as a top match and 0.15 reads as neutral.
-  const raw = Math.max(0, Math.min(1, (sim - 0.15) / 0.30))
+  // Calibration tuned to the observed distribution on the live inventory:
+  // Hebrew rental notes vs Hebrew rental descriptions land in [0.28, 0.62]
+  // with an average around 0.44 (lots of shared generic vocabulary —
+  // "דירה", "חדרים", "מרפסת" — bumps the floor). Map the actual relevant
+  // band to [0, 1] so the dimension actually discriminates instead of
+  // saturating to 1.0 for almost every match:
+  //   sim ≤ 0.30 → raw 0   (text doesn't tell us anything useful)
+  //   sim   0.45 → raw 0.6 (avg case — moderate signal)
+  //   sim ≥ 0.55 → raw 1.0 (genuinely close semantic match)
+  const raw = Math.max(0, Math.min(1, (sim - 0.30) / 0.25))
 
   const pct = Math.round(sim * 100)
   let note: string
