@@ -25,6 +25,7 @@ export function middleware(req: NextRequest) {
   const isCronAuthed =
     pathname === '/api/v1/matches/backfill' ||
     pathname === '/api/v1/neighborhoods/backfill' ||
+    pathname === '/api/v1/embeddings/backfill-renters' ||
     pathname === '/api/v1/properties/audit-amenities' ||
     pathname === '/api/v1/outreach/batch-pending'
 

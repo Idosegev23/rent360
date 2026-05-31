@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { computeMatchesInBackground } from '../../../../../lib/matching/orchestrator'
+import { embedInBackground, embedRenterIfChanged } from '../../../../../lib/ai/embeddings'
 
 /**
  * Public endpoint — a renter submits the multi-step questionnaire from /r/[token].
@@ -159,7 +160,18 @@ export async function POST(request: NextRequest) {
 
     // Recompute renter↔property matches in background
     if (renterId) {
+      // 1) Compute matches immediately on the structured fields. Don't block
+      //    this on the embedding — if OpenAI is down or notes are empty,
+      //    matches still need to land.
+      // 2) Fire embedding in the background; when it lands, recompute matches
+      //    so the text_similarity dimension picks up the new vector.
       computeMatchesInBackground({ renterId })
+      embedInBackground(
+        () => embedRenterIfChanged(renterId).then(res => {
+          if (res.embedded) computeMatchesInBackground({ renterId })
+        }),
+        `renter:${renterId}`,
+      )
     }
 
     return NextResponse.json({

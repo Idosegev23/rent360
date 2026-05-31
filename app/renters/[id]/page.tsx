@@ -43,6 +43,7 @@ const DIM_LABEL: Record<string, string> = {
   amenities_must: 'אמצעים — חובה',
   amenities_nice: 'אמצעים — רצוי',
   amenities: 'אמצעים', // backwards-compat for old rows still in DB
+  text_similarity: 'דמיון טקסטואלי',
   sqm: 'שטח',
   floor: 'קומה',
   timing: 'תזמון',
@@ -53,6 +54,7 @@ const DIM_LABEL: Record<string, string> = {
 const DIM_ORDER = [
   'budget', 'city', 'neighborhood', 'rooms',
   'amenities_must', 'amenities_nice', 'amenities',
+  'text_similarity',
   'sqm', 'floor', 'timing', 'demographic',
 ]
 

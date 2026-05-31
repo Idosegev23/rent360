@@ -89,6 +89,51 @@ export async function embedPropertyIfChanged(propertyId: string): Promise<{ embe
   return { embedded: true, skipped: false }
 }
 
+function buildRenterSourceText(r: any): string {
+  // We mostly care about the freeform notes, but the structured fields give
+  // the embedding a bit of grounding ("she said she's a single self-employed
+  // pet-owner looking near the beach" reads better than "near the beach" on
+  // its own). Keep it short — semantic match is for nuance, the structured
+  // dimensions already cover the hard constraints.
+  const cities = Array.isArray(r.preferred_cities) ? r.preferred_cities.join(', ') : ''
+  const nbhs   = Array.isArray(r.preferred_neighborhoods) ? r.preferred_neighborhoods.join(', ') : ''
+  return [
+    r.notes || '',
+    cities ? `preferred cities: ${cities}` : '',
+    nbhs ? `preferred neighborhoods: ${nbhs}` : '',
+    r.household_type ? `household type: ${r.household_type}` : '',
+    r.employment_status ? `employment: ${r.employment_status}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+/** Embed a renter's notes only when the source text changed. Same shape as
+ *  embedPropertyIfChanged so callers don't need to think about which one is
+ *  which. Skips silently when the renter has no notes worth embedding. */
+export async function embedRenterIfChanged(renterId: string): Promise<{ embedded: boolean; skipped: boolean }> {
+  const sb = supabaseService()
+  const { data: r } = await sb
+    .from('renters')
+    .select('id, notes, preferred_cities, preferred_neighborhoods, household_type, employment_status, notes_embedding_hash')
+    .eq('id', renterId)
+    .maybeSingle()
+  if (!r) return { embedded: false, skipped: true }
+
+  const source = buildRenterSourceText(r)
+  // Tiny inputs are noise — a single-word note ("שקט") doesn't tell us much
+  // semantically and the matcher should treat the dimension as "didn't ask".
+  if (source.trim().length < 10) return { embedded: false, skipped: true }
+
+  const hash = sha256(source)
+  if (r.notes_embedding_hash === hash) return { embedded: false, skipped: true }
+
+  const vec = await embedText(source)
+  await sb
+    .from('renters')
+    .update({ notes_embedding: vec as any, notes_embedding_hash: hash })
+    .eq('id', renterId)
+  return { embedded: true, skipped: false }
+}
+
 export async function embedMessage(messageId: string): Promise<{ embedded: boolean; skipped: boolean }> {
   const sb = supabaseService()
   const { data: m } = await sb

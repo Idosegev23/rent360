@@ -41,6 +41,7 @@ export type RenterRow = {
   children_count: number | null
   preferences: unknown                  // jsonb — { balcony: {level, min_sqm}, parking: {level, type}, elevator: {level}, ... }
   match_weights: unknown                // jsonb — overrides DEFAULT_WEIGHTS
+  notes_embedding?: number[] | null     // 1536-dim vector of the renter's notes
 }
 
 export type PropertyRow = {
@@ -59,6 +60,7 @@ export type PropertyRow = {
   pets_allowed: boolean | null
   smokers_allowed: boolean | null
   is_active: boolean
+  embedding?: number[] | null           // 1536-dim vector of the property's description/full_text
 }
 
 // Weights are nominal — the final score is normalized over only the
@@ -68,16 +70,17 @@ export type PropertyRow = {
 // This is what makes "didn't ask" actually mean "doesn't affect the
 // score" instead of silently injecting a neutral 70%.
 export const DEFAULT_WEIGHTS = {
-  budget: 0.25,
-  city: 0.20,
-  neighborhood: 0.10,
-  rooms: 0.12,
+  budget: 0.23,
+  city: 0.18,
+  neighborhood: 0.09,
+  rooms: 0.11,
   amenities_must: 0.18,   // each missing 'must' item drops the score hard
-  amenities_nice: 0.05,   // simple proportion of nice items present
+  amenities_nice: 0.04,   // simple proportion of nice items present
+  text_similarity: 0.07,  // cosine similarity between renter notes and property text
   sqm: 0.04,
   floor: 0.02,
   timing: 0.02,
-  demographic: 0.02,      // pets/smokers compatibility — only when she said she has them
+  demographic: 0.02,
 } as const
 
 export type Weights = { -readonly [K in keyof typeof DEFAULT_WEIGHTS]: number }
@@ -145,6 +148,7 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   breakdown.floor = scoreFloor(renter, property, weights.floor)
   breakdown.timing = scoreTiming(renter, property, weights.timing)
   breakdown.demographic = scoreDemographic(renter, property, weights.demographic)
+  breakdown.text_similarity = scoreTextSimilarity(renter, property, weights.text_similarity)
 
   // Re-normalize over applicable dimensions only. A dimension with
   // applies=false ("didn't ask") is excluded from BOTH the numerator and
@@ -239,18 +243,20 @@ function translateLegacyWeights(r: Record<string, unknown>): Weights {
   // neighborhood a smaller share that activates if/when the renter fills it.
   // amenities_must gets the deal_breakers contribution (the renter calls it
   // a "deal breaker" — it is, hence the heavy weight). amenities_nice gets
-  // the nice_to_have allocation.
+  // the nice_to_have allocation. text_similarity gets the new default share
+  // (the legacy questionnaire didn't have a slider for it).
   return {
-    budget:         budget   * factor,
-    rooms:          rooms    * factor,
-    city:           location * 0.70 * factor,
-    neighborhood:   location * 0.30 * factor,
-    amenities_must: dealBreakers * factor,
-    amenities_nice: niceToHave   * factor,
-    demographic:    Math.max(0.02, dealBreakers * 0.2 * factor),
-    sqm:            reserveSqm,
-    floor:          reserveFloor,
-    timing:         reserveTiming,
+    budget:           budget   * factor,
+    rooms:            rooms    * factor,
+    city:             location * 0.70 * factor,
+    neighborhood:     location * 0.30 * factor,
+    amenities_must:   dealBreakers * factor,
+    amenities_nice:   niceToHave   * factor,
+    demographic:      Math.max(0.02, dealBreakers * 0.2 * factor),
+    text_similarity:  DEFAULT_WEIGHTS.text_similarity,
+    sqm:              reserveSqm,
+    floor:            reserveFloor,
+    timing:           reserveTiming,
   }
 }
 
@@ -511,6 +517,61 @@ function scoreDemographic(renter: RenterRow, property: PropertyRow, weight: numb
   if (renterSmokes  && property.smokers_allowed === true)  { raw = Math.min(1, raw + 0.1); positives.push('מאפשר עישון') }
   const note = positives.length ? `התאמה דמוגרפית: ${positives.join(', ')}` : 'התאמה דמוגרפית כללית'
   return { weight, raw, weighted: raw * weight, note }
+}
+
+function scoreTextSimilarity(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
+  const rVec = parseVector(renter.notes_embedding)
+  const pVec = parseVector(property.embedding)
+  if (!rVec || !pVec) {
+    return { weight, raw: 0, weighted: 0, note: 'אין תיאור חופשי שאפשר להשוות', applies: false }
+  }
+  if (rVec.length !== pVec.length) {
+    // Defensive — both should be 1536d from text-embedding-3-small.
+    return { weight, raw: 0, weighted: 0, note: 'אי-התאמה במימדי הוקטור', applies: false }
+  }
+
+  const sim = cosineSimilarity(rVec, pVec)
+
+  // Calibration: text-embedding-3-small puts loosely-related Hebrew rental
+  // text in the 0.15-0.35 band, strongly-related text 0.35-0.55+, and
+  // unrelated text near 0. Stretch the relevant range to [0, 1] so a 0.5
+  // cosine reads as a top match and 0.15 reads as neutral.
+  const raw = Math.max(0, Math.min(1, (sim - 0.15) / 0.30))
+
+  const pct = Math.round(sim * 100)
+  let note: string
+  if (raw >= 0.7)      note = `דמיון טקסטואלי גבוה (${pct}%)`
+  else if (raw >= 0.4) note = `דמיון טקסטואלי בינוני (${pct}%)`
+  else                 note = `אין דמיון טקסטואלי מובהק (${pct}%)`
+
+  return { weight, raw, weighted: raw * weight, note }
+}
+
+/** Postgres' `vector` columns come back as either an array (json) or the
+ *  literal string "[0.1,0.2,...]" depending on the client. Normalize both. */
+function parseVector(v: unknown): number[] | null {
+  if (!v) return null
+  if (Array.isArray(v)) return v.filter(n => typeof n === 'number') as number[]
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v)
+      if (Array.isArray(parsed)) return parsed.filter(n => typeof n === 'number')
+    } catch { return null }
+  }
+  return null
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] as number
+    const y = b[i] as number
+    dot += x * y
+    na  += x * x
+    nb  += y * y
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb)
+  return denom === 0 ? 0 : dot / denom
 }
 
 function toStringArray(v: unknown): string[] {

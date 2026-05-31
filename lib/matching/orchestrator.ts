@@ -28,12 +28,13 @@ const RENTER_COLUMNS = `
   floor_min, floor_max, top_floor_preference, condition_preference,
   budget_min, budget_max, budget_flexibility, vaad_bayit_max, arnona_max,
   move_in_date, move_in_flexible, has_pets, smokers, household_size,
-  has_children, children_count, preferences, match_weights
+  has_children, children_count, preferences, match_weights, notes_embedding
 ` as const
 
 const PROPERTY_COLUMNS = `
   id, org_id, city, neighborhood, street, address, price, rooms, sqm, floor,
-  amenities, evacuation_date, available_from, pets_allowed, smokers_allowed, is_active
+  amenities, evacuation_date, available_from, pets_allowed, smokers_allowed, is_active,
+  embedding
 ` as const
 
 type PropertyRowWithOrg = PropertyRow & { org_id: string }
