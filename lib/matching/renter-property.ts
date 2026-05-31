@@ -61,16 +61,23 @@ export type PropertyRow = {
   is_active: boolean
 }
 
+// Weights are nominal — the final score is normalized over only the
+// dimensions the renter actually filled in. So if she only specifies
+// budget+city+rooms, those three are re-scaled to sum to 1.0 and the
+// other dimensions are dropped from both numerator and denominator.
+// This is what makes "didn't ask" actually mean "doesn't affect the
+// score" instead of silently injecting a neutral 70%.
 export const DEFAULT_WEIGHTS = {
   budget: 0.25,
-  city: 0.18,
-  neighborhood: 0.10, // optional — neutral 0.7 when renter didn't pick any
-  rooms: 0.13,
-  amenities: 0.16,    // balcony/parking/elevator/etc. — pulled from renter.preferences
-  sqm: 0.08,
-  floor: 0.03,
-  timing: 0.04,
-  demographic: 0.03,  // pets/smokers compatibility — partial when not DQ
+  city: 0.20,
+  neighborhood: 0.10,
+  rooms: 0.12,
+  amenities_must: 0.18,   // each missing 'must' item drops the score hard
+  amenities_nice: 0.05,   // simple proportion of nice items present
+  sqm: 0.04,
+  floor: 0.02,
+  timing: 0.02,
+  demographic: 0.02,      // pets/smokers compatibility — only when she said she has them
 } as const
 
 export type Weights = { -readonly [K in keyof typeof DEFAULT_WEIGHTS]: number }
@@ -79,8 +86,9 @@ export type Dimension = keyof Weights
 export type DimensionResult = {
   weight: number       // 0-1
   raw: number          // 0-1, before weight
-  weighted: number     // raw * weight
+  weighted: number     // raw * weight (kept for backwards compat / inspection)
   note: string         // human-readable Hebrew note for the UI
+  applies?: boolean    // false → renter didn't fill this in; excluded from the score
   items?: Array<{      // optional per-item breakdown (used by amenities)
     key: string
     label: string
@@ -109,7 +117,12 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   // City mismatch is intentionally NOT a DQ — it shows up as a low city score
   // so admins can still see "close but wrong area" candidates with a low %.
   const propertyCities = toLowerSet([property.city, property.neighborhood])
-  const preferredCities = toStringArray(renter.preferred_cities).map(s => s.toLowerCase())
+  // Strip the "- מגורים" suffix that some renters still have in their
+  // preferred_cities (legacy data — newer rows are cleaned at submit time).
+  // Without this strip, "חיפה - מגורים" never matches "חיפה" and falls to fuzzy.
+  const preferredCities = toStringArray(renter.preferred_cities)
+    .map(s => s.replace(/\s*-\s*מגורים\s*$/, '').trim().toLowerCase())
+    .filter(Boolean)
   const hasCityList = preferredCities.length > 0
 
   if (renter.has_pets === true && property.pets_allowed === false) {
@@ -125,15 +138,26 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   breakdown.city = scoreCity(renter, property, weights.city, hasCityList, preferredCities, propertyCities)
   breakdown.neighborhood = scoreNeighborhood(renter, property, weights.neighborhood)
   breakdown.rooms = scoreRooms(renter, property, weights.rooms)
-  breakdown.amenities = scoreAmenities(renter, property, weights.amenities)
+  const amenityPair = scoreAmenitiesSplit(renter, property, weights.amenities_must, weights.amenities_nice)
+  breakdown.amenities_must = amenityPair.must
+  breakdown.amenities_nice = amenityPair.nice
   breakdown.sqm = scoreSqm(renter, property, weights.sqm)
   breakdown.floor = scoreFloor(renter, property, weights.floor)
   breakdown.timing = scoreTiming(renter, property, weights.timing)
   breakdown.demographic = scoreDemographic(renter, property, weights.demographic)
 
+  // Re-normalize over applicable dimensions only. A dimension with
+  // applies=false ("didn't ask") is excluded from BOTH the numerator and
+  // the denominator, so "she only filled budget + city + rooms" produces a
+  // score that reflects exactly those three at full weight.
+  const applicable = Object.values(breakdown).filter(d => d.applies !== false)
+  const applicableWeight = applicable.reduce((s, d) => s + d.weight, 0)
   const isDisqualified = disqualifyingReasons.length > 0
-  const weightedSum = Object.values(breakdown).reduce((s, d) => s + d.weighted, 0)
-  const score = isDisqualified ? 0 : Math.round(weightedSum * 100)
+  const score = isDisqualified
+    ? 0
+    : applicableWeight > 0
+      ? Math.round((applicable.reduce((s, d) => s + d.raw * d.weight, 0) / applicableWeight) * 100)
+      : 50
 
   // Top positive notes — for the UI summary line
   const reasons = isDisqualified
@@ -202,22 +226,29 @@ function translateLegacyWeights(r: Record<string, unknown>): Weights {
   // location is split 70/30 city/neighborhood: the questionnaire only asked
   // about cities, so we keep most of the location weight there and give
   // neighborhood a smaller share that activates if/when the renter fills it.
+  // amenities_must gets the deal_breakers contribution (the renter calls it
+  // a "deal breaker" — it is, hence the heavy weight). amenities_nice gets
+  // the nice_to_have allocation.
   return {
-    budget:       budget       * factor,
-    rooms:        rooms        * factor,
-    city:         location * 0.70 * factor,
-    neighborhood: location * 0.30 * factor,
-    amenities:    (niceToHave + dealBreakers * 0.5) * factor,
-    demographic:  (dealBreakers * 0.5) * factor,
-    sqm:          reserveSqm,
-    floor:        reserveFloor,
-    timing:       reserveTiming,
+    budget:         budget   * factor,
+    rooms:          rooms    * factor,
+    city:           location * 0.70 * factor,
+    neighborhood:   location * 0.30 * factor,
+    amenities_must: dealBreakers * factor,
+    amenities_nice: niceToHave   * factor,
+    demographic:    Math.max(0.02, dealBreakers * 0.2 * factor),
+    sqm:            reserveSqm,
+    floor:          reserveFloor,
+    timing:         reserveTiming,
   }
 }
 
 function scoreBudget(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
-  if (property.price == null || renter.budget_max == null) {
-    return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'אין מספיק נתוני תקציב' }
+  if (renter.budget_max == null) {
+    return { weight, raw: 0, weighted: 0, note: 'לא ביקש תקציב מקסימלי', applies: false }
+  }
+  if (property.price == null) {
+    return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'אין מחיר לנכס', applies: false }
   }
   const flex = (renter.budget_flexibility ?? 0) / 100
   const hardCeiling = renter.budget_max * (1 + flex)
@@ -248,7 +279,7 @@ function scoreBudget(renter: RenterRow, property: PropertyRow, weight: number): 
 
 function scoreCity(_r: RenterRow, property: PropertyRow, weight: number, hasList: boolean, preferred: string[], propertyCities: Set<string>): DimensionResult {
   if (!hasList) {
-    return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'אין רשימת ערים מועדפות' }
+    return { weight, raw: 0, weighted: 0, note: 'לא ביקש ערים מועדפות', applies: false }
   }
   const exact = preferred.some(c => propertyCities.has(c))
   if (exact) return { weight, raw: 1, weighted: weight, note: `${property.city} ברשימה המועדפת` }
@@ -261,11 +292,9 @@ function scoreCity(_r: RenterRow, property: PropertyRow, weight: number, hasList
 
 function scoreNeighborhood(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
   const preferred = toStringArray(renter.preferred_neighborhoods).map(s => s.trim()).filter(Boolean)
-  // Renter didn't pick any neighborhoods → neutral. We never penalize for a
-  // field they didn't fill in (matches the user's spec: "אם לא ביקש שכונה
-  // לא להשפיע").
+  // Renter didn't pick any neighborhoods → excluded entirely from the score.
   if (preferred.length === 0) {
-    return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'לא ביקש שכונה' }
+    return { weight, raw: 0, weighted: 0, note: 'לא ביקש שכונה', applies: false }
   }
   if (!property.neighborhood) {
     return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'אין שכונה ידועה לנכס' }
@@ -285,8 +314,11 @@ function scoreNeighborhood(renter: RenterRow, property: PropertyRow, weight: num
 }
 
 function scoreRooms(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
-  if (renter.preferred_rooms == null || property.rooms == null) {
-    return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'חסר נתון חדרים' }
+  if (renter.preferred_rooms == null) {
+    return { weight, raw: 0, weighted: 0, note: 'לא ביקש מספר חדרים', applies: false }
+  }
+  if (property.rooms == null) {
+    return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'חסר נתון חדרים בנכס', applies: false }
   }
   const diff = Math.abs(property.rooms - renter.preferred_rooms)
   if (diff < 0.01) return { weight, raw: 1, weighted: weight, note: `${property.rooms} חדרים — בדיוק כפי שביקש` }
@@ -333,81 +365,83 @@ const AMENITY_LABEL: Record<string, string> = {
   quiet:          'שקט',
 }
 
-function scoreAmenities(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
+function scoreAmenitiesSplit(
+  renter: RenterRow,
+  property: PropertyRow,
+  weightMust: number,
+  weightNice: number,
+): { must: DimensionResult; nice: DimensionResult } {
   const prefs = (renter.preferences && typeof renter.preferences === 'object') ? renter.preferences as Record<string, any> : null
   const amen = (property.amenities && typeof property.amenities === 'object') ? property.amenities as Record<string, any> : {}
 
-  if (!prefs) {
-    return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'אין העדפות אמצעים בשאלון' }
+  const mustItems: Array<{ key: string; label: string; level: 'must'; has: boolean }> = []
+  const niceItems: Array<{ key: string; label: string; level: 'nice'; has: boolean }> = []
+
+  if (prefs) {
+    for (const [prefKey, propKey] of Object.entries(AMENITY_KEY_MAP)) {
+      const pref = prefs[prefKey]
+      if (!pref || typeof pref !== 'object') continue
+      const level = (pref.level as string | undefined) ?? (pref.wanted === true ? 'nice' : undefined)
+      if (level !== 'must' && level !== 'nice') continue
+
+      const propVal = amen[propKey]
+      const has = !!propVal && propVal !== 'none' && propVal !== false
+      const label = AMENITY_LABEL[prefKey] ?? prefKey
+      if (level === 'must') mustItems.push({ key: prefKey, label, level: 'must', has })
+      else                  niceItems.push({ key: prefKey, label, level: 'nice', has })
+    }
   }
 
-  // Collect each preference that's actively ranked (must/nice). Skip 'any'/null.
-  // Each preference contributes a per-item score:
-  //   must + has  → 1.0
-  //   must + miss → 0.0   (big hit — this is what they explicitly required)
-  //   nice + has  → 1.0
-  //   nice + miss → 0.55  (mild penalty — they wanted it but it's not a dealbreaker)
-  // The dimension's `raw` is the average across all ranked items, so the
-  // weight stays calibrated regardless of how many prefs a renter has.
-  const items: Array<{ key: string; level: 'must' | 'nice'; has: boolean; score: number }> = []
-
-  for (const [prefKey, propKey] of Object.entries(AMENITY_KEY_MAP)) {
-    const pref = prefs[prefKey]
-    if (!pref || typeof pref !== 'object') continue
-    const level = (pref.level as string | undefined) ?? (pref.wanted === true ? 'nice' : undefined)
-    if (level !== 'must' && level !== 'nice') continue
-
-    const propVal = amen[propKey]
-    // `has` is true for boolean true OR a truthy object/string. Some legacy
-    // properties store amenities as strings like "yes"/"private" so we treat
-    // anything truthy and non-"none" as having the feature.
-    const has = !!propVal && propVal !== 'none' && propVal !== false
-    const score = has ? 1.0 : (level === 'must' ? 0.0 : 0.55)
-    items.push({ key: prefKey, level, has, score })
+  return {
+    must: scoreMustDimension(mustItems, weightMust),
+    nice: scoreNiceDimension(niceItems, weightNice),
   }
+}
 
+function scoreMustDimension(
+  items: Array<{ key: string; label: string; level: 'must'; has: boolean }>,
+  weight: number,
+): DimensionResult {
   if (items.length === 0) {
-    return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'אין דרישות אמצעים מוגדרות' }
+    return { weight, raw: 0, weighted: 0, note: 'לא ביקש אמצעי חובה', applies: false, items: [] }
   }
+  // Each missing must costs heavily. raw = max(0, 1 − 1.5×(missing/total)).
+  // 0/N missing → 1.0; 1/3 missing → 0.5; 2/3 missing → 0.0.
+  const missingCount = items.filter(i => !i.has).length
+  const raw = Math.max(0, 1 - 1.5 * (missingCount / items.length))
+  const missing = items.filter(i => !i.has).map(i => i.label)
+  const matched = items.filter(i =>  i.has).map(i => i.label)
+  const note = missing.length > 0
+    ? `חסר: ${missing.join(', ')}`
+    : matched.length > 0 ? `כל החובות קיימים: ${matched.join(', ')}` : 'אין אמצעי חובה'
 
-  const raw = items.reduce((s, i) => s + i.score, 0) / items.length
-  const missingMust = items.filter(i => i.level === 'must' && !i.has).map(i => AMENITY_LABEL[i.key] ?? i.key)
-  const matchedMust = items.filter(i => i.level === 'must' && i.has).map(i => AMENITY_LABEL[i.key] ?? i.key)
+  const orderForUi = items.slice().sort((a, b) => Number(a.has) - Number(b.has))
+  return { weight, raw, weighted: raw * weight, note, items: orderForUi }
+}
 
-  let note: string
-  if (missingMust.length > 0) {
-    note = `חסר: ${missingMust.join(', ')}`
-  } else if (matchedMust.length > 0) {
-    note = `מתאים: ${matchedMust.join(', ')}`
-  } else {
-    const matchedNice = items.filter(i => i.has).map(i => AMENITY_LABEL[i.key] ?? i.key)
-    note = matchedNice.length > 0 ? `מתאים: ${matchedNice.join(', ')}` : 'אמצעים חלקיים'
+function scoreNiceDimension(
+  items: Array<{ key: string; label: string; level: 'nice'; has: boolean }>,
+  weight: number,
+): DimensionResult {
+  if (items.length === 0) {
+    return { weight, raw: 0, weighted: 0, note: 'לא ביקש אמצעים רצויים', applies: false, items: [] }
   }
+  // Simple proportion of nice items present.
+  const presentCount = items.filter(i => i.has).length
+  const raw = presentCount / items.length
+  const missing = items.filter(i => !i.has).map(i => i.label)
+  const matched = items.filter(i =>  i.has).map(i => i.label)
+  const note = missing.length > 0
+    ? `חסר: ${missing.join(', ')}`
+    : `הכל קיים: ${matched.join(', ')}`
 
-  // Sort so the actionable items (missing must) come first, then missing nice,
-  // then matched. UI uses this order to display per-item rows.
-  const orderForUi = items
-    .slice()
-    .sort((a, b) => {
-      const rank = (it: typeof items[0]) =>
-        (it.level === 'must' && !it.has ? 0 :
-         it.level === 'nice' && !it.has ? 1 :
-         it.level === 'must' && it.has  ? 2 : 3)
-      return rank(a) - rank(b)
-    })
-    .map(i => ({
-      key: i.key,
-      label: AMENITY_LABEL[i.key] ?? i.key,
-      level: i.level,
-      has: i.has,
-    }))
-
+  const orderForUi = items.slice().sort((a, b) => Number(a.has) - Number(b.has))
   return { weight, raw, weighted: raw * weight, note, items: orderForUi }
 }
 
 function scoreSqm(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
-  if (renter.min_sqm == null) return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'לא הוגדר שטח מינימלי' }
-  if (property.sqm == null) return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'שטח הנכס לא ידוע' }
+  if (renter.min_sqm == null) return { weight, raw: 0, weighted: 0, note: 'לא ביקש שטח מינימלי', applies: false }
+  if (property.sqm == null) return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'שטח הנכס לא ידוע', applies: false }
   if (property.sqm >= renter.min_sqm) return { weight, raw: 1, weighted: weight, note: `${property.sqm} מ"ר ≥ ${renter.min_sqm} מבוקש` }
   const ratio = property.sqm / renter.min_sqm
   return { weight, raw: ratio, weighted: ratio * weight, note: `${property.sqm} מ"ר קטן מהמינימום (${renter.min_sqm})` }
@@ -415,8 +449,8 @@ function scoreSqm(renter: RenterRow, property: PropertyRow, weight: number): Dim
 
 function scoreFloor(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
   const fmin = renter.floor_min, fmax = renter.floor_max
-  if (fmin == null && fmax == null) return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'אין העדפת קומה' }
-  if (property.floor == null) return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'קומת הנכס לא ידועה' }
+  if (fmin == null && fmax == null) return { weight, raw: 0, weighted: 0, note: 'לא ביקש העדפת קומה', applies: false }
+  if (property.floor == null) return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'קומת הנכס לא ידועה', applies: false }
   const f = property.floor
   if ((fmin == null || f >= fmin) && (fmax == null || f <= fmax)) {
     return { weight, raw: 1, weighted: weight, note: `קומה ${f} בטווח המבוקש` }
@@ -429,12 +463,13 @@ function scoreFloor(renter: RenterRow, property: PropertyRow, weight: number): D
 function scoreTiming(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
   const desired = renter.move_in_date
   const available = property.evacuation_date || property.available_from
-  if (!desired || !available) return { weight, raw: 0.7, weighted: 0.7 * weight, note: 'תזמון לא חסום (חסר תאריך)' }
+  if (!desired) return { weight, raw: 0, weighted: 0, note: 'לא ביקש מועד כניסה', applies: false }
+  if (!available) return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'אין תאריך פינוי לנכס', applies: false }
 
   const desiredTs = Date.parse(desired)
   const availableTs = Date.parse(available)
   if (Number.isNaN(desiredTs) || Number.isNaN(availableTs)) {
-    return { weight, raw: 0.6, weighted: 0.6 * weight, note: 'בעיה בקריאת תאריכים' }
+    return { weight, raw: 0.6, weighted: 0.6 * weight, note: 'בעיה בקריאת תאריכים', applies: false }
   }
   const diffDays = Math.abs(desiredTs - availableTs) / 86400000
   const buffer = renter.move_in_flexible ? 21 : 7
@@ -447,11 +482,17 @@ function scoreTiming(renter: RenterRow, property: PropertyRow, weight: number): 
 }
 
 function scoreDemographic(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
-  // Hard mismatches were already caught as DQ. Here we reward explicit accommodating signals.
+  // Only applies when the renter actually declared pets or smoking. Otherwise
+  // there's nothing to compare against and the dimension drops out.
+  const renterHasPets = renter.has_pets === true
+  const renterSmokes  = renter.smokers === true
+  if (!renterHasPets && !renterSmokes) {
+    return { weight, raw: 0, weighted: 0, note: 'לא ביקש דרישות דמוגרפיות', applies: false }
+  }
   const positives: string[] = []
-  let raw = 0.7   // neutral baseline
-  if (renter.has_pets === true && property.pets_allowed === true) { raw = Math.min(1, raw + 0.2); positives.push('מאפשר חיות') }
-  if (renter.smokers === true && property.smokers_allowed === true) { raw = Math.min(1, raw + 0.1); positives.push('מאפשר עישון') }
+  let raw = 0.7
+  if (renterHasPets && property.pets_allowed === true)     { raw = Math.min(1, raw + 0.2); positives.push('מאפשר חיות') }
+  if (renterSmokes  && property.smokers_allowed === true)  { raw = Math.min(1, raw + 0.1); positives.push('מאפשר עישון') }
   const note = positives.length ? `התאמה דמוגרפית: ${positives.join(', ')}` : 'התאמה דמוגרפית כללית'
   return { weight, raw, weighted: raw * weight, note }
 }

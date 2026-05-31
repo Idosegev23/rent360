@@ -22,7 +22,7 @@ type MatchProperty = {
   evacuation_date: string | null
 }
 type AmenityItem = { key: string; label: string; level: 'must' | 'nice'; has: boolean }
-type BreakdownEntry = { weight: number; raw: number; weighted: number; note: string; items?: AmenityItem[] }
+type BreakdownEntry = { weight: number; raw: number; weighted: number; note: string; applies?: boolean; items?: AmenityItem[] }
 type Match = {
   id: string
   property_id: string
@@ -40,12 +40,21 @@ const DIM_LABEL: Record<string, string> = {
   city: 'עיר',
   neighborhood: 'שכונה',
   rooms: 'חדרים',
-  amenities: 'אמצעים',
+  amenities_must: 'אמצעים — חובה',
+  amenities_nice: 'אמצעים — רצוי',
+  amenities: 'אמצעים', // backwards-compat for old rows still in DB
   sqm: 'שטח',
   floor: 'קומה',
   timing: 'תזמון',
   demographic: 'דמוגרפיה',
 }
+
+// Order the breakdown rows so the most impactful dimensions appear first.
+const DIM_ORDER = [
+  'budget', 'city', 'neighborhood', 'rooms',
+  'amenities_must', 'amenities_nice', 'amenities',
+  'sqm', 'floor', 'timing', 'demographic',
+]
 
 const PREF_LABEL: Record<string, string> = {
   balcony: 'מרפסת',
@@ -284,9 +293,11 @@ function MatchRow({ match }: { match: Match }) {
           {match.breakdown && (
             <div className="mt-2 space-y-1.5">
               <div className="text-xs font-medium text-gray-700 mb-1">פירוט ציון:</div>
-              {Object.entries(match.breakdown).map(([dim, d]) => (
-                <BreakdownDimensionRow key={dim} dim={dim} d={d} />
-              ))}
+              {Object.entries(match.breakdown)
+                .sort(([a], [b]) => (DIM_ORDER.indexOf(a) === -1 ? 999 : DIM_ORDER.indexOf(a)) - (DIM_ORDER.indexOf(b) === -1 ? 999 : DIM_ORDER.indexOf(b)))
+                .map(([dim, d]) => (
+                  <BreakdownDimensionRow key={dim} dim={dim} d={d} />
+                ))}
             </div>
           )}
         </div>
@@ -295,22 +306,23 @@ function MatchRow({ match }: { match: Match }) {
   )
 }
 
-// One row in the breakdown. For most dimensions: status pill + note.
-// For amenities (when items array exists): nested rows for each requested
-// amenity with its own קיים / חסר badge.
+// One row in the breakdown. Status pill (קיים/חלקי/חסר/לא ביקש) + note.
+// Amenity dimensions (must/nice/legacy) also render per-item rows beneath.
 function BreakdownDimensionRow({ dim, d }: { dim: string; d: BreakdownEntry }) {
   const status = statusForDimension(d)
-  const isAmenities = dim === 'amenities' && Array.isArray(d.items) && d.items.length > 0
+  const isAmenityDim = (dim === 'amenities_must' || dim === 'amenities_nice' || dim === 'amenities')
+                       && Array.isArray(d.items) && d.items.length > 0
+  const dimmed = d.applies === false
 
   return (
-    <div className="text-xs">
+    <div className={`text-xs ${dimmed ? 'opacity-60' : ''}`}>
       <div className="flex items-center gap-2">
-        <span className="w-20 text-gray-500">{DIM_LABEL[dim] || dim}</span>
+        <span className="w-24 text-gray-500">{DIM_LABEL[dim] || dim}</span>
         <StatusBadge tone={status.tone} label={status.label} />
-        {!isAmenities && <span className="flex-1 text-gray-500 truncate">{d.note}</span>}
+        <span className="flex-1 text-gray-500 truncate">{d.note}</span>
       </div>
-      {isAmenities && d.items && (
-        <div className="mt-1.5 mr-[88px] space-y-1">
+      {isAmenityDim && d.items && (
+        <div className="mt-1.5 mr-[104px] space-y-1">
           {d.items.map(item => (
             <div key={item.key} className="flex items-center gap-2 text-[11px]">
               <span className="w-20 text-gray-600">{item.label}</span>
@@ -340,14 +352,17 @@ function StatusBadge({ tone, label }: { tone: 'green' | 'amber' | 'red' | 'gray'
   )
 }
 
-// Decide קיים / חסר / חלקי / לא ביקש per dimension. Neutral cases
-// (renter didn't fill in, or property data missing) are detected by the
-// engine's note phrasing so the UI doesn't claim something "exists" when
-// really there was nothing to compare against.
+// Decide קיים / חסר / חלקי / לא ביקש per dimension.
+//   - applies=false (engine signals the renter didn't fill it in, or no
+//     comparable data on the property) → "לא ביקש".
+//   - Otherwise pivot on raw.
+// We also keep the note-based neutral detection as a fallback for older
+// breakdowns that pre-date the `applies` field.
 function statusForDimension(d: BreakdownEntry): { label: string; tone: 'green' | 'amber' | 'red' | 'gray' } {
+  if (d.applies === false) return { label: 'לא ביקש', tone: 'gray' }
   const note = d.note || ''
   const isNeutral =
-    /^(אין |אין$|לא הוגדר|לא ידוע)/.test(note) ||
+    /^(אין |אין$|לא הוגדר|לא ביקש|לא ידוע)/.test(note) ||
     note.includes('לא חסום') ||
     note.includes('בעיה בקריאת') ||
     note.includes('חסר תאריך')
