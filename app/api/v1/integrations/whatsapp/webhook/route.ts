@@ -160,9 +160,16 @@ async function processEvent(
       return
     }
 
-    // 2. Hard stop-word match on plain text
-    if (m.type === 'text' && isHardOptOut(m.text)) {
-      await recordOptOut({ orgId, phone: m.from, source: 'stopword', reason: m.text || undefined })
+    // 2. Hard stop-word match — plain text OR a template quick-reply button.
+    //    Tapping the "להסיר אותי" button on landlord_outreach_* arrives as a
+    //    `button` message (m.text = button label), so we must check both types.
+    if ((m.type === 'text' || m.type === 'button') && isHardOptOut(m.text)) {
+      await recordOptOut({
+        orgId,
+        phone: m.from,
+        source: m.type === 'button' ? 'button' : 'stopword',
+        reason: m.text || undefined,
+      })
       try {
         await sendText(m.from, 'בסדר, לא נשלח עוד הודעות. תודה!')
       } catch {/* ignore */}

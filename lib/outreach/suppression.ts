@@ -15,7 +15,10 @@
 import { supabaseService } from '../supabase'
 import { normalizePhone } from './phone'
 
-const HARD_OPT_OUT_RE = /^\s*(STOP|הסר(\s+אותי)?|תפסיק|להסיר|אל\s+תשלח\s+לי|לא\s+מעוניינ[ת]?)\s*$/i
+// Matches the deterministic opt-out phrases, including the exact quick-reply
+// button label "להסיר אותי" used by the landlord_outreach_* templates. The
+// `אותי` suffix is optional on every הסר/להסיר/תסירו variant, not just "הסר".
+const HARD_OPT_OUT_RE = /^\s*(STOP|תפסיק|אל\s+תשלח\s+לי|לא\s+מעוניי[ןנ]ת?|(?:ל?הסיר[וי]?|תסיר[וי]?|הסר)(?:\s+אותי)?)\s*$/i
 
 export function isHardOptOut(body: string | null | undefined): boolean {
   if (!body) return false
