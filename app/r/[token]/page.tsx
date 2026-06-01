@@ -169,6 +169,9 @@ export default function RenterFormPage() {
 
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  // Surfaced from the submit response so the success screen can branch on
+  // whether we triggered an invite email (renter provided an address) or not.
+  const [submitResult, setSubmitResult] = useState<{ krayot_app_url?: string; will_receive_email?: boolean } | null>(null)
   const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
@@ -356,6 +359,11 @@ export default function RenterFormPage() {
         }),
       })
       if (!res.ok) throw new Error('server')
+      const json = await res.json().catch(() => ({}))
+      setSubmitResult({
+        krayot_app_url: json?.krayot_app_url,
+        will_receive_email: json?.will_receive_email === true,
+      })
       setSubmitted(true)
     } catch (err) {
       console.error(err)
@@ -410,11 +418,32 @@ export default function RenterFormPage() {
             </svg>
           </motion.div>
           <h2 className="text-2xl font-bold text-brand-ink mb-3">תודה {data.firstName}!</h2>
-          <p className="text-brand-inkMuted leading-relaxed">
+          <p className="text-brand-inkMuted leading-relaxed mb-6">
             קיבלנו את הפרטים שלך.
             <br />
-            נצור איתך קשר בהקדם עם הצעות מתאימות 🏠
+            <span className="text-brand-ink font-semibold">פתחנו לך גם חשבון באפליקציית השוכרים שלנו</span> — שם תוכל/י לראות בזמן אמת דירות שמתאימות לך, לסמן מועדפות ולפנות ישירות למתווכים.
           </p>
+
+          {submitResult?.will_receive_email && data.email && (
+            <div className="mb-5 rounded-lg border border-brand-border bg-brand-surfaceMuted p-3 text-sm text-brand-inkMuted text-start">
+              📩 שלחנו מייל ל-<span className="font-medium text-brand-ink">{data.email}</span> עם קישור להתחברות. לחצ/י עליו וקבע/י סיסמא — בלי למלא שום פרט מחדש.
+            </div>
+          )}
+
+          {!submitResult?.will_receive_email && (
+            <div className="mb-5 rounded-lg border border-brand-border bg-brand-surfaceMuted p-3 text-sm text-brand-inkMuted text-start">
+              💡 לא נתת לנו כתובת מייל — לכן הרישום לאפליקציית השוכרים יעשה ידנית. קישור:
+            </div>
+          )}
+
+          <a
+            href={submitResult?.krayot_app_url || 'https://rent360-app.vercel.app/'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 w-full bg-brand-primary text-white font-semibold py-3 px-6 rounded-md hover:bg-brand-primaryHover transition-colors"
+          >
+            פתח/י את אפליקציית השוכרים 🏠
+          </a>
         </motion.div>
       </CenterMessage>
     )

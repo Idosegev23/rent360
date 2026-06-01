@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { computeMatchesInBackground } from '../../../../../lib/matching/orchestrator'
 import { embedInBackground, embedRenterIfChanged } from '../../../../../lib/ai/embeddings'
+import { enrollInBackground, KRAYOT_RENTAL_URL } from '../../../../../lib/integrations/krayot-rental'
 
 /**
  * Public endpoint — a renter submits the multi-step questionnaire from /r/[token].
@@ -158,6 +159,12 @@ export async function POST(request: NextRequest) {
       }).catch(() => {})
     }
 
+    // Enroll the renter into the krayot-rental consumer app so she gets an
+    // invite email and her profile is pre-populated when she lands there.
+    if (renterId) {
+      enrollInBackground(renterId)
+    }
+
     // Recompute renter↔property matches in background
     if (renterId) {
       // 1) Compute matches immediately on the structured fields. Don't block
@@ -178,6 +185,8 @@ export async function POST(request: NextRequest) {
       success: true,
       renter_id: renterId,
       submission_id: submissionId,
+      krayot_app_url: KRAYOT_RENTAL_URL,
+      will_receive_email: !!email,
     })
   } catch (err) {
     console.error('[renter submit] error:', err)
