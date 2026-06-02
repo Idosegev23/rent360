@@ -33,11 +33,18 @@ interface SharedProperty {
   long_term: boolean | null;
 }
 
+interface MatchInfo {
+  percentage: number;
+  matches: string[];
+  missing: string[];
+}
+
 export default function SharedPropertyPage() {
   const params = useParams();
   const token = params?.token as string;
-  
+
   const [property, setProperty] = useState<SharedProperty | null>(null);
+  const [match, setMatch] = useState<MatchInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -51,6 +58,7 @@ export default function SharedPropertyPage() {
         }
         const data = await response.json();
         setProperty(data.property);
+        setMatch(data.match || null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'שגיאה בטעינת הנכס');
       } finally {
@@ -197,6 +205,39 @@ export default function SharedPropertyPage() {
             )}
           </div>
         </div>
+
+        {/* Personalized match — only when the link was sent to a specific renter */}
+        {match && (
+          <div className="bg-white rounded-xl shadow-sm p-6 border-2 border-emerald-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">ההתאמה שלך</h2>
+              <span className="rounded-full bg-emerald-500 text-white font-bold text-sm px-3 py-1">{match.percentage}% התאמה</span>
+            </div>
+            {match.matches.length > 0 && (
+              <ul className="space-y-2 mb-4">
+                {match.matches.map((m, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <Check className="h-5 w-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-800">{m}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {match.missing.length > 0 && (
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-sm font-medium text-gray-700 mb-2">כדאי לדעת — מה חסר:</div>
+                <ul className="space-y-1.5">
+                  {match.missing.map((m, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <X className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <span className="text-gray-600 text-sm">{m}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* AI Highlights */}
         {property.highlights && property.highlights.length > 0 && (

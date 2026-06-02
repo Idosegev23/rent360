@@ -1,13 +1,13 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Building2, CheckCircle2, Users, Inbox } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Inbox, Send } from 'lucide-react'
 
 const tabs = [
   { href: '/dashboard',           label: 'דשבורד',  Icon: LayoutDashboard },
   { href: '/properties',          label: 'נכסים',   Icon: Building2 },
-  { href: '/approved-properties', label: 'מאושרים', Icon: CheckCircle2 },
   { href: '/renters',             label: 'שוכרים',  Icon: Users },
+  { href: '/outreach',            label: 'שליחה',   Icon: Send },
   { href: '/inbox',               label: 'שיחות',   Icon: Inbox },
 ]
 

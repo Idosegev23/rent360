@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Settings,
   ChevronDown,
+  Send,
 } from 'lucide-react'
 
 type NavLink = {
@@ -23,6 +24,7 @@ const main: NavLink[] = [
   { href: '/properties',           label: 'נכסים',           Icon: Building2 },
   { href: '/approved-properties',  label: 'מאושרים',        Icon: CheckCircle2 },
   { href: '/renters',              label: 'שוכרים',          Icon: Users },
+  { href: '/outreach',             label: 'שליחה',           Icon: Send },
   { href: '/inbox',                label: 'שיחות',           Icon: Inbox },
 ]
 
