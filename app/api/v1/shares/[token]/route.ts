@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
+import { processPropertyForSharing } from '../../../../../lib/ai-property-processor'
 
 // GET - Public endpoint to view shared property
 export async function GET(
@@ -41,22 +42,54 @@ export async function GET(
     })
     .eq('id', share.id)
 
+  // Marketing copy (AI-rewritten, no emojis). Renter share links are minted without AI
+  // processing, so generate it lazily on first view and cache it back on the share row.
+  let aiTitle = share.ai_title as string | null
+  let aiDescription = share.ai_description as string | null
+  let aiHighlights = share.ai_highlights as string[] | null
+  if (!aiDescription) {
+    try {
+      const processed = await processPropertyForSharing({
+        title: property.title || '',
+        city: property.city || '',
+        neighborhood: property.neighborhood,
+        price: property.price || 0,
+        rooms: property.rooms,
+        sqm: property.sqm,
+        description: property.description,
+        amenities: property.amenities,
+        type: property.type,
+        condition: property.condition,
+        available_from: property.available_from,
+        pets_allowed: property.pets_allowed,
+        long_term: property.long_term,
+      })
+      aiTitle = processed.ai_title
+      aiDescription = processed.ai_description
+      aiHighlights = processed.ai_highlights
+      await sb.from('property_shares').update({
+        ai_title: aiTitle,
+        ai_description: aiDescription,
+        ai_highlights: aiHighlights,
+        ai_processed_at: new Date().toISOString(),
+      }).eq('id', share.id)
+    } catch {
+      // AI unavailable (e.g. no OPENAI_API_KEY) — fall back to the raw description below.
+    }
+  }
+
   // When the token is renter-linked, attach the personalized match breakdown
   // (% fit, what matches, what's missing) for the "ההתאמה שלך" block.
   const match = share.match_id ? await buildMatchInfo(sb, share.match_id) : null
 
   // Return sanitized property data (without sensitive info)
-  // Prefer AI-processed data if available
   return NextResponse.json({
     match,
     property: {
       id: property.id,
-      // Use AI title if available, otherwise fallback to basic format
-      title: share.ai_title || `${property.type || 'דירה'} ב${property.city}`,
-      // Use AI description if available, otherwise use original
-      description: share.ai_description || property.description,
-      // Include AI highlights if available
-      highlights: share.ai_highlights || null,
+      title: aiTitle || `${property.type || 'דירה'} ב${property.city}`,
+      description: aiDescription || property.description,
+      highlights: aiHighlights || null,
       city: property.city,
       neighborhood: property.neighborhood,
       price: property.price,

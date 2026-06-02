@@ -50,6 +50,22 @@ export default function SharedPropertyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [interested, setInterested] = useState(false);
+  const [sendingInterest, setSendingInterest] = useState(false);
+
+  async function expressInterest() {
+    if (sendingInterest || interested) return;
+    setSendingInterest(true);
+    try {
+      const res = await fetch(`/api/v1/shares/${token}/interest`, { method: 'POST' });
+      if (!res.ok) throw new Error('failed');
+      setInterested(true);
+    } catch {
+      alert('משהו השתבש, נסו שוב בעוד רגע');
+    } finally {
+      setSendingInterest(false);
+    }
+  }
 
   useEffect(() => {
     async function fetchProperty() {
@@ -358,6 +374,26 @@ export default function SharedPropertyPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Sticky CTA — express interest in viewing the apartment */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 backdrop-blur p-4">
+        <div className="mx-auto max-w-4xl">
+          {interested ? (
+            <div className="flex items-center justify-center gap-2 py-2 font-semibold text-emerald-700">
+              <Check className="h-5 w-5" /> תודה! קיבלנו את הבקשה וניצור איתך קשר בקרוב.
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={expressInterest}
+              disabled={sendingInterest}
+              className="w-full rounded-xl bg-orange-500 py-3.5 text-center text-lg font-bold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-60"
+            >
+              {sendingInterest ? 'שולח…' : 'מעוניין/ת לראות את הדירה'}
+            </button>
+          )}
         </div>
       </div>
 
