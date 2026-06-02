@@ -14,6 +14,7 @@ type ThreadRow = {
   last_outbound_at: string | null
   opted_out_at: string | null
   intent: string | null
+  audience?: 'renter' | 'landlord'
   landlord_name: string | null
   property_title: string | null
   property_city: string | null
@@ -126,6 +127,7 @@ export default function InboxPage() {
                       <span className="truncate" style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>
                         {t.landlord_name || t.phone || 'ללא שם'}
                       </span>
+                      {t.audience === 'renter' && <span className="pill pill-blue">שוכר</span>}
                       {t.intent && <span className="pill pill-blue">{t.intent}</span>}
                     </div>
                     {t.property_title && (

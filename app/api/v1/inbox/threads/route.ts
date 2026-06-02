@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
+import { normalizePhone } from '../../../../../lib/outreach/phone'
 
 const STATUS_FILTER: Record<string, string[]> = {
   all: [],
@@ -66,10 +67,32 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // The inbox is landlord-oriented: it labels a thread with the linked property's owner.
+  // Renter threads (tags.audience === 'renter') are linked to the RECOMMENDED property, so
+  // that label would wrongly show the property owner — resolve the renter's name instead.
+  const hasRenterThreads = (threads || []).some(t => {
+    const tg = (t.tags && typeof t.tags === 'object') ? (t.tags as Record<string, unknown>) : {}
+    return tg.audience === 'renter'
+  })
+  const renterNameByPhone = new Map<string, string>()
+  if (hasRenterThreads) {
+    const { data: renters } = await sb.from('renters').select('first_name, last_name, phone')
+    for (const r of renters || []) {
+      if (!r.phone) continue
+      const nm = [r.first_name, r.last_name].filter(Boolean).join(' ').trim()
+      if (nm) renterNameByPhone.set(normalizePhone(r.phone), nm)
+    }
+  }
+
   const rows = (threads || []).map(t => {
     const prop = t.property_id ? propertyById.get(t.property_id) : undefined
     const preview = previewByThread.get(t.id)
     const tags = (t.tags && typeof t.tags === 'object') ? (t.tags as Record<string, unknown>) : {}
+    const audience = tags.audience === 'renter' ? 'renter' : 'landlord'
+    const tagRenterName = typeof tags.renter_name === 'string' ? tags.renter_name : null
+    const displayName = audience === 'renter'
+      ? (tagRenterName || (t.phone ? renterNameByPhone.get(normalizePhone(t.phone)) : null) || null)
+      : (prop?.contact_name || null)
     return {
       id: t.id,
       phone: t.phone,
@@ -79,7 +102,8 @@ export async function GET(req: NextRequest) {
       last_outbound_at: t.last_outbound_at,
       opted_out_at: t.opted_out_at,
       intent: typeof tags.intent === 'string' ? tags.intent : null,
-      landlord_name: prop?.contact_name || null,
+      audience,
+      landlord_name: displayName,
       property_title: prop?.title || null,
       property_city: prop?.city || null,
       preview: preview ? {

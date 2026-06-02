@@ -10,7 +10,9 @@ import {
   Calendar,
   Check,
   X,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -155,21 +157,55 @@ export default function SharedPropertyPage() {
                 unoptimized
               />
               {images.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                  {images.map((_: any, idx: number) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentImageIndex(idx)}
-                      className={`w-2 h-2 rounded-full transition-all ${
-                        idx === currentImageIndex 
-                          ? 'bg-white w-6' 
-                          : 'bg-white/50'
-                      }`}
-                    />
-                  ))}
-                </div>
+                <>
+                  <button
+                    type="button"
+                    aria-label="הקודם"
+                    onClick={() => setCurrentImageIndex(i => (i - 1 + images.length) % images.length)}
+                    className="absolute right-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="הבא"
+                    onClick={() => setCurrentImageIndex(i => (i + 1) % images.length)}
+                    className="absolute left-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </button>
+                  <div className="absolute top-3 left-3 z-10 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white">
+                    {currentImageIndex + 1}/{images.length}
+                  </div>
+                  <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
+                    {images.map((_: any, idx: number) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        aria-label={`תמונה ${idx + 1}`}
+                        onClick={() => setCurrentImageIndex(idx)}
+                        className={`h-2.5 rounded-full transition-all ${idx === currentImageIndex ? 'w-6 bg-white' : 'w-2.5 bg-white/50'}`}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
+            {images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto p-3">
+                {images.map((img: string, idx: number) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    aria-label={`מעבר לתמונה ${idx + 1}`}
+                    onClick={() => setCurrentImageIndex(idx)}
+                    className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 ${idx === currentImageIndex ? 'border-orange-500' : 'border-transparent'}`}
+                  >
+                    <img src={img} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

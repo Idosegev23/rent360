@@ -136,7 +136,7 @@ export async function dispatchRenterMatchAlert(opts: {
   }
 
   // ---- Record thread + message + dedupe stamp ----
-  const thread = await upsertRenterThread(sb, orgId, phone, propertyId)
+  const thread = await upsertRenterThread(sb, orgId, phone, propertyId, renterId, renter.first_name || null)
 
   await sb.from('messages').insert({
     org_id: orgId,
@@ -222,6 +222,8 @@ async function upsertRenterThread(
   orgId: string,
   normalizedPhone: string,
   propertyId: string,
+  renterId: string,
+  renterName: string | null,
 ): Promise<{ id: string }> {
   const { data: existing } = await sb
     .from('threads')
@@ -239,7 +241,8 @@ async function upsertRenterThread(
       channel: 'whatsapp',
       status: 'human_takeover',
       property_id: propertyId,
-      tags: { audience: 'renter' },
+      // Tag the audience + renter so the (landlord-oriented) inbox can label it correctly.
+      tags: { audience: 'renter', renter_id: renterId, ...(renterName ? { renter_name: renterName } : {}) },
     })
     .select('id')
     .single()
