@@ -20,6 +20,13 @@ export function middleware(req: NextRequest) {
     pathname === '/api/v1/neighborhoods' ||
     /^\/api\/v1\/renters\/invite\/[^/]+$/.test(pathname)
 
+  // Public property share view — prospects/renters open the /share/<token> link from a
+  // WhatsApp message while NOT logged in. The page + its read-only API (GET only) must be
+  // reachable without a session, or the link redirects to /auth/login (broken share link).
+  const isPublicShare =
+    pathname.startsWith('/share/') ||
+    pathname.startsWith('/api/v1/shares/')
+
   // Cron-authenticated endpoints — they verify Authorization: Bearer <CRON_SECRET> themselves.
   // Without this allowlist Vercel Cron / curl can't reach them through the session middleware.
   const isCronAuthed =
@@ -35,6 +42,7 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/v1/integrations') ||
     isPublicRenter ||
+    isPublicShare ||
     isCronAuthed
   ) {
     return NextResponse.next()
