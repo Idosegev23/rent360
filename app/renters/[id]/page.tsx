@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   ArrowRight, Phone, Mail, User, Home, MapPin, Calendar, Users, Loader2, AlertCircle,
   CreditCard, FileCheck, RefreshCw, ExternalLink, ChevronDown, ChevronUp, AlertTriangle,
+  Send, Check,
 } from 'lucide-react'
 
 type Renter = Record<string, any>
@@ -243,8 +244,33 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
 
 function MatchRow({ match }: { match: Match }) {
   const [expanded, setExpanded] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
   const p = match.property
   if (!p) return null
+
+  // Send THIS apartment to the renter (manual, one-click). Bypasses rate caps but the
+  // server still enforces opt-out, dedup (renter_notified_at) and template approval.
+  async function sendApartment() {
+    if (sending || sent) return
+    if (!window.confirm('לשלוח לשוכר את הדירה הזו בוואטסאפ?')) return
+    setSending(true)
+    try {
+      const res = await fetch('/api/v1/outreach/notify-renter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId: match.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error?.message || 'שליחה נכשלה')
+      setSent(true)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'שליחה נכשלה')
+    } finally {
+      setSending(false)
+    }
+  }
+
   const score = Math.round(match.score || 0)
   const scoreTone =
     match.is_disqualified ? 'bg-red-100 text-red-700 border-red-200' :
@@ -277,6 +303,18 @@ function MatchRow({ match }: { match: Match }) {
             {p.floor !== null && <span className="rounded bg-gray-100 px-1.5 py-0.5">קומה {p.floor}</span>}
           </div>
         </div>
+        {!match.is_disqualified && (
+          <button
+            type="button"
+            onClick={sendApartment}
+            disabled={sending || sent}
+            title="שלח לשוכר את הדירה הזו בוואטסאפ"
+            className="shrink-0 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : sent ? <Check className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+            {sent ? 'נשלח' : 'שלח לשוכר'}
+          </button>
+        )}
         <button onClick={() => setExpanded(s => !s)} className="shrink-0 text-gray-400 hover:text-gray-700">
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
