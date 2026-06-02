@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Topbar from '../shell/Topbar';
+import RecentInterest from './RecentInterest';
 
 interface DashboardData {
   kpis?: {
@@ -80,6 +81,7 @@ export default function ModernDashboard({ data }: { data: DashboardData }) {
       />
 
       <div className="page-wrap">
+        <RecentInterest />
         {/* KPI Hero Row */}
         <section className="grid gap-4 mb-7" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)' }}>
           <Link href="/approved-properties" className="kpi kpi-hero block no-underline">

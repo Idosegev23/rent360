@@ -106,6 +106,52 @@ export async function notifyAdminsHandoff(payload: AdminHandoffPayload): Promise
   return result
 }
 
+export type RenterInterestPayload = {
+  renterName: string
+  renterPhone: string
+  propertyLocation: string
+  price: string
+  rooms: string
+  score: string
+}
+
+/**
+ * Notify admins (ADMIN_ALERT_PHONES) that a renter clicked "interested in viewing"
+ * on their /share link — via the `renter_interest_alert_v1` template. No-op when the
+ * env is empty; throws nothing (errors collected). Will fail-soft until Meta approves
+ * the template.
+ */
+export async function notifyAdminsRenterInterest(payload: RenterInterestPayload): Promise<AdminAlertResult> {
+  const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
+  if (admins.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] }
+
+  const components = [
+    {
+      type: 'body' as const,
+      parameters: [
+        { type: 'text' as const, text: truncate(payload.renterName || 'שוכר', 40) },
+        { type: 'text' as const, text: truncate(payload.renterPhone || '-', 20) },
+        { type: 'text' as const, text: truncate(payload.propertyLocation || 'דירה', 50) },
+        { type: 'text' as const, text: truncate(payload.price || '-', 15) },
+        { type: 'text' as const, text: truncate(payload.rooms || '-', 8) },
+        { type: 'text' as const, text: truncate(payload.score || '-', 5) },
+      ],
+    },
+  ]
+
+  const result: AdminAlertResult = { attempted: admins.length, sent: 0, failed: 0, errors: [] }
+  for (const phone of admins) {
+    try {
+      await sendTemplate({ to: phone, name: 'renter_interest_alert_v1', language: 'he', components })
+      result.sent++
+    } catch (err) {
+      result.failed++
+      result.errors.push({ phone, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  return result
+}
+
 async function upsertAdminThread(orgId: string, phone: string): Promise<{ id: string } | null> {
   const sb = supabaseService()
   const { data: existing } = await sb

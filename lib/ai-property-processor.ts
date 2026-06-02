@@ -89,7 +89,7 @@ export async function processPropertyForSharing(
 
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: process.env.OPENAI_TEXT_MODEL || 'gpt-5.4-nano-2026-03-17',
       messages: [
         {
           role: 'system',
@@ -100,7 +100,6 @@ export async function processPropertyForSharing(
           content: prompt
         }
       ],
-      temperature: 0.7,
       response_format: { type: 'json_object' }
     });
 

@@ -34,6 +34,7 @@ type Match = {
   reasons: string[] | null
   status: string | null
   property: MatchProperty | null
+  interested?: boolean
 }
 
 const DIM_LABEL: Record<string, string> = {
@@ -292,6 +293,11 @@ function MatchRow({ match }: { match: Match }) {
             <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${scoreTone}`}>
               {match.is_disqualified ? <><AlertTriangle className="h-3 w-3" /> פסול</> : `${score}/100`}
             </span>
+            {match.interested && (
+              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold text-white animate-pulse">
+                ✋ מעוניין/ת לראות!
+              </span>
+            )}
           </div>
           <div className="text-xs text-gray-500 mb-1">
             {[p.street || p.address, p.city].filter(Boolean).join(', ')}

@@ -43,9 +43,19 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     propertiesById = Object.fromEntries((props || []).map(p => [p.id, p]))
   }
 
+  // Properties this renter clicked "interested in viewing" on their /share link.
+  const { data: interestRows } = await sb
+    .from('messages')
+    .select('property_id')
+    .eq('org_id', orgId)
+    .eq('meta_message_type', 'interest')
+    .eq('metadata->>renter_id', params.id)
+  const interestedPropertyIds = new Set((interestRows || []).map(r => r.property_id))
+
   const enrichedMatches = (matches || []).map(m => ({
     ...m,
     property: propertiesById[m.property_id] || null,
+    interested: interestedPropertyIds.has(m.property_id),
   }))
 
   // Most recent submission snapshot (for "what they answered")
