@@ -19,6 +19,21 @@ export class PersonalizationError extends Error {
   }
 }
 
+/** Strip listing junk from a city: "קרית אתא - מגורים" → "קרית אתא". */
+function cleanCity(c: string | null | undefined): string {
+  if (!c) return ''
+  return c.replace(/\s*-\s*(מגורים|משרדים|rent).*$/i, '').replace(/\s+/g, ' ').trim()
+}
+
+/** Keep just the street name — cut at the first house number / floor:
+ *  "יצחק שדה 4 קומה 2 גבעת הרקפות" → "יצחק שדה". */
+function cleanStreet(s: string | null | undefined): string {
+  if (!s) return ''
+  let out = s.split(/\s*\d/)[0] || s
+  out = out.replace(/קומה.*$/g, '').replace(/\s+/g, ' ').trim()
+  return out || s.trim()
+}
+
 export type HookVariables = {
   first_name: string
   street: string
@@ -57,11 +72,13 @@ export async function buildLandlordHookVariables(propertyId: string): Promise<Ho
   })
   if (!sanitized.ok) throw new PersonalizationError(`name_invalid:${sanitized.reason}`)
 
-  const street = property.street
+  const streetRaw = property.street
     || (property.address ? property.address.split(',')[0]?.trim() : null)
     || property.neighborhood
     || property.city
-  if (!street) throw new PersonalizationError('street_missing')
+  if (!streetRaw) throw new PersonalizationError('street_missing')
+  const streetName = cleanStreet(streetRaw) || streetRaw.trim()
+  const cityName = cleanCity(property.city) || property.city
 
   // Images are no longer required (v2 templates use TEXT header, not IMAGE) —
   // they're still nice for the bot to attach later in the conversation, but
@@ -69,8 +86,8 @@ export async function buildLandlordHookVariables(propertyId: string): Promise<Ho
   const images: string[] = Array.isArray(property.images) ? property.images.filter((u): u is string => typeof u === 'string' && u.length > 0) : []
   const cover_image_url = images[0] || null
 
-  // Header text: "ארלוזורוב, חיפה". Both header and body's {{3}} use this.
-  const street_city = [street.trim(), property.city].filter(Boolean).join(', ')
+  // Header text: short + clean, "יצחק שדה, קרית אתא" — both header and body's {{3}} use it.
+  const street_city = [streetName, cityName].filter(Boolean).join(', ') || streetName || cityName
 
   // Rooms label: number or "סטודיו". Falls back so we never send empty.
   const rooms_label = property.rooms !== null && property.rooms !== undefined
@@ -100,8 +117,8 @@ export async function buildLandlordHookVariables(propertyId: string): Promise<Ho
 
   return {
     first_name: sanitized.firstName,
-    street: street.trim(),
-    city: property.city,
+    street: streetName,
+    city: cityName,
     neighborhood: property.neighborhood || null,
     cover_image_url,
     recipient_phone: property.contact_phone,

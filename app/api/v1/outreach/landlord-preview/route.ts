@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { requireAdminOrg } from '../../../../../lib/outreach/admin-context'
 import { buildLandlordHookVariables, PersonalizationError } from '../../../../../lib/outreach/personalization'
+import { generateAndStorePersonalization } from '../../../../../lib/ai/property-vision'
 
 /**
  * Real rendered preview of both landlord templates for a property, so the admin can
@@ -29,6 +30,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ eligible: false, reason: e.reason })
     }
     throw e
+  }
+
+  // No personal sentence yet → generate one on-demand (model call), then rebuild vars.
+  if (!vars.personal_hook) {
+    try {
+      await generateAndStorePersonalization(propertyId)
+      vars = await buildLandlordHookVariables(propertyId)
+    } catch {
+      // keep basic-only if the model is unavailable
+    }
   }
 
   const sb = supabaseService()
