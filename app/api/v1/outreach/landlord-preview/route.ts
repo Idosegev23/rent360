@@ -43,6 +43,14 @@ export async function GET(req: NextRequest) {
   }
 
   const sb = supabaseService()
+
+  // Richer property details for the send window (so the operator has context before sending).
+  const { data: prop } = await sb
+    .from('properties')
+    .select('city, neighborhood, street, type, sqm, floor, condition, price, rooms, source, link, description, created_at')
+    .eq('id', propertyId)
+    .maybeSingle()
+
   const { data: tpls } = await sb
     .from('whatsapp_templates')
     .select('name, body_template')
@@ -70,5 +78,19 @@ export async function GET(req: NextRequest) {
     buttons: ['כן, ספרו לי עוד', 'להסיר אותי'],
     basic: { header, body: basicBody },
     rich: richBody ? { header, body: richBody } : null,
+    details: prop ? {
+      type: prop.type,
+      condition: prop.condition,
+      sqm: prop.sqm,
+      floor: prop.floor,
+      price: prop.price,
+      rooms: prop.rooms,
+      neighborhood: prop.neighborhood,
+      city: prop.city,
+      source: prop.source,
+      link: prop.link,
+      description: prop.description,
+      createdAt: prop.created_at,
+    } : null,
   })
 }

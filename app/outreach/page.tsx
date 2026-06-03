@@ -303,6 +303,21 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   )
 }
 
+type PropertyDetails = {
+  type: string | null
+  condition: string | null
+  sqm: number | null
+  floor: number | null
+  price: number | null
+  rooms: number | null
+  neighborhood: string | null
+  city: string | null
+  source: string | null
+  link: string | null
+  description: string | null
+  createdAt: string | null
+}
+
 type PreviewData = {
   eligible: boolean
   reason?: string
@@ -312,6 +327,52 @@ type PreviewData = {
   buttons?: string[]
   basic?: { header: string; body: string } | null
   rich?: { header: string; body: string } | null
+  details?: PropertyDetails | null
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  manual_employee: 'הוזן ידנית', manual: 'הוזן ידנית', yad2: 'יד2', whatsapp: 'וואטסאפ', sheet_import: 'ייבוא גיליון',
+}
+const CONDITION_LABELS: Record<string, string> = {
+  renovated: 'משופץ', good: 'טוב', 'needs-work': 'דורש שיפוץ', new: 'חדש',
+}
+function addedAgo(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (days <= 0) return 'היום'
+  if (days === 1) return 'אתמול'
+  if (days < 30) return `לפני ${days} ימים`
+  const months = Math.floor(days / 30)
+  return months < 12 ? `לפני ${months} חודשים` : `לפני ${Math.floor(months / 12)} שנים`
+}
+
+function PropertyDetailsBlock({ d }: { d: PropertyDetails }) {
+  const chips: Array<[string, string]> = []
+  if (d.type) chips.push(['סוג', d.type])
+  if (d.rooms != null) chips.push(['חדרים', String(d.rooms)])
+  if (d.sqm != null) chips.push(['מ״ר', String(d.sqm)])
+  if (d.floor != null) chips.push(['קומה', String(d.floor)])
+  if (d.price != null) chips.push(['מחיר', '₪' + Number(d.price).toLocaleString('he-IL')])
+  if (d.condition) chips.push(['מצב', CONDITION_LABELS[d.condition] || d.condition])
+  if (d.neighborhood) chips.push(['שכונה', d.neighborhood])
+  return (
+    <div className="rounded-lg border border-brand-border bg-gray-50 p-3 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-sm font-semibold text-gray-800">פרטי הנכס</span>
+        <span className="text-xs text-gray-500">
+          {d.source ? (SOURCE_LABELS[d.source] || d.source) : ''}{d.createdAt ? ` · נוסף ${addedAgo(d.createdAt)}` : ''}
+        </span>
+      </div>
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {chips.map(([k, v]) => (
+            <span key={k} className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-700"><span className="text-gray-400">{k}:</span> {v}</span>
+          ))}
+        </div>
+      )}
+      {d.description && <p className="text-xs text-gray-600 whitespace-pre-wrap">{d.description.slice(0, 240)}{d.description.length > 240 ? '…' : ''}</p>}
+      {d.link && <a href={d.link} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-brand-primary hover:underline">למודעה המקורית ↗</a>}
+    </div>
+  )
 }
 
 function LandlordPreview({ propertyId, busy, onSend }: { propertyId: string; busy: boolean; onSend: (tpl: 'basic' | 'rich') => void }) {
@@ -340,6 +401,7 @@ function LandlordPreview({ propertyId, busy, onSend }: { propertyId: string; bus
 
   return (
     <div className="border-t border-brand-border p-3">
+      {data.details && <PropertyDetailsBlock d={data.details} />}
       <div className="flex items-center justify-between gap-2 mb-2 text-xs text-gray-500">
         <span>המשפט האישי נוצר ע״י AI מהתמונות/התיאור</span>
         <button
