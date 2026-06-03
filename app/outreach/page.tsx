@@ -317,17 +317,18 @@ type PreviewData = {
 function LandlordPreview({ propertyId, busy, onSend }: { propertyId: string; busy: boolean; onSend: (tpl: 'basic' | 'rich') => void }) {
   const [data, setData] = useState<PreviewData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [regenerating, setRegenerating] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    fetch(`/api/v1/outreach/landlord-preview?propertyId=${propertyId}`)
+  const load = useCallback((regen: boolean) => {
+    if (regen) setRegenerating(true); else setLoading(true)
+    return fetch(`/api/v1/outreach/landlord-preview?propertyId=${propertyId}${regen ? '&regenerate=1' : ''}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled) setData(d) })
-      .catch(() => { if (!cancelled) setData({ eligible: false, reason: 'load_failed' }) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+      .then(d => setData(d))
+      .catch(() => setData({ eligible: false, reason: 'load_failed' }))
+      .finally(() => { setLoading(false); setRegenerating(false) })
   }, [propertyId])
+
+  useEffect(() => { load(false) }, [load])
 
   if (loading) return <div className="border-t border-brand-border p-3 text-sm text-gray-500"><Loader2 className="inline h-4 w-4 animate-spin ml-1" /> טוען תצוגה…</div>
   if (!data) return null
@@ -338,27 +339,40 @@ function LandlordPreview({ propertyId, busy, onSend }: { propertyId: string; bus
     : 'bg-gray-100 text-gray-600'
 
   return (
-    <div className="border-t border-brand-border p-3 grid gap-3 md:grid-cols-2">
-      <TemplateCard
-        title="בסיסית"
-        header={data.basic?.header || ''}
-        body={data.basic?.body || ''}
-        footer={data.footer}
-        buttons={data.buttons}
-        action={<button type="button" disabled={busy} onClick={() => onSend('basic')} className="btn btn-brand disabled:opacity-50" style={{ fontSize: 12 }}>שלח בסיסית</button>}
-      />
-      {data.rich ? (
+    <div className="border-t border-brand-border p-3">
+      <div className="flex items-center justify-between gap-2 mb-2 text-xs text-gray-500">
+        <span>המשפט האישי נוצר ע״י AI מהתמונות/התיאור</span>
+        <button
+          type="button"
+          onClick={() => load(true)}
+          disabled={regenerating}
+          className="inline-flex items-center gap-1 rounded-md border border-brand-border bg-white px-2 py-1 hover:bg-gray-50 disabled:opacity-50"
+        >
+          {regenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} צור משפט מחדש
+        </button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
         <TemplateCard
-          title={<span className="inline-flex items-center gap-1.5">פרסונלית {data.hookConfidence && <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${confTone}`}>ביטחון: {data.hookConfidence}</span>}</span>}
-          header={data.rich.header}
-          body={data.rich.body}
+          title="בסיסית"
+          header={data.basic?.header || ''}
+          body={data.basic?.body || ''}
           footer={data.footer}
           buttons={data.buttons}
-          action={<button type="button" disabled={busy} onClick={() => onSend('rich')} className="btn btn-brand disabled:opacity-50" style={{ fontSize: 12 }}>שלח פרסונלית</button>}
+          action={<button type="button" disabled={busy} onClick={() => onSend('basic')} className="btn btn-brand disabled:opacity-50" style={{ fontSize: 12 }}>שלח בסיסית</button>}
         />
-      ) : (
-        <div className="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-400 flex items-center justify-center text-center">אין משפט אישי לנכס זה — רק בסיסית זמינה</div>
-      )}
+        {data.rich ? (
+          <TemplateCard
+            title={<span className="inline-flex items-center gap-1.5">פרסונלית {data.hookConfidence && <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${confTone}`}>ביטחון: {data.hookConfidence}</span>}</span>}
+            header={data.rich.header}
+            body={data.rich.body}
+            footer={data.footer}
+            buttons={data.buttons}
+            action={<button type="button" disabled={busy} onClick={() => onSend('rich')} className="btn btn-brand disabled:opacity-50" style={{ fontSize: 12 }}>שלח פרסונלית</button>}
+          />
+        ) : (
+          <div className="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-400 flex items-center justify-center text-center">אין משפט אישי לנכס זה — רק בסיסית זמינה</div>
+        )}
+      </div>
     </div>
   )
 }

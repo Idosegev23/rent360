@@ -32,10 +32,12 @@ export async function GET(req: NextRequest) {
     throw e
   }
 
-  // No personal sentence yet → generate one on-demand (model call), then rebuild vars.
-  if (!vars.personal_hook) {
+  // Generate the personal sentence on-demand (model call) when missing, or force a fresh
+  // one with ?regenerate=1 (e.g. after the operator finds the existing line too generic).
+  const regenerate = req.nextUrl.searchParams.get('regenerate') === '1'
+  if (regenerate || !vars.personal_hook) {
     try {
-      await generateAndStorePersonalization(propertyId)
+      await generateAndStorePersonalization(propertyId, { force: regenerate })
       vars = await buildLandlordHookVariables(propertyId)
     } catch {
       // keep basic-only if the model is unavailable

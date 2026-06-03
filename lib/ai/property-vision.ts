@@ -42,7 +42,7 @@ function client(): OpenAI {
   return _client
 }
 
-const VISION_SYSTEM = `אתה כותב משפט קצר אחד (עד 100 תווים) על דירה להשכרה, על סמך תמונות שלה. המשפט יישלח לבעל הדירה כחלק מהודעת פנייה ראשונה.
+const VISION_SYSTEM = `אתה כותב משפט קצר אחד (עד 120 תווים) על דירה להשכרה, על סמך תמונות שלה. המשפט יישלח לבעל הדירה כחלק מהודעת פנייה ראשונה.
 
 המטרה: ליצור אפקט של "באמת הסתכלו על הדירה שלי, לא רק סרקו את המספר". זה חייב להישמע אישי ומבוסס, לא קלישאה.
 
@@ -51,8 +51,9 @@ const VISION_SYSTEM = `אתה כותב משפט קצר אחד (עד 100 תווי
 2. אם אין משהו ספציפי שווה לציון בתמונות — החזר NULL. עדיף NULL מאשר תיאור כללי או מומצא.
 3. אל תמציא: צבעים, מצב, תקופת שיפוץ, רהיטים שלא רואים, נוף שלא רואים.
 4. אסור: סופרלטיבים ריקים ("נראה מדהים", "פשוט מושלם"). תיאור עובדתי בלבד.
-5. תיאור באורך משפט אחד, עד 100 תווים, עברית פשוטה, ללא אמוג'י, ללא markdown.
-6. הוסף תמיד "ראינו" / "ראיתי" כדי להבהיר שזה מבוסס תמונה.
+5. משפט אחד, עד 120 תווים, עברית פשוטה, ללא אמוג'י, ללא markdown.
+6. מבנה חובה — שני חלקים: (א) פרט קונקרטי שראית, ואז (ב) מקף "—" וזווית קצרה שמחברת את הפרט לביקוש מצד שוכרים או לערך לבעל הנכס (בדיוק כמו בדוגמאות הטובות). משפט שהוא רק תיאור ("ראינו מרפסת גדולה עם נוף") בלי החלק השני — אסור, גנרי מדי. או שמוסיפים זווית, או מחזירים NULL.
+7. פתח ב"ראינו"/"ראיתי" כדי להבהיר שזה מבוסס תמונה.
 
 דוגמאות לפלט טוב:
 - "ראינו את המטבח עם השיש הכהה — סטייל שמושך שוכרים שמחפשים סיים נקי."
@@ -85,8 +86,9 @@ const DESCRIPTION_SYSTEM = `קיבלת תיאור דירה גולמי (מ-יד2/
 1. רק פרט שמופיע בטקסט המקורי. אל תמציא.
 2. תעדיף פרטים יוצאי דופן: שיפוץ ברמה גבוהה, מאפיין נדיר (חיות מחמד מותרים, ממ"ד פרטי), הזדמנות (קומה גבוהה עם נוף).
 3. אם הטקסט גנרי בלבד ("דירה משופצת, מטבח חדש") — החזר NULL.
-4. עד 100 תווים, עברית, ללא אמוג'י/markdown.
+4. עד 120 תווים, עברית, ללא אמוג'י/markdown.
 5. פתח ב"ראינו ש..." או "צוין במודעה ש..." כדי להבהיר את המקור.
+6. מבנה חובה — שני חלקים: פרט ייחודי, ואז מקף "—" וזווית קצרה שמחברת אותו לביקוש/ערך (כמו "— בדיוק מה ששוכרים אצלנו מחפשים"). תיאור יבש בלי זווית — אסור.
 
 החזר JSON:
 { "line": string או null, "confidence": "high" / "medium" / "low" }
@@ -212,7 +214,7 @@ function extractOutputText(response: any): string {
 // ---------- Persistence -----------------------------------------------------
 
 /** Generate + persist the personalization line for a property. Skips if recent + same images. */
-export async function generateAndStorePersonalization(propertyId: string): Promise<{ generated: boolean; existing: boolean; line: string | null }> {
+export async function generateAndStorePersonalization(propertyId: string, opts?: { force?: boolean }): Promise<{ generated: boolean; existing: boolean; line: string | null }> {
   const sb = supabaseService()
   const { data: p } = await sb
     .from('properties')
@@ -224,7 +226,7 @@ export async function generateAndStorePersonalization(propertyId: string): Promi
   const existing = (p.scraped_metadata && typeof p.scraped_metadata === 'object'
     ? (p.scraped_metadata as any).ai_personalization
     : null) as Personalization | null
-  if (existing && existing.line) {
+  if (!opts?.force && existing && existing.line) {
     return { generated: false, existing: true, line: existing.line }
   }
 
