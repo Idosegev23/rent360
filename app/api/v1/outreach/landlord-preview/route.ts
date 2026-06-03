@@ -32,16 +32,14 @@ export async function GET(req: NextRequest) {
     throw e
   }
 
-  // Generate the personal sentence on-demand (model call) when missing, or force a fresh
-  // one with ?regenerate=1 (e.g. after the operator finds the existing line too generic).
+  // Always ensure a CURRENT-version personal sentence: the generator regenerates live when
+  // missing or from an older prompt version (or always, with ?regenerate=1), else reuses cache.
   const regenerate = req.nextUrl.searchParams.get('regenerate') === '1'
-  if (regenerate || !vars.personal_hook) {
-    try {
-      await generateAndStorePersonalization(propertyId, { force: regenerate })
-      vars = await buildLandlordHookVariables(propertyId)
-    } catch {
-      // keep basic-only if the model is unavailable
-    }
+  try {
+    await generateAndStorePersonalization(propertyId, { force: regenerate })
+    vars = await buildLandlordHookVariables(propertyId)
+  } catch {
+    // keep basic-only if the model is unavailable
   }
 
   const sb = supabaseService()

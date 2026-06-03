@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     propertyId: body.propertyId,
     force: body.force === true,
     templateChoice,
+    ensurePersonalization: true,
   })
 
   if (!result.ok) {

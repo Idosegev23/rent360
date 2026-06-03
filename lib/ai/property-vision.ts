@@ -22,7 +22,10 @@ import { supabaseService } from '../supabase'
 
 const MODEL = process.env.OPENAI_AGENT_MODEL || 'gpt-5.4'
 const MAX_VISION_IMAGES = 5
-const MAX_LINE_CHARS = 100
+const MAX_LINE_CHARS = 140
+// Bump when the personalization prompt changes — stored lines from an older version are
+// regenerated live on next access (preview/send), so the new style rolls out per-property.
+export const PERSONALIZATION_VERSION = 2
 
 export type PersonalizationSource = 'vision' | 'description' | 'amenity'
 
@@ -31,6 +34,7 @@ export type Personalization = {
   source: PersonalizationSource
   confidence: 'high' | 'medium' | 'low'
   generated_at: string
+  version?: number
 }
 
 let _client: OpenAI | null = null
@@ -231,7 +235,9 @@ export async function generateAndStorePersonalization(propertyId: string, opts?:
   const existing = (p.scraped_metadata && typeof p.scraped_metadata === 'object'
     ? (p.scraped_metadata as any).ai_personalization
     : null) as Personalization | null
-  if (!opts?.force && existing && existing.line) {
+  // Reuse a stored line only if it's from the CURRENT prompt version. Older lines (or none)
+  // are regenerated live on access, so the latest style rolls out per-property without a backfill.
+  if (!opts?.force && existing && existing.line && existing.version === PERSONALIZATION_VERSION) {
     return { generated: false, existing: true, line: existing.line }
   }
 
@@ -242,13 +248,13 @@ export async function generateAndStorePersonalization(propertyId: string, opts?:
     amenities: p.amenities as any,
   })
   if (!result) {
-    // Still write a "no_personalization" marker so we don't retry every cron tick.
-    const newMeta = { ...(p.scraped_metadata && typeof p.scraped_metadata === 'object' ? p.scraped_metadata : {}), ai_personalization: { line: null, source: null, attempted_at: new Date().toISOString() } }
+    // Mark the attempt (versioned) so we don't re-call the model every access until the prompt changes.
+    const newMeta = { ...(p.scraped_metadata && typeof p.scraped_metadata === 'object' ? p.scraped_metadata : {}), ai_personalization: { line: null, source: null, version: PERSONALIZATION_VERSION, attempted_at: new Date().toISOString() } }
     await sb.from('properties').update({ scraped_metadata: newMeta as any }).eq('id', propertyId)
     return { generated: false, existing: false, line: null }
   }
 
-  const newMeta = { ...(p.scraped_metadata && typeof p.scraped_metadata === 'object' ? p.scraped_metadata : {}), ai_personalization: result }
+  const newMeta = { ...(p.scraped_metadata && typeof p.scraped_metadata === 'object' ? p.scraped_metadata : {}), ai_personalization: { ...result, version: PERSONALIZATION_VERSION } }
   await sb.from('properties').update({ scraped_metadata: newMeta as any }).eq('id', propertyId)
   return { generated: true, existing: false, line: result.line }
 }

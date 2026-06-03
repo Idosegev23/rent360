@@ -15,6 +15,7 @@ import {
   PersonalizationError,
   type TemplateChoice,
 } from './personalization'
+import { generateAndStorePersonalization } from '../ai/property-vision'
 
 export type DispatchResult =
   | { ok: true; messageId: string; threadId: string; phone: string; templateName: string }
@@ -29,6 +30,8 @@ export async function dispatchInitialOutreach(opts: {
   force?: boolean
   /** Which template to use: 'auto' (rich if hook), 'basic', 'rich', or 'auto_quality' (rich only if hook confidence is high enough — used by batch). */
   templateChoice?: TemplateChoice
+  /** Live-generate the personal sentence for this property before sending (single/interactive sends). Off for batch. */
+  ensurePersonalization?: boolean
 }): Promise<DispatchResult> {
   const { orgId, propertyId, force } = opts
   const sb = supabaseService()
@@ -47,6 +50,13 @@ export async function dispatchInitialOutreach(opts: {
     return { ok: false, code: 'ALREADY_SENT', message: 'כבר נשלחה פנייה ראשונה' }
   }
   if (!property.contact_phone) return { ok: false, code: 'PHONE_MISSING', message: 'אין מספר טלפון' }
+
+  // For interactive personalized sends, live-generate the personal sentence per property
+  // (regenerates if missing or from an older prompt version). Batch skips this to stay
+  // within the function timeout — it reuses what the preview already generated.
+  if (opts.ensurePersonalization && (opts.templateChoice || 'auto') !== 'basic') {
+    try { await generateAndStorePersonalization(propertyId) } catch { /* rich falls back to basic if none */ }
+  }
 
   // Build personalization (throws PersonalizationError on bad data)
   let vars
