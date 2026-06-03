@@ -26,16 +26,21 @@ export async function POST(req: NextRequest) {
   const { data: user } = await sb.from('users').select('org_id').eq('id', userId).maybeSingle()
   if (!user) return NextResponse.json({ error: { code: 'NO_USER' } }, { status: 401 })
 
-  let body: { propertyId?: string; force?: boolean } = {}
+  let body: { propertyId?: string; force?: boolean; template?: string } = {}
   try {
     body = await req.json()
   } catch {/* allow empty body */}
   if (!body.propertyId) return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'propertyId required' } }, { status: 400 })
 
+  const templateChoice = (body.template === 'basic' || body.template === 'rich' || body.template === 'auto_quality')
+    ? body.template
+    : 'auto'
+
   const result = await dispatchInitialOutreach({
     orgId: user.org_id,
     propertyId: body.propertyId,
     force: body.force === true,
+    templateChoice,
   })
 
   if (!result.ok) {

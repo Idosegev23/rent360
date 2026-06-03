@@ -13,6 +13,7 @@ import {
   buildLandlordHookVariables,
   pickTemplateAndComponents,
   PersonalizationError,
+  type TemplateChoice,
 } from './personalization'
 
 export type DispatchResult =
@@ -26,6 +27,8 @@ export async function dispatchInitialOutreach(opts: {
   propertyId: string
   /** Set true to bypass the `initial_message_sent` guard (e.g. admin force resend). */
   force?: boolean
+  /** Which template to use: 'auto' (rich if hook), 'basic', 'rich', or 'auto_quality' (rich only if hook confidence is high enough — used by batch). */
+  templateChoice?: TemplateChoice
 }): Promise<DispatchResult> {
   const { orgId, propertyId, force } = opts
   const sb = supabaseService()
@@ -64,8 +67,8 @@ export async function dispatchInitialOutreach(opts: {
     return { ok: false, code: 'SUPPRESSED', message: 'הטלפון בעל הנכס ברשימת הסירוב' }
   }
 
-  // Pick rich vs basic template based on whether we have a personal hook.
-  const { templateName, components } = pickTemplateAndComponents(vars)
+  // Pick rich vs basic template — honoring an explicit choice / batch quality gate.
+  const { templateName, components } = pickTemplateAndComponents(vars, opts.templateChoice || 'auto')
 
   // Verify the chosen template is approved at Meta.
   const { data: template } = await sb

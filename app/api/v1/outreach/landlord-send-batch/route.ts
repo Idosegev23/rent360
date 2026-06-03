@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
   const { orgId } = ctx
 
-  let body: { propertyIds?: unknown } = {}
+  let body: { propertyIds?: unknown; prefer?: unknown } = {}
   try {
     body = await req.json()
   } catch {/* empty body → no-op below */}
@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
   if (propertyIds.length === 0) {
     return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'propertyIds required' } }, { status: 400 })
   }
+
+  // 'personalized' (default) → rich when the hook is trustworthy, else basic. 'basic' → always basic.
+  const templateChoice = body.prefer === 'basic' ? 'basic' : 'auto_quality'
 
   const sentToday = await templatesSentToday(orgId)
   const remaining = DAILY_CAP - sentToday
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
   let skipped = 0
   for (const propertyId of propertyIds) {
     if (sent >= limit) break
-    const r = await dispatchInitialOutreach({ orgId, propertyId })
+    const r = await dispatchInitialOutreach({ orgId, propertyId, templateChoice })
     if (r.ok) {
       sent++
       results.push({ propertyId, status: 'sent' })

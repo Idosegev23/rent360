@@ -30,6 +30,7 @@ export type HookVariables = {
   rooms_label: string         // "2" / "2.5" / "סטודיו" — falls back to "מספר"
   availability_label: string  // "מיידית" / "1/7/26" — has a default if missing
   personal_hook: string | null // The {{4}} in rich template. null → use basic template.
+  hook_confidence: string | null // 'high' | 'medium' | 'low' — the generator's self-rating of the hook.
 }
 
 export type TemplateComponentForSend =
@@ -94,6 +95,8 @@ export async function buildLandlordHookVariables(propertyId: string): Promise<Ho
 
   // Personal hook from vision/description/amenity pipeline (may be null).
   const personal_hook = getPersonalizationFromMeta(property.scraped_metadata)
+  const ap = (property.scraped_metadata as any)?.ai_personalization
+  const hook_confidence = ap && typeof ap.confidence === 'string' ? ap.confidence : null
 
   return {
     first_name: sanitized.firstName,
@@ -106,6 +109,7 @@ export async function buildLandlordHookVariables(propertyId: string): Promise<Ho
     rooms_label,
     availability_label,
     personal_hook,
+    hook_confidence,
   }
 }
 
@@ -119,7 +123,28 @@ export async function buildLandlordHookVariables(propertyId: string): Promise<Ho
  *
  * Header on both: TEXT with the address ("ארלוזורוב, חיפה").
  */
-export function pickTemplateAndComponents(vars: HookVariables): {
+export type TemplateChoice = 'auto' | 'basic' | 'rich' | 'auto_quality'
+
+/** Confidence levels accepted as "good enough" for the rich template in batch quality mode. */
+const RICH_OK_CONFIDENCE = (process.env.OUTREACH_RICH_MIN_CONFIDENCE || 'high,medium')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+
+/**
+ * Decide whether the rich (personalized) template applies.
+ *  - basic        → never rich.
+ *  - rich         → rich whenever a hook exists (explicit manual pick).
+ *  - auto_quality → rich only when the hook's confidence is trustworthy (batch fallback to basic).
+ *  - auto         → rich whenever a hook exists (legacy default).
+ */
+export function shouldUseRich(vars: HookVariables, mode: TemplateChoice = 'auto'): boolean {
+  if (mode === 'basic') return false
+  if (!vars.personal_hook) return false
+  if (mode === 'rich') return true
+  if (mode === 'auto_quality') return RICH_OK_CONFIDENCE.includes((vars.hook_confidence || '').toLowerCase())
+  return true
+}
+
+export function pickTemplateAndComponents(vars: HookVariables, mode: TemplateChoice = 'auto'): {
   templateName: string
   components: TemplateComponentForSend[]
 } {
@@ -128,7 +153,7 @@ export function pickTemplateAndComponents(vars: HookVariables): {
     parameters: [{ type: 'text', text: vars.street_city }],
   }
 
-  if (vars.personal_hook) {
+  if (shouldUseRich(vars, mode)) {
     // RICH: name, rooms, address, hook, availability
     return {
       templateName: 'landlord_outreach_v2_rich',
@@ -140,7 +165,7 @@ export function pickTemplateAndComponents(vars: HookVariables): {
             { type: 'text', text: vars.first_name },
             { type: 'text', text: vars.rooms_label },
             { type: 'text', text: vars.street_city },
-            { type: 'text', text: vars.personal_hook },
+            { type: 'text', text: vars.personal_hook! },
             { type: 'text', text: vars.availability_label },
           ],
         },

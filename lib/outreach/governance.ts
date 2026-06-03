@@ -19,7 +19,7 @@ const intEnv = (name: string, def: number): number => {
 }
 
 /** Shared daily template cap across landlord + renter sends. */
-export const DAILY_CAP = intEnv('OUTREACH_DAILY_CAP', 30)
+export const DAILY_CAP = intEnv('OUTREACH_DAILY_CAP', 50)
 /** Only matches at/above this score are "hot" enough to alert a renter. */
 export const RENTER_MIN_SCORE = (() => {
   const n = parseFloat(process.env.RENTER_ALERT_MIN_SCORE || '')

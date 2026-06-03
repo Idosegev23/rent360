@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import {
   Send, Building2, Users, ShieldOff, Loader2, AlertCircle, RefreshCw,
   CheckCircle2, Trash2, Upload, Gauge,
@@ -87,6 +87,9 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   const [busyRow, setBusyRow] = useState<string | null>(null)
   // landlord filters
   const [city, setCity] = useState('')
+  // landlord: which row's template preview is open + batch template preference
+  const [previewRow, setPreviewRow] = useState<string | null>(null)
+  const [prefer, setPrefer] = useState<'personalized' | 'basic'>('personalized')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -148,7 +151,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
       const res = await fetch(ep.batch, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [ep.idsKey]: ids }),
+        body: JSON.stringify({ [ep.idsKey]: ids, ...(mode === 'landlord' ? { prefer } : {}) }),
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data?.error?.message || data?.error?.code || 'send failed')
@@ -162,19 +165,19 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   }
 
   // Manual single send — bypasses rate caps (opt-out still enforced server-side), shows an advisory confirm.
-  async function sendOne(row: QueueRow) {
+  async function sendOne(row: QueueRow, template?: 'basic' | 'rich') {
     if (busyRow) return
     const warn: string[] = []
     if (row.received.today > 0) warn.push(`הנמען כבר קיבל ${row.received.today} הודעות היום`)
     if (counters && counters.remaining <= 0) warn.push('התקרה היומית נוצלה (ידני עוקף)')
-    const msg = warn.length ? `${warn.join(' · ')}.\nלשלוח בכל זאת?` : 'לשלוח המלצה לנמען זה?'
+    const msg = warn.length ? `${warn.join(' · ')}.\nלשלוח בכל זאת?` : 'לשלוח לנמען זה?'
     if (!window.confirm(msg)) return
     setBusyRow(row.id)
     try {
       const res = await fetch(ep.single, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [ep.key]: row.id }),
+        body: JSON.stringify({ [ep.key]: row.id, ...(template ? { template } : {}) }),
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data?.error?.message || data?.error?.code || 'send failed')
@@ -213,6 +216,17 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
           {allSelected ? 'נקה בחירה' : 'בחר הכל'}
         </button>
         <div className="flex-1" />
+        {mode === 'landlord' && (
+          <select
+            value={prefer}
+            onChange={e => setPrefer(e.target.value === 'basic' ? 'basic' : 'personalized')}
+            className="rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm"
+            title="איזו תבנית לשלוח באצווה"
+          >
+            <option value="personalized">פרסונלי (נפילה לבסיסי)</option>
+            <option value="basic">בסיסי בלבד</option>
+          </select>
+        )}
         <button
           type="button"
           onClick={sendBatch}
@@ -245,33 +259,128 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
 
       <div className="grid gap-2">
         {rows.map(r => (
-          <div key={r.id} className="rounded-lg border border-brand-border bg-white p-3 flex items-center gap-3">
-            <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4 shrink-0" />
-            {r.coverImage
-              ? <img src={r.coverImage} alt="" className="h-12 w-12 rounded-md object-cover shrink-0" />
-              : <div className="h-12 w-12 rounded-md bg-gray-100 shrink-0" />}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900 truncate">{r.title}</span>
-                {r.score != null && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">{Math.round(r.score)}% התאמה</span>}
+          <div key={r.id} className="rounded-lg border border-brand-border bg-white">
+            <div className="p-3 flex items-center gap-3">
+              <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4 shrink-0" />
+              {r.coverImage
+                ? <img src={r.coverImage} alt="" className="h-12 w-12 rounded-md object-cover shrink-0" />
+                : <div className="h-12 w-12 rounded-md bg-gray-100 shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-900 truncate">{r.title}</span>
+                  {r.score != null && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">{Math.round(r.score)}% התאמה</span>}
+                </div>
+                <div className="text-xs text-gray-500 truncate">{r.subtitle || r.phone}</div>
               </div>
-              <div className="text-xs text-gray-500 truncate">{r.subtitle || r.phone}</div>
+              <ReceivedBadge received={r.received} />
+              {mode === 'landlord' && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewRow(previewRow === r.id ? null : r.id)}
+                  className="rounded-md border border-brand-border bg-white px-2.5 py-1.5 text-xs hover:bg-gray-50 shrink-0"
+                >
+                  {previewRow === r.id ? 'סגור' : 'תצוגה'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => sendOne(r)}
+                disabled={busyRow === r.id || (mode === 'renter' && !templateApproved)}
+                title="שליחה ידנית (עוקפת תקרה, לא opt-out)"
+                className="rounded-md border border-brand-border bg-white px-2.5 py-1.5 text-xs hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50 shrink-0"
+              >
+                {busyRow === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                שלח
+              </button>
             </div>
-            <ReceivedBadge received={r.received} />
-            <button
-              type="button"
-              onClick={() => sendOne(r)}
-              disabled={busyRow === r.id || (mode === 'renter' && !templateApproved)}
-              title="שליחה ידנית (עוקפת תקרה, לא opt-out)"
-              className="rounded-md border border-brand-border bg-white px-2.5 py-1.5 text-xs hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50 shrink-0"
-            >
-              {busyRow === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-              שלח
-            </button>
+            {mode === 'landlord' && previewRow === r.id && (
+              <LandlordPreview propertyId={r.id} busy={busyRow === r.id} onSend={(tpl) => sendOne(r, tpl)} />
+            )}
           </div>
         ))}
       </div>
     </>
+  )
+}
+
+type PreviewData = {
+  eligible: boolean
+  reason?: string
+  hook?: string | null
+  hookConfidence?: string | null
+  footer?: string
+  buttons?: string[]
+  basic?: { header: string; body: string } | null
+  rich?: { header: string; body: string } | null
+}
+
+function LandlordPreview({ propertyId, busy, onSend }: { propertyId: string; busy: boolean; onSend: (tpl: 'basic' | 'rich') => void }) {
+  const [data, setData] = useState<PreviewData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/v1/outreach/landlord-preview?propertyId=${propertyId}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setData(d) })
+      .catch(() => { if (!cancelled) setData({ eligible: false, reason: 'load_failed' }) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [propertyId])
+
+  if (loading) return <div className="border-t border-brand-border p-3 text-sm text-gray-500"><Loader2 className="inline h-4 w-4 animate-spin ml-1" /> טוען תצוגה…</div>
+  if (!data) return null
+  if (!data.eligible) return <div className="border-t border-brand-border p-3 text-sm text-amber-700">לא ניתן לשלוח לנכס זה: {data.reason}</div>
+
+  const confTone = data.hookConfidence === 'high' ? 'bg-emerald-100 text-emerald-700'
+    : data.hookConfidence === 'medium' ? 'bg-amber-100 text-amber-700'
+    : 'bg-gray-100 text-gray-600'
+
+  return (
+    <div className="border-t border-brand-border p-3 grid gap-3 md:grid-cols-2">
+      <TemplateCard
+        title="בסיסית"
+        header={data.basic?.header || ''}
+        body={data.basic?.body || ''}
+        footer={data.footer}
+        buttons={data.buttons}
+        action={<button type="button" disabled={busy} onClick={() => onSend('basic')} className="btn btn-brand disabled:opacity-50" style={{ fontSize: 12 }}>שלח בסיסית</button>}
+      />
+      {data.rich ? (
+        <TemplateCard
+          title={<span className="inline-flex items-center gap-1.5">פרסונלית {data.hookConfidence && <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${confTone}`}>ביטחון: {data.hookConfidence}</span>}</span>}
+          header={data.rich.header}
+          body={data.rich.body}
+          footer={data.footer}
+          buttons={data.buttons}
+          action={<button type="button" disabled={busy} onClick={() => onSend('rich')} className="btn btn-brand disabled:opacity-50" style={{ fontSize: 12 }}>שלח פרסונלית</button>}
+        />
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-400 flex items-center justify-center text-center">אין משפט אישי לנכס זה — רק בסיסית זמינה</div>
+      )}
+    </div>
+  )
+}
+
+function TemplateCard({ title, header, body, footer, buttons, action }: { title: ReactNode; header: string; body: string; footer?: string | undefined; buttons?: string[] | undefined; action: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-brand-border bg-gray-50 p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-sm font-semibold text-gray-800">{title}</div>
+        {action}
+      </div>
+      <div className="rounded-lg bg-white border border-gray-200 p-3 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+        <div className="font-bold mb-1">{header}</div>
+        {body}
+        {footer && <div className="text-xs text-gray-400 mt-2">{footer}</div>}
+        {buttons && buttons.length > 0 && (
+          <div className="flex gap-1.5 mt-2 flex-wrap">
+            {buttons.map((b, i) => <span key={i} className="rounded-md border border-brand-primary/40 text-brand-primary px-2 py-0.5 text-xs">{b}</span>)}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
