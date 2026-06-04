@@ -39,6 +39,42 @@ const DIM_LABEL: Record<string, string> = {
   budget: 'תקציב', city: 'עיר', rooms: 'חדרים', sqm: 'שטח', floor: 'קומה', timing: 'תזמון', demographic: 'דמוגרפיה',
 }
 
+// Editable boolean amenity flag (divided / garden) — PATCHes /api/v1/properties/[id].
+function FlagToggle({ propertyId, amenity, label, initial }: { propertyId: string; amenity: 'divided' | 'garden'; label: string; initial: boolean }) {
+  const [on, setOn] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  async function toggle() {
+    if (saving) return
+    const next = !on
+    setSaving(true)
+    setOn(next)
+    try {
+      const r = await fetch(`/api/v1/properties/${propertyId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amenity, value: next }),
+      })
+      if (!r.ok) throw new Error()
+    } catch {
+      setOn(!next)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={saving}
+      className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all disabled:opacity-60 ${
+        on ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+      }`}
+    >
+      {on ? '✓ ' : ''}{label}
+    </button>
+  )
+}
+
 async function fetchProperty(id: string): Promise<ExtendedProperty | null> {
   try {
     const response = await fetch(`/api/v1/properties/${id}`)
@@ -235,6 +271,16 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
             )}
+
+            {/* Quick flags — editable, affect renter matching */}
+            <div className="mt-8 space-y-3 border-t border-gray-100 pt-6">
+              <h4 className="text-lg font-medium text-gray-900">סימון מהיר</h4>
+              <div className="flex flex-wrap gap-2">
+                <FlagToggle propertyId={item.id} amenity="divided" label="דירה מחולקת" initial={!!(item.amenities as any)?.divided} />
+                <FlagToggle propertyId={item.id} amenity="garden" label="חצר / גינה" initial={!!(item.amenities as any)?.garden} />
+              </div>
+              <p className="text-xs text-gray-500">משפיע על התאמות: «מחולקת» פוסל שוכרים שביקשו דירה שלמה; «חצר» מתאים למי שביקש/ה חצר.</p>
+            </div>
           </div>
 
           {/* Description */}

@@ -101,6 +101,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recomputing, setRecomputing] = useState(false)
+  const [sendingInvite, setSendingInvite] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -133,6 +134,24 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       setTimeout(() => load(), 2500)
     } finally {
       setTimeout(() => setRecomputing(false), 2500)
+    }
+  }
+
+  async function sendQuestionnaire() {
+    if (sendingInvite) return
+    setSendingInvite(true)
+    try {
+      const res = await fetch(`/api/v1/renters/${params.id}/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const data = await res.json()
+      if (res.ok && data.waUrl) {
+        window.open(data.waUrl, '_blank')
+      } else {
+        alert(data?.error?.message || 'שליחת השאלון נכשלה')
+      }
+    } catch {
+      alert('שליחת השאלון נכשלה')
+    } finally {
+      setSendingInvite(false)
     }
   }
 
@@ -170,15 +189,27 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
               הצטרף {fmtDate(renter.created_at)} · {renter.submissions_count} שאלונים
             </div>
           </div>
-          <button
-            type="button"
-            onClick={recompute}
-            disabled={recomputing}
-            className="inline-flex items-center gap-1.5 rounded-md border border-brand-primary px-3 py-1.5 text-sm text-brand-primary hover:bg-brand-primary/5 disabled:opacity-60"
-          >
-            {recomputing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            חשב התאמות מחדש
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={recompute}
+              disabled={recomputing}
+              className="inline-flex items-center gap-1.5 rounded-md border border-brand-primary px-3 py-1.5 text-sm text-brand-primary hover:bg-brand-primary/5 disabled:opacity-60"
+            >
+              {recomputing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              חשב התאמות מחדש
+            </button>
+            <button
+              type="button"
+              onClick={sendQuestionnaire}
+              disabled={sendingInvite}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+              title="מייצר קישור שאלון מעודכן ופותח וואטסאפ לשליחה"
+            >
+              {sendingInvite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              שלח שאלון מעודכן
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

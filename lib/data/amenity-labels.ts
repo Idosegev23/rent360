@@ -25,6 +25,8 @@ export const AMENITY_LABELS: Record<string, string> = {
   shelter:        'מקלט',
   fiberInternet:  'אינטרנט סיבים',
   accessibility:  'נגישות',
+  garden:         'חצר',
+  divided:        'מחולקת',
   // Legacy lowercase fallbacks that show up in older rows
   airconditioner: 'מזגן',
   solarheater:    'דוד שמש',

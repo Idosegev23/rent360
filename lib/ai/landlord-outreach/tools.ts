@@ -126,8 +126,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
-        field: { type: 'string', enum: ['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description'] },
-        value: { description: 'string for text/date/description; number for price/rooms/sqm/floor; boolean for pets_allowed and smokers_allowed.' },
+        field: { type: 'string', enum: ['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description', 'divided', 'garden'] },
+        value: { description: 'string for text/date/description; number for price/rooms/sqm/floor; boolean for pets_allowed, smokers_allowed, divided (דירה מחולקת), and garden (חצר/גינה).' },
       },
       required: ['field', 'value'],
       additionalProperties: false,
@@ -320,10 +320,23 @@ async function recordIntent(args: { intent: string; notes?: string; callback_at?
 }
 
 async function updatePropertyField(args: { field: string; value: unknown }, ctx: ToolContext) {
-  const allowed = new Set(['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description'])
-  if (!allowed.has(args.field)) return { error: 'field_not_allowed' }
   if (!ctx.propertyId) return { error: 'no_property_id' }
   const sb = supabaseService()
+
+  // divided / garden are amenity flags (stored in the amenities jsonb), not top-level
+  // columns — merge them in so the matcher (divided DQ / yard) picks them up.
+  const AMENITY_FLAGS = new Set(['divided', 'garden'])
+  if (AMENITY_FLAGS.has(args.field)) {
+    const { data: p } = await sb.from('properties').select('amenities').eq('id', ctx.propertyId).eq('org_id', ctx.orgId).maybeSingle()
+    const amenities = (p?.amenities && typeof p.amenities === 'object') ? { ...(p.amenities as Record<string, unknown>) } : {}
+    amenities[args.field] = !!args.value
+    const { error: aerr } = await sb.from('properties').update({ amenities }).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
+    if (aerr) return { ok: false, error: aerr.message }
+    return { ok: true, field: args.field, value: !!args.value }
+  }
+
+  const allowed = new Set(['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description'])
+  if (!allowed.has(args.field)) return { error: 'field_not_allowed' }
   const update: Record<string, unknown> = { [args.field]: args.value }
   const { error } = await sb.from('properties').update(update).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
   if (error) return { ok: false, error: error.message }
