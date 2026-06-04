@@ -85,6 +85,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   const [sending, setSending] = useState(false)
   const [results, setResults] = useState<{ sent: number; skipped: number; details: SendResult[] } | null>(null)
   const [busyRow, setBusyRow] = useState<string | null>(null)
+  const [genProgress, setGenProgress] = useState<string | null>(null)
   // landlord filters
   const [city, setCity] = useState('')
   // landlord: which row's template preview is open + batch template preference
@@ -147,7 +148,28 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     if (!window.confirm(`לשלוח ל-${ids.length} נמענים? (אצווה — כפופה לתקרה היומית)`)) return
     setSending(true)
     setResults(null)
+    setError(null)
     try {
+      // Phase 1 — landlord personalized: generate the personal sentence for ALL selected
+      // properties first (in chunks, to avoid the function timeout), then send. The send
+      // then uses the rich template wherever the generated hook is strong enough.
+      if (mode === 'landlord' && prefer === 'personalized') {
+        let remaining = [...ids]
+        const total = ids.length
+        while (remaining.length) {
+          setGenProgress(`מייצר משפטים פרסונליים… ${total - remaining.length}/${total}`)
+          const gr = await fetch('/api/v1/outreach/landlord-generate-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ propertyIds: remaining }),
+          })
+          const gd = await gr.json()
+          if (!gr.ok || gd.error) throw new Error(gd?.error?.message || gd?.error?.code || 'generation failed')
+          remaining = Array.isArray(gd.remaining) ? gd.remaining : []
+        }
+        setGenProgress(`שולח ${total} הודעות…`)
+      }
+
       const res = await fetch(ep.batch, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -161,6 +183,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
       setError(err instanceof Error ? err.message : 'send failed')
     } finally {
       setSending(false)
+      setGenProgress(null)
     }
   }
 
@@ -234,7 +257,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
           className="btn btn-brand disabled:opacity-50"
         >
           {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          שלח אצווה ({selected.size})
+          {sending ? (genProgress || 'שולח…') : `שלח אצווה (${selected.size})`}
         </button>
       </div>
 
