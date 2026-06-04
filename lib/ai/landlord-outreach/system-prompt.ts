@@ -249,7 +249,7 @@ export function buildSystemPrompt(ctx: LandlordContext): string {
     '<פרטי-הנכס>',
     describeProperty(ctx.property),
     '</פרטי-הנכס>',
-    `<קישור-שאלון>\nשלח לבעל הנכס בדיוק את הקישור הזה (אל תשנה אותו):\n${ctx.ownerFormUrl || 'https://rent360owner.vercel.app/'}\n</קישור-שאלון>`,
+    `<קישור-שאלון>\nשלח לבעל הנכס בדיוק את הקישור הזה, אות-באות. אסור להמציא קישור, ואסור להשתמש ב-rent360.co.il או בכל דומיין אחר:\n${ctx.ownerFormUrl || 'https://rent360owner.vercel.app/'}\n</קישור-שאלון>`,
     `<מצב-השיחה>\nthread_id: ${ctx.thread.id}\nסטטוס: ${ctx.thread.status}\nהודעות עד כה: ${ctx.thread.message_count}\n</מצב-השיחה>`,
   ].join('\n\n')
 }

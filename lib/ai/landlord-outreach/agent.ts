@@ -158,7 +158,15 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
     })
   }
 
-  const text = extractOutputText(response)
+  let text = extractOutputText(response)
+
+  // The model sometimes invents the questionnaire URL (e.g. "rent360.co.il/owner-form")
+  // instead of the exact personalized link. Force the correct one — never trust the model
+  // to reproduce a URL verbatim.
+  if (ctx.ownerFormUrl) {
+    text = text.replace(/https?:\/\/\S*(?:owner-?form|rent360owner)\S*/gi, ctx.ownerFormUrl)
+  }
+
   await sb.from('threads').update({ openai_response_id: response.id }).eq('id', input.threadId)
 
   return {
