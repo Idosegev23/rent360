@@ -142,6 +142,10 @@ export async function buildLandlordHookVariables(propertyId: string): Promise<Ho
  */
 export type TemplateChoice = 'auto' | 'basic' | 'rich' | 'auto_quality'
 
+/** Active landlord first-touch template names (v3 = "value" copy). Env-overridable for future flips. */
+export const LANDLORD_TEMPLATE_BASIC = process.env.OUTREACH_TEMPLATE_BASIC || 'landlord_outreach_v3_basic'
+export const LANDLORD_TEMPLATE_RICH = process.env.OUTREACH_TEMPLATE_RICH || 'landlord_outreach_v3_rich'
+
 /** Confidence levels accepted as "good enough" for the rich template in batch quality mode. */
 const RICH_OK_CONFIDENCE = (process.env.OUTREACH_RICH_MIN_CONFIDENCE || 'high,medium')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
@@ -173,7 +177,7 @@ export function pickTemplateAndComponents(vars: HookVariables, mode: TemplateCho
   if (shouldUseRich(vars, mode)) {
     // RICH: name, rooms, address, hook, availability
     return {
-      templateName: 'landlord_outreach_v2_rich',
+      templateName: LANDLORD_TEMPLATE_RICH,
       components: [
         headerComp,
         {
@@ -191,7 +195,7 @@ export function pickTemplateAndComponents(vars: HookVariables, mode: TemplateCho
   }
   // BASIC: name, rooms, address, availability
   return {
-    templateName: 'landlord_outreach_v2_basic',
+    templateName: LANDLORD_TEMPLATE_BASIC,
     components: [
       headerComp,
       {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { requireAdminOrg } from '../../../../../lib/outreach/admin-context'
-import { buildLandlordHookVariables, PersonalizationError } from '../../../../../lib/outreach/personalization'
+import { buildLandlordHookVariables, PersonalizationError, LANDLORD_TEMPLATE_BASIC, LANDLORD_TEMPLATE_RICH } from '../../../../../lib/outreach/personalization'
 import { generateAndStorePersonalization } from '../../../../../lib/ai/property-vision'
 
 /**
@@ -54,17 +54,17 @@ export async function GET(req: NextRequest) {
   const { data: tpls } = await sb
     .from('whatsapp_templates')
     .select('name, body_template')
-    .in('name', ['landlord_outreach_v2_basic', 'landlord_outreach_v2_rich'])
+    .in('name', [LANDLORD_TEMPLATE_BASIC, LANDLORD_TEMPLATE_RICH])
   const bodyByName = new Map<string, string>()
   for (const t of tpls || []) bodyByName.set(t.name, t.body_template || '')
 
   const header = `דירה ב${vars.street_city}`
 
-  const basicBody = render(bodyByName.get('landlord_outreach_v2_basic') || '', [
+  const basicBody = render(bodyByName.get(LANDLORD_TEMPLATE_BASIC) || '', [
     vars.first_name, vars.rooms_label, vars.street_city, vars.availability_label,
   ])
   const richBody = vars.personal_hook
-    ? render(bodyByName.get('landlord_outreach_v2_rich') || '', [
+    ? render(bodyByName.get(LANDLORD_TEMPLATE_RICH) || '', [
         vars.first_name, vars.rooms_label, vars.street_city, vars.personal_hook, vars.availability_label,
       ])
     : null
