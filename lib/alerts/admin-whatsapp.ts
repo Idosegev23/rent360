@@ -11,6 +11,11 @@ import { sendTemplate } from '../whatsapp/meta-provider'
 import { parsePhoneList } from '../outreach/phone'
 import { supabaseService } from '../supabase'
 
+// Handoff alert template. v2 fixes the button URL to the working production domain
+// (rent360-vert.vercel.app/inbox/{{1}}); v1's button pointed at the dead rent360admin
+// domain (404/401). Env-overridable so we can flip to v2 the moment Meta approves it.
+const ADMIN_HANDOFF_TEMPLATE = process.env.ADMIN_HANDOFF_TEMPLATE || 'admin_handoff_alert_v1'
+
 export type AdminHandoffPayload = {
   threadId: string
   landlordName: string
@@ -73,7 +78,7 @@ export async function notifyAdminsHandoff(payload: AdminHandoffPayload): Promise
     try {
       const r = await sendTemplate({
         to: phone,
-        name: 'admin_handoff_alert_v1',
+        name: ADMIN_HANDOFF_TEMPLATE,
         language: 'he',
         components,
       })
@@ -92,7 +97,7 @@ export async function notifyAdminsHandoff(payload: AdminHandoffPayload): Promise
             status: 'sent',
             external_id: r.messageId,
             meta_message_type: 'template',
-            template_name: 'admin_handoff_alert_v1',
+            template_name: ADMIN_HANDOFF_TEMPLATE,
             template_params: { admin_phone: phone, ...payload },
             metadata: { admin_alert: true },
           })
