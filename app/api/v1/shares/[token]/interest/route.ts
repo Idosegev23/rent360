@@ -27,8 +27,10 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
     .select('city, neighborhood, street, price, rooms')
     .eq('id', share.property_id)
     .maybeSingle()
+  // Specific address (street + clean city) so the admin knows exactly which apartment.
+  const cityClean = (prop?.city || '').replace(/\s*-\s*(מגורים|משרדים|rent).*$/i, '').trim()
   const location = prop
-    ? (prop.neighborhood ? `${prop.city} · ${prop.neighborhood}` : (prop.city || prop.street || ''))
+    ? ([prop.street, cityClean].filter(Boolean).join(', ') || cityClean || prop.street || '')
     : ''
 
   // No renter attribution (generic property share) — acknowledge without recording.

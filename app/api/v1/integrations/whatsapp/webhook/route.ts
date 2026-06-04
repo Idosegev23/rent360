@@ -12,6 +12,11 @@ import {
 import { isHardOptOut, isSuppressed, recordOptOut } from '../../../../../../lib/outreach/suppression'
 import { processThreadIfNotLocked } from '../../../../../../lib/ai/conversation-orchestrator'
 import { embedInBackground, embedMessage } from '../../../../../../lib/ai/embeddings'
+import { waitUntil } from '@vercel/functions'
+
+// Keep the serverless function alive long enough for the orchestrator (2s coalesce + the
+// OpenAI agent turn, which can loop on tool calls). Without this it's cut at the default 10s.
+export const maxDuration = 60
 
 // Meta calls this endpoint when configuring the webhook (verification handshake).
 export async function GET(req: NextRequest) {
@@ -47,9 +52,10 @@ export async function POST(req: NextRequest) {
   const sb = supabaseService()
   const events = parseInboundWebhook(payload)
 
-  // Process events sequentially per-event but don't block the HTTP response on the
-  // full coalesce window. The orchestrator's atomic claim handles concurrent invocations.
-  void Promise.allSettled(events.map(e => processEvent(sb, e, payload)))
+  // Respond 200 to Meta immediately, but keep the function alive (waitUntil) so the
+  // background processing — coalesce sleep + OpenAI agent turn — actually completes.
+  // On Vercel, plain `void` background work is killed once the response is returned.
+  waitUntil(Promise.allSettled(events.map(e => processEvent(sb, e, payload))))
 
   return NextResponse.json({ received: true, events: events.length })
 }
