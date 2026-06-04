@@ -34,15 +34,41 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const { data: messages } = await sb
     .from('messages')
-    .select('id, direction, body, status, created_at, processed_at, meta_message_type, template_name, media_url, ai_metadata, external_id')
+    .select('id, direction, body, status, created_at, processed_at, meta_message_type, template_name, template_params, media_url, ai_metadata, external_id')
     .eq('thread_id', thread.id)
     .order('created_at', { ascending: true })
     .limit(500)
 
+  // Render template messages to the actual text the client received (so the inbox shows the
+  // content, not just "[תבנית: name]"). Map stored named params → the template's {{n}} slots.
+  const list = messages || []
+  const tplNames = Array.from(new Set(
+    list.filter(m => m.meta_message_type === 'template' && !m.body && m.template_name).map(m => m.template_name as string)
+  ))
+  if (tplNames.length) {
+    const { data: tpls } = await sb
+      .from('whatsapp_templates')
+      .select('name, body_template, param_names')
+      .in('name', tplNames)
+    const tplByName = new Map((tpls || []).map(t => [t.name, t]))
+    for (const m of list as any[]) {
+      if (m.meta_message_type !== 'template' || m.body || !m.template_name) continue
+      const tpl = tplByName.get(m.template_name)
+      if (!tpl?.body_template) continue
+      const order: string[] = Array.isArray(tpl.param_names) ? (tpl.param_names as string[]) : []
+      const vals = (m.template_params && typeof m.template_params === 'object') ? m.template_params as Record<string, unknown> : {}
+      m.rendered_body = String(tpl.body_template).replace(/\{\{(\d+)\}\}/g, (_m, n: string) => {
+        const key = order[Number(n) - 1]
+        const v = key ? vals[key] : undefined
+        return v != null && v !== '' ? String(v) : `{{${n}}}`
+      })
+    }
+  }
+
   return NextResponse.json({
     thread,
     property,
-    messages: messages || [],
+    messages: list,
   })
 }
 

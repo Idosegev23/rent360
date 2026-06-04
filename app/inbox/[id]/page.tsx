@@ -13,6 +13,7 @@ type Message = {
   processed_at: string | null
   meta_message_type: string | null
   template_name: string | null
+  rendered_body: string | null
   media_url: string | null
   ai_metadata: Record<string, unknown> | null
   external_id: string | null
@@ -305,8 +306,8 @@ function MessageBubble({ message }: { message: Message }) {
         {message.media_url && (
           <img src={message.media_url} alt="" className="rounded mb-2 max-h-64 object-cover" />
         )}
-        {message.body && <div className="whitespace-pre-wrap leading-relaxed">{message.body}</div>}
-        {isTemplate && !message.body && <div className="italic opacity-80 text-xs">[תבנית: {message.template_name}]</div>}
+        {(message.body || message.rendered_body) && <div className="whitespace-pre-wrap leading-relaxed">{message.body || message.rendered_body}</div>}
+        {isTemplate && !message.body && !message.rendered_body && <div className="italic opacity-80 text-xs">[תבנית: {message.template_name}]</div>}
         <div className="mt-1 text-[10px] opacity-70 flex items-center gap-1">
           <span>{fmtTime(message.created_at)}</span>
           {message.status && <span>· {message.status}</span>}
