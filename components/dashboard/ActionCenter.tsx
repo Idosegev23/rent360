@@ -154,31 +154,33 @@ function FullView({ data, loading, error, reload }: { data: Data | null; loading
       )}
 
       {data && data.total > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, alignItems: 'start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {LANES.map(lane => {
             const l = data.lanes[lane.key]
             if (!l || l.count === 0) return null
             const Icon = lane.icon
             return (
-              <div key={lane.key} style={{ borderRadius: 14, border: '1px solid var(--line)', background: 'var(--paper)', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: lane.bg, borderBottom: '1px solid var(--line)' }}>
-                  <span style={{ display: 'inline-flex', width: 30, height: 30, borderRadius: 8, background: '#fff', alignItems: 'center', justifyContent: 'center', color: lane.color }}><Icon size={16} /></span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink)' }}>{lane.title}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{lane.sub}</div>
+              <div key={lane.key} style={{ borderRadius: 16, border: '1px solid var(--line)', background: 'var(--paper)', overflow: 'hidden', borderInlineStart: `3px solid ${lane.color}` }}>
+                {/* Wide, clearly-labelled header per category */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: lane.bg, borderBottom: '1px solid var(--line)' }}>
+                  <span style={{ display: 'inline-flex', width: 38, height: 38, borderRadius: 10, background: '#fff', alignItems: 'center', justifyContent: 'center', color: lane.color, flexShrink: 0 }}><Icon size={19} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 16.5, color: 'var(--ink)' }}>{lane.title}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{lane.sub}</div>
                   </div>
-                  <span style={{ fontWeight: 800, fontSize: 14, color: lane.color, background: '#fff', borderRadius: 999, minWidth: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px' }}>{l.count}</span>
+                  <span style={{ fontWeight: 800, fontSize: 15, color: lane.color, background: '#fff', borderRadius: 999, minWidth: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 11px', flexShrink: 0 }}>{l.count}</span>
                 </div>
-                <div>
+                {/* Items fill the wide container in responsive columns (thin separators via gap) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 1, background: 'var(--line)' }}>
                   {l.items.map((it, i) => (
-                    <Link key={i} href={it.href} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: i < l.items.length - 1 ? '1px solid var(--line)' : 'none', textDecoration: 'none', color: 'inherit' }}>
+                    <Link key={i} href={it.href} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', background: 'var(--paper)', textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</div>
-                        {it.sublabel && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.sublabel}</div>}
-                        {it.note && <div style={{ fontSize: 11, color: 'var(--ink-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>“{it.note}”</div>}
-                        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-                          {it.badge && <span style={{ fontSize: 10.5, color: lane.color, fontWeight: 700 }}>{it.badge}</span>}
-                          {it.since && <span style={{ fontSize: 10.5, color: 'var(--ink-4)' }}>{ago(it.since)}</span>}
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</div>
+                        {it.sublabel && <div style={{ fontSize: 12, color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.sublabel}</div>}
+                        {it.note && <div style={{ fontSize: 11.5, color: 'var(--ink-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>“{it.note}”</div>}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
+                          {it.badge && <span style={{ fontSize: 11, color: lane.color, fontWeight: 700 }}>{it.badge}</span>}
+                          {it.since && <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{ago(it.since)}</span>}
                         </div>
                       </div>
                       <ChevronLeft size={16} style={{ color: 'var(--ink-4)', flexShrink: 0 }} />
