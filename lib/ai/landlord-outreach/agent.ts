@@ -75,6 +75,12 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
     property = (data as ExtendedProperty | null) || null
   }
 
+  // Personalized owner-questionnaire link — local 0-format phone, e.g. 972547667775 → 0547667775.
+  const localPhone = thread.phone
+    ? (thread.phone.startsWith('972') ? '0' + thread.phone.slice(3) : thread.phone.replace(/^\+/, ''))
+    : ''
+  const ownerFormUrl = `https://rent360owner.vercel.app/?phone=${localPhone}`
+
   const ctx: LandlordContext = {
     property: property as any,
     thread: {
@@ -83,6 +89,7 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
       last_inbound_at: thread.last_inbound_at,
       message_count: await countThreadMessages(thread.id),
     },
+    ownerFormUrl,
   }
 
   const toolCtx: ToolContext = {
@@ -107,11 +114,16 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
     parallel_tool_calls: false,
   }
 
+  // Re-send the system prompt EVERY turn (not just the first). With previous_response_id
+  // alone the system directives lose weight over the conversation and the agent drifts
+  // (e.g. stops sending the questionnaire link). Passing instructions each turn keeps the
+  // critical rules authoritative; previous_response_id still preserves conversation state.
+  const systemPrompt = ctx.property ? buildSystemPrompt(ctx) : buildSystemPrompt({ ...ctx, property: PLACEHOLDER_PROPERTY })
+
   let response: any = await (client() as any).responses.create({
     ...requestBase,
-    ...(isFirstTurn
-      ? { instructions: ctx.property ? buildSystemPrompt(ctx) : buildSystemPrompt({ ...ctx, property: PLACEHOLDER_PROPERTY }) }
-      : { previous_response_id: thread.openai_response_id }),
+    instructions: systemPrompt,
+    ...(isFirstTurn ? {} : { previous_response_id: thread.openai_response_id }),
     input: [{ role: 'user', content: userContent }],
   })
 
