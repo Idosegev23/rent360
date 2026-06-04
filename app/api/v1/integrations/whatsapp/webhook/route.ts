@@ -71,6 +71,28 @@ async function processEvent(
         .from('messages')
         .update({ status: event.status.status, metadata: event.status.raw as any })
         .eq('external_id', event.status.externalId)
+
+      // A first-touch landlord outreach that FAILED delivery (accepted by Meta, then bounced)
+      // must NOT stay marked as "sent" — return the property to the outreach queue so it isn't
+      // silently lost. The failed message row remains as the audit trail.
+      if (event.status.status === 'failed') {
+        const { data: failedMsg } = await sb
+          .from('messages')
+          .select('property_id, template_name, direction')
+          .eq('external_id', event.status.externalId)
+          .maybeSingle()
+        if (
+          failedMsg?.direction === 'out' &&
+          failedMsg.property_id &&
+          typeof failedMsg.template_name === 'string' &&
+          failedMsg.template_name.startsWith('landlord_outreach')
+        ) {
+          await sb
+            .from('properties')
+            .update({ initial_message_sent: false, outreach_skip_reason: 'delivery_failed' })
+            .eq('id', failedMsg.property_id)
+        }
+      }
       return
     }
 
