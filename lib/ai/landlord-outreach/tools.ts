@@ -107,12 +107,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     name: 'record_landlord_intent',
-    description: 'Mark the conversation outcome. Call this once per turn when the landlord state is clear.',
+    description: 'Mark the conversation outcome. Call this once per turn when the landlord state is clear. For callback_later, also set callback_at when the landlord names a time.',
     parameters: {
       type: 'object',
       properties: {
         intent: { type: 'string', enum: ['interested', 'not_interested', 'already_rented', 'callback_later', 'price_objection'] },
         notes: { type: 'string' },
+        callback_at: { type: 'string', description: 'ISO date (YYYY-MM-DD) when the landlord asked us to follow up — set this for callback_later when they give a time ("next month", "after the holiday", a date).' },
       },
       required: ['intent'],
       additionalProperties: false,
@@ -297,14 +298,24 @@ async function searchPastConversations(args: { query: string; scope?: 'thread' |
   return { results: data || [] }
 }
 
-async function recordIntent(args: { intent: string; notes?: string }, ctx: ToolContext) {
+async function recordIntent(args: { intent: string; notes?: string; callback_at?: string }, ctx: ToolContext) {
   const sb = supabaseService()
   const { data: thread } = await sb.from('threads').select('tags').eq('id', ctx.threadId).maybeSingle()
   const tags = (thread?.tags && typeof thread.tags === 'object' ? thread.tags : {}) as Record<string, unknown>
   tags.intent = args.intent
   if (args.notes) tags.intent_notes = args.notes
+  if (args.callback_at) tags.callback_at = args.callback_at
+  else if (args.intent !== 'callback_later') delete tags.callback_at
   tags.intent_set_at = new Date().toISOString()
   await sb.from('threads').update({ tags }).eq('id', ctx.threadId)
+
+  // Self-driving: a clear "no" takes the property out of the outreach queue so we never
+  // re-message someone who declined (anti-flood). already_rented also marks it off-market.
+  if (ctx.propertyId && (args.intent === 'not_interested' || args.intent === 'already_rented')) {
+    const upd: Record<string, unknown> = { outreach_blocked: true }
+    if (args.intent === 'already_rented') upd.is_active = false
+    await sb.from('properties').update(upd).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
+  }
   return { ok: true, intent: args.intent }
 }
 

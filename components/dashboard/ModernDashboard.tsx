@@ -19,6 +19,7 @@ import {
 import Link from 'next/link';
 import Topbar from '../shell/Topbar';
 import RecentInterest from './RecentInterest';
+import ActionCenter from './ActionCenter';
 
 interface DashboardData {
   kpis?: {
@@ -81,6 +82,7 @@ export default function ModernDashboard({ data }: { data: DashboardData }) {
       />
 
       <div className="page-wrap">
+        <ActionCenter />
         <RecentInterest />
         {/* KPI Hero Row */}
         <section className="grid gap-4 mb-7" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)' }}>
