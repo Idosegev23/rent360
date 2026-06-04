@@ -144,8 +144,11 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
       toolOutputs.push({ type: 'function_call_output', call_id: fc.call_id, output: JSON.stringify(out) })
     }
 
+    // Re-send instructions on the tool-loop continuation too — otherwise the final reply
+    // (synthesized after tool calls) drifts from the system rules (emojis, lists creep back).
     response = await (client() as any).responses.create({
       ...requestBase,
+      instructions: systemPrompt,
       previous_response_id: response.id,
       input: toolOutputs,
     })

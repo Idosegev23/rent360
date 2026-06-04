@@ -357,15 +357,16 @@ async function approveBrokerage(args: { summary?: string }, ctx: ToolContext) {
 
   // Insert with the full payload; fall back to core columns if the new columns aren't in
   // PostgREST's schema cache yet, then attach the summary/transcript best-effort.
+  const approvedAt = new Date().toISOString()
   const full = await sb
     .from('approved_properties')
-    .insert({ org_id: ctx.orgId, property_id: ctx.propertyId, approved_by: null, approval_method: 'conversation', approval_summary: summary, conversation_transcript: transcript })
+    .insert({ org_id: ctx.orgId, property_id: ctx.propertyId, approved_by: null, approved_at: approvedAt, approval_method: 'conversation', approval_summary: summary, conversation_transcript: transcript })
     .select('id')
     .single()
   if (full.error) {
     const core = await sb
       .from('approved_properties')
-      .insert({ org_id: ctx.orgId, property_id: ctx.propertyId, approved_by: null, approval_method: 'conversation' })
+      .insert({ org_id: ctx.orgId, property_id: ctx.propertyId, approved_by: null, approved_at: approvedAt, approval_method: 'conversation' })
       .select('id')
       .single()
     if (core.error) return { ok: false, error: core.error.message }
