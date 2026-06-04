@@ -29,6 +29,7 @@ type Preferences = {
   parking: ParkingPref
   elevator: RankedPref
   balcony: BalconyPref
+  yard: RankedPref
   furnished: LevelPref
   aircon: LevelPref
   mamad: RankedPref
@@ -39,6 +40,8 @@ type Preferences = {
   quiet: Wanted
   fiber_internet: Wanted
   shelter: Wanted
+  // האם דירה מחולקת מתאימה לשוכר. false → דירות מחולקות ידוחו במנוע ההתאמות.
+  divided_ok: boolean
 }
 
 type FormData = {
@@ -91,6 +94,7 @@ const KRAYOT_CITIES = [
   'קרית מוצקין',
   'קרית אתא',
   'קרית ים',
+  'קרית חיים',
   'חיפה',
   'נשר',
   'טירת כרמל',
@@ -101,6 +105,7 @@ const initialPreferences: Preferences = {
   parking: { level: 'any', type: 'any' },
   elevator: { level: 'any' },
   balcony: { level: 'any', min_sqm: null },
+  yard: { level: 'any' },
   furnished: { level: 'any', amount: 'any' },
   aircon: { level: 'any', amount: 'any' },
   mamad: { level: 'any' },
@@ -111,6 +116,7 @@ const initialPreferences: Preferences = {
   quiet: { wanted: false },
   fiber_internet: { wanted: false },
   shelter: { wanted: false },
+  divided_ok: true,
 }
 
 const initial: FormData = {
@@ -826,6 +832,7 @@ export default function RenterFormPage() {
                       )
                     }
                   />
+                  <RankedRow label="חצר / גינה" level={data.preferences.yard.level} onLevel={l => setPref('yard', { level: l })} />
                   <RankedRow
                     label="מרוהט"
                     level={data.preferences.furnished.level}
@@ -912,6 +919,28 @@ export default function RenterFormPage() {
                       </button>
                     )
                   })}
+                </div>
+              </Card>
+
+              <Card title="דירה מחולקת" subtitle="דירה שמחולקת בין כמה שוכרים / שותפים — האם זה מתאים לך?">
+                <div className="flex gap-2.5">
+                  {[
+                    { val: true, label: 'כן, מתאים לי' },
+                    { val: false, label: 'לא, רק דירה שלמה' },
+                  ].map(opt => (
+                    <button
+                      key={String(opt.val)}
+                      type="button"
+                      onClick={() => setPref('divided_ok', opt.val)}
+                      className={`flex-1 py-2.5 px-3 rounded-md border-2 text-sm font-medium transition-all ${
+                        data.preferences.divided_ok === opt.val
+                          ? 'border-brand-primary bg-brand-primarySoft text-brand-primary'
+                          : 'border-brand-border bg-brand-surfaceMuted text-brand-inkMuted hover:border-brand-borderStrong'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </Card>
             </StepWrap>

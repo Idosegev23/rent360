@@ -136,6 +136,19 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
     disqualifyingReasons.push('השוכר מעשן אבל הנכס לא מאפשר עישון')
   }
 
+  // Divided / shared apartment ("דירה מחולקת"): if the renter said it does NOT suit them
+  // and the property is a divided apartment, disqualify — same severity as pets/smokers.
+  // Only DQ when the property is KNOWN divided (=== true); unknown/absent never blocks.
+  {
+    const dprefs = (renter.preferences && typeof renter.preferences === 'object') ? renter.preferences as Record<string, any> : null
+    const damen = (property.amenities && typeof property.amenities === 'object') ? property.amenities as Record<string, any> : null
+    const dividedOk = dprefs?.divided_ok
+    const propDivided = damen?.divided === true || damen?.divided === 'true'
+    if (dividedOk === false && propDivided) {
+      disqualifyingReasons.push('השוכר ביקש דירה לא מחולקת אבל הנכס מחולק')
+    }
+  }
+
   // ----- Soft dimensions -----------------------------------------------------
   breakdown.budget = scoreBudget(renter, property, weights.budget)
   breakdown.city = scoreCity(renter, property, weights.city, hasCityList, preferredCities, propertyCities)
@@ -364,6 +377,7 @@ const AMENITY_KEY_MAP: Record<string, string> = {
   shelter:        'shelter',
   fiber_internet: 'fiberInternet',
   quiet:          'quiet',
+  yard:           'garden',
 }
 
 const AMENITY_LABEL: Record<string, string> = {
@@ -380,6 +394,7 @@ const AMENITY_LABEL: Record<string, string> = {
   shelter:        'מקלט',
   fiber_internet: 'אינטרנט סיבים',
   quiet:          'שקט',
+  yard:           'חצר',
 }
 
 function scoreAmenitiesSplit(

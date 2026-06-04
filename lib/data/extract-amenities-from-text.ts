@@ -26,6 +26,8 @@ export type AmenityKey =
   | 'shelter'
   | 'fiberInternet'
   | 'accessibility'
+  | 'garden'
+  | 'divided'
 
 type Spec = {
   positive: string[]
@@ -80,6 +82,17 @@ const SPECS: Record<AmenityKey, Spec> = {
   accessibility: {
     positive: ['נגישות', 'נגישה לנכים', 'דירת נכים', 'נגיש לנכים', 'מעלית לנכים', 'רמפה', 'ללא מדרגות'],
     negative: ['ללא נגישות', 'אינה נגישה'],
+  },
+  // חצר/גינה. Specific phrases only — bare "גינה" is avoided because it is a
+  // substring of common words/street names (e.g. "המגינים").
+  garden: {
+    positive: ['חצר', 'חצר פרטית', 'חצר צמודה', 'יציאה לחצר', 'דירת גן', 'גינה פרטית', 'גינה צמודה', 'יציאה לגינה', 'עם גינה'],
+    negative: ['ללא חצר', 'אין חצר', 'בלי חצר', 'ללא גינה', 'אין גינה'],
+  },
+  // דירה מחולקת / מפוצלת / שותפים.
+  divided: {
+    positive: ['דירה מחולקת', 'מחולקת', 'מחולק', 'דירת שותפים', 'דירה מפוצלת', 'מפוצלת', 'מחולקת לשתי יחידות', 'מחולקת ל-'],
+    negative: ['לא מחולקת', 'דירה שלמה', 'אינה מחולקת', 'לא מפוצלת'],
   },
 }
 
