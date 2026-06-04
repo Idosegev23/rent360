@@ -60,6 +60,10 @@
 }
 
 html { direction: rtl; }
+/* Never allow the document itself to scroll sideways. `clip` (not `hidden`)
+   so position:sticky on the sidebar/topbar keeps working. The real reflow
+   fix is `min-width: 0` on .main-pane below; this is defense-in-depth. */
+html, body { max-width: 100%; overflow-x: clip; }
 body {
   font-family: var(--font-ui), 'Heebo', system-ui, -apple-system, sans-serif;
   font-size: 14px;
@@ -359,6 +363,11 @@ body {
 .main-pane {
   background: var(--paper);
   min-height: 100vh;
+  /* Grid items default to min-width:auto (= min-content), which lets wide
+     children (tables, filter rows) blow the column past the viewport and
+     scroll the whole page sideways. min-width:0 lets the column shrink so
+     inner overflow-x containers handle their own scrolling. */
+  min-width: 0;
 }
 .page-wrap {
   padding: 28px 32px 100px;

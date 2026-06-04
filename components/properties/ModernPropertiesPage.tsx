@@ -323,12 +323,12 @@ export default function ModernPropertiesPage({
             </div>
           </div>
 
-          {/* Bottom Row - Filters */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          {/* Bottom Row - Filters (responsive grid: wraps instead of overflowing) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <select
               value={filters.city}
               onChange={(e) => handleFilterChange({ city: e.target.value })}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
             >
               <option value="">כל הערים</option>
               {allCities.map(city => (
@@ -340,7 +340,7 @@ export default function ModernPropertiesPage({
               value={filters.neighborhood}
               onChange={(e) => handleFilterChange({ neighborhood: e.target.value })}
               disabled={allNeighborhoods.length === 0}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               title={filters.city ? `שכונות ב${filters.city}` : 'כל השכונות'}
             >
               <option value="">{filters.city ? `כל השכונות ב${filters.city}` : 'כל השכונות'}</option>
@@ -349,44 +349,44 @@ export default function ModernPropertiesPage({
               ))}
             </select>
 
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <input
                 type="number"
                 placeholder="מחיר מינימום"
                 value={filters.priceMin}
                 onChange={(e) => handleFilterChange({ priceMin: e.target.value })}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+                className="w-full min-w-0 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
               />
               <input
                 type="number"
                 placeholder="מחיר מקסימום"
                 value={filters.priceMax}
                 onChange={(e) => handleFilterChange({ priceMax: e.target.value })}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+                className="w-full min-w-0 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <input
                 type="number"
                 placeholder="חדרים מינימום"
                 value={filters.roomsMin}
                 onChange={(e) => handleFilterChange({ roomsMin: e.target.value })}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+                className="w-full min-w-0 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
               />
               <input
                 type="number"
                 placeholder="חדרים מקסימום"
                 value={filters.roomsMax}
                 onChange={(e) => handleFilterChange({ roomsMax: e.target.value })}
-                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent w-32"
+                className="w-full min-w-0 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
               />
             </div>
 
             <select
               value={filters.isActive}
               onChange={(e) => handleFilterChange({ isActive: e.target.value })}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
             >
               <option value="">כל הסטטוסים</option>
               <option value="true">פעיל</option>
@@ -396,7 +396,7 @@ export default function ModernPropertiesPage({
             <select
               value={filters.isBrokerage}
               onChange={(e) => handleFilterChange({ isBrokerage: e.target.value })}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
             >
               <option value="">הכל</option>
               <option value="false">ישיר (ללא תיווך)</option>
@@ -406,7 +406,7 @@ export default function ModernPropertiesPage({
             {(filters.search || filters.city || filters.neighborhood || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive || filters.isBrokerage || filters.amenities.length > 0) && (
               <button
                 onClick={clearFilters}
-                className="px-4 py-3 text-brand-primary border border-brand-primary rounded-lg hover:bg-brand-primary hover:text-white transition-colors"
+                className="w-full px-4 py-3 text-brand-primary border border-brand-primary rounded-lg hover:bg-brand-primary hover:text-white transition-colors"
               >
                 נקה פילטרים
               </button>
