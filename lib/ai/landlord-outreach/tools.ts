@@ -121,14 +121,27 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     name: 'update_property_field',
-    description: 'Update a property field with information the landlord shared. Whitelist only.',
+    description: 'Save a property detail the landlord shared during the conversation (we collect details in chat — there is no form). Call it each time the landlord gives or corrects a fact. Whitelist only.',
     parameters: {
       type: 'object',
       properties: {
-        field: { type: 'string', enum: ['contact_name', 'evacuation_date', 'pets_allowed', 'smokers_allowed', 'price', 'description'] },
-        value: { description: 'string for text/date/description; number for price; boolean for pets_allowed and smokers_allowed.' },
+        field: { type: 'string', enum: ['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description'] },
+        value: { description: 'string for text/date/description; number for price/rooms/sqm/floor; boolean for pets_allowed and smokers_allowed.' },
       },
       required: ['field', 'value'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'approve_brokerage',
+    description: 'Call ONLY when the landlord clearly agrees in the conversation to let Rent360 handle the brokerage (e.g. "כן בואו נתחיל", "אני מאשר", "סגור, קדימה"). This moves the property to APPROVED. Provide a clear, readable Hebrew summary of what was agreed and the details collected (NOT json).',
+    parameters: {
+      type: 'object',
+      properties: {
+        summary: { type: 'string', description: 'תקציר קריא בעברית: מה סוכם, פרטי הדירה שנאספו/אומתו (חדרים, מחיר, זמינות, ריהוט וכו\'), עמלה אם נדונה, ומה חשוב להמשך. טקסט נקי וברור — לא JSON.' },
+      },
+      required: ['summary'],
       additionalProperties: false,
     },
   },
@@ -186,6 +199,7 @@ export async function executeTool(name: string, args: any, ctx: ToolContext): Pr
     case 'search_past_conversations': return searchPastConversations(args, ctx)
     case 'record_landlord_intent': return recordIntent(args, ctx)
     case 'update_property_field': return updatePropertyField(args, ctx)
+    case 'approve_brokerage': return approveBrokerage(args, ctx)
     case 'get_matching_renters_for_property': return getMatchingRenters(args, ctx)
     case 'handoff_to_human': return handoff(args, ctx)
     case 'opt_out_landlord': return optOut(args, ctx)
@@ -295,7 +309,7 @@ async function recordIntent(args: { intent: string; notes?: string }, ctx: ToolC
 }
 
 async function updatePropertyField(args: { field: string; value: unknown }, ctx: ToolContext) {
-  const allowed = new Set(['contact_name', 'evacuation_date', 'pets_allowed', 'smokers_allowed', 'price', 'description'])
+  const allowed = new Set(['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description'])
   if (!allowed.has(args.field)) return { error: 'field_not_allowed' }
   if (!ctx.propertyId) return { error: 'no_property_id' }
   const sb = supabaseService()
@@ -303,6 +317,77 @@ async function updatePropertyField(args: { field: string; value: unknown }, ctx:
   const { error } = await sb.from('properties').update(update).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
   if (error) return { ok: false, error: error.message }
   return { ok: true, field: args.field }
+}
+
+/**
+ * Record a brokerage approval captured in the conversation: insert the approved_properties
+ * row (approval_method='conversation') with a readable summary + the conversation transcript,
+ * record the intent, and notify the admin. No human verification step — chat approval = approved.
+ * Resilient to PostgREST schema-cache lag on the new columns.
+ */
+async function approveBrokerage(args: { summary?: string }, ctx: ToolContext) {
+  if (!ctx.propertyId) return { error: 'no_property_id' }
+  const sb = supabaseService()
+
+  // Readable transcript of this thread.
+  const { data: msgs } = await sb
+    .from('messages')
+    .select('direction, body, created_at')
+    .eq('thread_id', ctx.threadId)
+    .order('created_at', { ascending: true })
+    .limit(80)
+  const transcript = (msgs || [])
+    .filter(m => m.body && String(m.body).trim())
+    .map(m => `${m.direction === 'in' ? 'בעל הדירה' : 'רנט360'}: ${String(m.body).trim()}`)
+    .join('\n')
+
+  const summary = (args.summary || '').trim() || 'בעל הדירה אישר תיווך בשיחה.'
+
+  // Already approved? update the summary/transcript (best-effort) and exit.
+  const { data: existing } = await sb
+    .from('approved_properties')
+    .select('id')
+    .eq('org_id', ctx.orgId)
+    .eq('property_id', ctx.propertyId)
+    .maybeSingle()
+  if (existing) {
+    await sb.from('approved_properties').update({ approval_summary: summary, conversation_transcript: transcript }).eq('id', existing.id)
+    return { ok: true, already_approved: true }
+  }
+
+  // Insert with the full payload; fall back to core columns if the new columns aren't in
+  // PostgREST's schema cache yet, then attach the summary/transcript best-effort.
+  const full = await sb
+    .from('approved_properties')
+    .insert({ org_id: ctx.orgId, property_id: ctx.propertyId, approved_by: null, approval_method: 'conversation', approval_summary: summary, conversation_transcript: transcript })
+    .select('id')
+    .single()
+  if (full.error) {
+    const core = await sb
+      .from('approved_properties')
+      .insert({ org_id: ctx.orgId, property_id: ctx.propertyId, approved_by: null, approval_method: 'conversation' })
+      .select('id')
+      .single()
+    if (core.error) return { ok: false, error: core.error.message }
+    await sb.from('approved_properties').update({ approval_summary: summary, conversation_transcript: transcript }).eq('id', (core.data as any).id)
+  }
+
+  // Record intent + notify the admin (informational — no verification needed).
+  await recordIntent({ intent: 'interested', notes: `אישר תיווך בשיחה. ${summary}` }, ctx)
+  try {
+    const { data: p } = await sb.from('properties').select('contact_name, title, city, street, address').eq('id', ctx.propertyId).maybeSingle()
+    const base = ctx.appBaseUrl || process.env.APP_BASE_URL || 'https://rent360-vert.vercel.app'
+    await notifyAdminsHandoff({
+      threadId: ctx.threadId,
+      landlordName: p?.contact_name || 'בעל דירה',
+      landlordPhone: ctx.landlordPhone,
+      propertyTitle: p?.title || [p?.street || p?.address, p?.city].filter(Boolean).join(', ') || 'נכס',
+      reason: `אישר תיווך בשיחה — נכנס לנכסים מאושרים`,
+      dashboardUrl: `${base.replace(/\/$/, '')}/inbox/${ctx.threadId}`,
+    })
+  } catch {/* best-effort */}
+
+  return { ok: true, approved: true }
 }
 
 async function getMatchingRenters(args: { property_id?: string; min_score?: number }, ctx: ToolContext) {

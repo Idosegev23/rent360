@@ -33,7 +33,7 @@ export async function GET(req: NextRequest){
   // Step 1: Get approved property IDs with pagination and count
   let approvedQuery = sb
     .from('approved_properties')
-    .select('id, property_id, approved_at, org_id, approval_method, approved_by', { count: 'exact' })
+    .select('*', { count: 'exact' })
     .eq('org_id', orgId)
     .order('approved_at', { ascending: false })
     .range(offset, offset + limit - 1)
@@ -168,6 +168,8 @@ export async function GET(req: NextRequest){
         approval_method: approval.approval_method || 'questionnaire',
         approved_by: approval.approved_by || null,
         approved_by_name: approval.approved_by ? approverNameById.get(approval.approved_by) || null : null,
+        approval_summary: (approval as any).approval_summary || null,
+        approval_transcript: (approval as any).conversation_transcript || null,
         matches_count: agg.count,
         matches_top_score: agg.topScore,
       }

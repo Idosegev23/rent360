@@ -26,6 +26,7 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
   const [sendingOutreach, setSendingOutreach] = useState(false);
   const [outreachError, setOutreachError] = useState<string | null>(null);
   const [justSentOutreach, setJustSentOutreach] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const handleConfirmDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -188,7 +189,33 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
             <Check size={12} />
             {item.approval_method === 'manual'
               ? `אישור ידני · ${formatDate(item.approved_at)}${item.approved_by_name ? ` · ${item.approved_by_name}` : ''}`
+              : (item.approval_method as string) === 'conversation'
+              ? `אושר בשיחה · ${formatDate(item.approved_at)}`
               : `שאלון · ${formatDate(item.approved_at)}`}
+          </div>
+        )}
+
+        {/* Conversation approval — summary + transcript (readable) */}
+        {(item as any).approval_summary && (
+          <div style={{ marginTop: 8, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--paper-2, #f7f7f5)', padding: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', marginBottom: 4 }}>סיכום השיחה</div>
+            <div style={{ fontSize: 12, color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{(item as any).approval_summary}</div>
+            {(item as any).approval_transcript && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTranscript(s => !s); }}
+                  style={{ marginTop: 6, fontSize: 11, color: 'var(--brand)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  {showTranscript ? 'הסתר תמלול ▲' : 'הצג תמלול שיחה ▼'}
+                </button>
+                {showTranscript && (
+                  <pre style={{ marginTop: 6, maxHeight: 220, overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 11, lineHeight: 1.6, color: 'var(--ink-2)', background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, padding: 8, fontFamily: 'inherit' }}>
+                    {(item as any).approval_transcript}
+                  </pre>
+                )}
+              </>
+            )}
           </div>
         )}
 

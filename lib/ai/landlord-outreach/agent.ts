@@ -75,12 +75,6 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
     property = (data as ExtendedProperty | null) || null
   }
 
-  // Personalized owner-questionnaire link — local 0-format phone, e.g. 972547667775 → 0547667775.
-  const localPhone = thread.phone
-    ? (thread.phone.startsWith('972') ? '0' + thread.phone.slice(3) : thread.phone.replace(/^\+/, ''))
-    : ''
-  const ownerFormUrl = `https://rent360owner.vercel.app/?phone=${localPhone}`
-
   const ctx: LandlordContext = {
     property: property as any,
     thread: {
@@ -89,7 +83,6 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
       last_inbound_at: thread.last_inbound_at,
       message_count: await countThreadMessages(thread.id),
     },
-    ownerFormUrl,
   }
 
   const toolCtx: ToolContext = {
@@ -158,15 +151,7 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
     })
   }
 
-  let text = extractOutputText(response)
-
-  // The model sometimes invents the questionnaire URL (e.g. "rent360.co.il/owner-form")
-  // instead of the exact personalized link. Force the correct one — never trust the model
-  // to reproduce a URL verbatim.
-  if (ctx.ownerFormUrl) {
-    text = text.replace(/https?:\/\/\S*(?:owner-?form|rent360owner)\S*/gi, ctx.ownerFormUrl)
-  }
-
+  const text = extractOutputText(response)
   await sb.from('threads').update({ openai_response_id: response.id }).eq('id', input.threadId)
 
   return {
