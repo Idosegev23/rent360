@@ -48,10 +48,12 @@ export async function processThreadIfNotLocked(threadId: string): Promise<Orches
     .select('id')
 
   if (claimErr) {
-    console.error('[orchestrator] claim error:', claimErr.message)
-    return { status: 'skipped_no_messages' }
-  }
-  if (!claimedRows || claimedRows.length === 0) {
+    // Best-effort: if the claim can't be performed (e.g. PostgREST schema-cache lag right
+    // after the processing_started_at migration), PROCEED without the lock rather than
+    // dropping the reply entirely. Worst case is a possible duplicate during a burst; that
+    // is far better than the agent never replying. Self-heals once the cache refreshes.
+    console.error('[orchestrator] claim error (proceeding without lock):', claimErr.message)
+  } else if (!claimedRows || claimedRows.length === 0) {
     // Another worker holds the claim.
     return { status: 'skipped_locked' }
   }
