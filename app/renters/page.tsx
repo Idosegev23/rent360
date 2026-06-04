@@ -219,7 +219,7 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
         </div>
       )}
 
-      <div className="grid gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {renters.map(r => <RenterCard key={r.id} renter={r} />)}
       </div>
     </>
@@ -378,7 +378,7 @@ function InvitesPanel({
         </div>
       )}
 
-      <div className="grid gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {invites.map(inv => <InviteRow key={inv.token} invite={inv} />)}
       </div>
     </>

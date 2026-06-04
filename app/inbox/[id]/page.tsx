@@ -160,7 +160,7 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
         <ArrowRight className="h-4 w-4" /> חזרה לתיבה
       </Link>
 
-      <div className="grid gap-4 md:grid-cols-[1fr_280px]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_280px]">
         {/* Chat column */}
         <div className="flex flex-col rounded-lg border border-brand-border bg-white min-h-[70vh]">
           <div className="border-b border-brand-border p-3 flex items-center justify-between">

@@ -60,10 +60,6 @@
 }
 
 html { direction: rtl; }
-/* Never allow the document itself to scroll sideways. `clip` (not `hidden`)
-   so position:sticky on the sidebar/topbar keeps working. The real reflow
-   fix is `min-width: 0` on .main-pane below; this is defense-in-depth. */
-html, body { max-width: 100%; overflow-x: clip; }
 body {
   font-family: var(--font-ui), 'Heebo', system-ui, -apple-system, sans-serif;
   font-size: 14px;

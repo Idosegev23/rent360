@@ -566,12 +566,12 @@ export default function ModernPropertiesPage({
           {/* Pagination */}
           {pagination.totalPages > 1 && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-gray-600">
                   עמוד {pagination.page} מתוך {pagination.totalPages} (סך הכל {totalProperties} נכסים)
                 </div>
-                
-                <div className="flex items-center gap-2">
+
+                <div className="flex flex-wrap items-center justify-center gap-2">
                   <button
                     onClick={() => handlePageChange(pagination.page - 1)}
                     disabled={!pagination.hasPrev || loading}

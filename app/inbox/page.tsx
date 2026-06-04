@@ -110,7 +110,7 @@ export default function InboxPage() {
           </div>
         )}
 
-        <div className="grid gap-2">
+        <div className="grid grid-cols-1 gap-2">
           {threads.map(t => {
             const statusInfo = STATUS_LABELS[t.status] || { label: t.status, tone: 'outline' as const }
             return (

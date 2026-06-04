@@ -32,7 +32,7 @@ export default function RecentInterest() {
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100">✋</span>
         <h2 className="font-semibold text-gray-900">שוכרים שמעוניינים בדירה ({items.length})</h2>
       </div>
-      <div className="grid gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {items.map(i => (
           <Link
             key={i.id}

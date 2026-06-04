@@ -257,10 +257,10 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
         </div>
       )}
 
-      <div className="grid gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {rows.map(r => (
           <div key={r.id} className="rounded-lg border border-brand-border bg-white">
-            <div className="p-3 flex items-center gap-3">
+            <div className="p-3 flex flex-wrap items-center gap-3">
               <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4 shrink-0" />
               {r.coverImage
                 ? <img src={r.coverImage} alt="" className="h-12 w-12 rounded-md object-cover shrink-0" />
@@ -413,7 +413,7 @@ function LandlordPreview({ propertyId, busy, onSend }: { propertyId: string; bus
           {regenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} צור משפט מחדש
         </button>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <TemplateCard
           title="בסיסית"
           header={data.basic?.header || ''}
@@ -594,7 +594,7 @@ function SuppressionManager({ refreshKey }: { refreshKey: number }) {
         <div className="text-center py-10 text-gray-500"><ShieldOff className="mx-auto h-10 w-10 mb-2 text-gray-300" /><p>הרשימה ריקה.</p></div>
       )}
 
-      <div className="grid gap-1.5">
+      <div className="grid grid-cols-1 gap-1.5">
         {rows.map(r => (
           <div key={r.id} className="rounded-md border border-brand-border bg-white px-3 py-2 flex items-center gap-3 text-sm">
             <span className="font-mono text-gray-800">{r.phone}</span>

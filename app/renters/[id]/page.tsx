@@ -227,7 +227,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
         </div>
       )}
 
-      <div className="grid gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {[...nonDqMatches, ...dqMatches].map(m => <MatchRow key={m.id} match={m} />)}
       </div>
     </div>
