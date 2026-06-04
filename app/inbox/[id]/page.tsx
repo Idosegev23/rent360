@@ -71,27 +71,34 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
   const [statusUpdating, setStatusUpdating] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  async function load() {
-    setLoading(true)
+  async function load(opts?: { silent?: boolean }) {
+    // Background polls must NOT toggle the full-page loading state — otherwise the whole
+    // conversation flashes to a spinner every 15s ("jumping"). Only the first load shows it.
+    if (!opts?.silent) setLoading(true)
     try {
       const res = await fetch(`/api/v1/inbox/threads/${params.id}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error?.message || data?.error?.code || 'load failed')
       setThread(data.thread)
       setProperty(data.property)
-      setMessages(data.messages || [])
+      setMessages(prev => {
+        const next = data.messages || []
+        // Avoid a needless re-render when nothing changed (same count + same last id).
+        if (prev.length === next.length && prev[prev.length - 1]?.id === next[next.length - 1]?.id) return prev
+        return next
+      })
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'load failed')
+      if (!opts?.silent) setError(err instanceof Error ? err.message : 'load failed')
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }
 
   useEffect(() => {
     load()
-    // Light polling every 15s to pick up new inbound messages
-    const t = setInterval(load, 15_000)
+    // Light polling every 15s to pick up new inbound messages — silent (no loading flash).
+    const t = setInterval(() => load({ silent: true }), 15_000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
