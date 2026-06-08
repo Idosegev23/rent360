@@ -140,7 +140,9 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<'matches' | 'created_at' | 'budget_max' | 'updated_at'>('matches')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
-  const [vetted, setVetted] = useState<'' | 'true' | 'false'>('')
+  // Default to vetted ("our renters list" = renters who completed intake). Imported leads
+  // live under "לא מטוייבים" until the intake bot finalizes them (submissions_count>0).
+  const [vetted, setVetted] = useState<'' | 'true' | 'false'>('true')
   const [sendingQ, setSendingQ] = useState(false)
   const [sendQMsg, setSendQMsg] = useState<string | null>(null)
 
