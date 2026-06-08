@@ -7,6 +7,7 @@ import {
   CreditCard, FileCheck, RefreshCw, ExternalLink, ChevronDown, ChevronUp, AlertTriangle,
   Send, Check,
 } from 'lucide-react'
+import MarkRented from '../../../components/MarkRented'
 
 type Renter = Record<string, any>
 type MatchProperty = {
@@ -209,6 +210,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
               {sendingInvite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               שלח שאלון מעודכן
             </button>
+            <MarkRented mode="renter" id={params.id} />
           </div>
         </div>
 

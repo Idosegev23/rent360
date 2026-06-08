@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight, Share2, Target, AlertTriangle, ChevronDown, ChevronUp, Loader2, RefreshCw, User } from 'lucide-react'
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
 import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
+import MarkRented from '../../../components/MarkRented'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -280,6 +281,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                 <FlagToggle propertyId={item.id} amenity="garden" label="חצר / גינה" initial={!!(item.amenities as any)?.garden} />
               </div>
               <p className="text-xs text-gray-500">משפיע על התאמות: «מחולקת» פוסל שוכרים שביקשו דירה שלמה; «חצר» מתאים למי שביקש/ה חצר.</p>
+              <div className="pt-2"><MarkRented mode="property" id={item.id} /></div>
             </div>
           </div>
 
