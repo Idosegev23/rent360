@@ -21,6 +21,7 @@ import { supabaseService } from '../supabase'
 import { sendText } from '../whatsapp/meta-provider'
 import { isInSessionWindow } from '../whatsapp/window-guard'
 import { runAgentTurn } from './landlord-outreach/agent'
+import { runRenterAgentTurn } from './renter-interview/agent'
 import { embedInBackground, embedMessage } from './embeddings'
 
 const COALESCE_MS = parseInt(process.env.WEBHOOK_COALESCE_MS || '2000', 10)
@@ -63,7 +64,7 @@ export async function processThreadIfNotLocked(threadId: string): Promise<Orches
 
     const { data: thread } = await sb
       .from('threads')
-      .select('id, org_id, phone, status, last_inbound_at')
+      .select('id, org_id, phone, status, last_inbound_at, tags')
       .eq('id', threadId)
       .maybeSingle()
     if (!thread) return { status: 'skipped_no_messages' }
@@ -97,7 +98,12 @@ export async function processThreadIfNotLocked(threadId: string): Promise<Orches
       return { status: 'window_closed' }
     }
 
-    const turn = await runAgentTurn({ threadId, userText, imageUrls })
+    // Route by audience: a renter thread gets the intake bot, otherwise the landlord bot.
+    const tags = (thread.tags && typeof thread.tags === 'object') ? thread.tags as Record<string, any> : {}
+    const isRenter = tags.audience === 'renter'
+    const turn = isRenter
+      ? await runRenterAgentTurn({ threadId, userText, imageUrls })
+      : await runAgentTurn({ threadId, userText, imageUrls })
 
     if (turn.text && turn.text.trim()) {
       try {
