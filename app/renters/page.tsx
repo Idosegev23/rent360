@@ -140,13 +140,14 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<'matches' | 'created_at' | 'budget_max' | 'updated_at'>('matches')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+  const [vetted, setVetted] = useState<'' | 'true' | 'false'>('')
 
   useEffect(() => {
     let cancel = false
     setLoading(true)
     setError(null)
     const apiSort = sort === 'matches' ? 'updated_at' : sort
-    fetch(`/api/v1/renters?sort=${apiSort}&dir=${dir}&search=${encodeURIComponent(search)}`)
+    fetch(`/api/v1/renters?sort=${apiSort}&dir=${dir}&search=${encodeURIComponent(search)}${vetted ? `&vetted=${vetted}` : ''}&limit=200`)
       .then(r => r.json())
       .then(data => {
         if (cancel) return
@@ -165,7 +166,7 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
       .catch(err => { if (!cancel) setError(err.message) })
       .finally(() => { if (!cancel) setLoading(false) })
     return () => { cancel = true }
-  }, [search, sort, dir, refreshKey])
+  }, [search, sort, dir, refreshKey, vetted])
 
   function toggleSort(col: typeof sort) {
     if (sort === col) setDir(d => (d === 'desc' ? 'asc' : 'desc'))
@@ -206,6 +207,21 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex gap-1.5 mb-3 text-xs">
+        {([{ id: '' as const, label: 'הכל' }, { id: 'false' as const, label: 'לא מטוייבים (יובאו)' }, { id: 'true' as const, label: 'מטוייבים (מילאו שאלון)' }]).map(v => (
+          <button
+            key={v.id || 'all'}
+            type="button"
+            onClick={() => setVetted(v.id)}
+            className={`px-3 py-1 rounded-full border transition ${
+              vetted === v.id ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-600 border-brand-border hover:bg-gray-50'
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
       </div>
 
       {loading && <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-brand-primary" /></div>}

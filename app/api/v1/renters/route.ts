@@ -42,6 +42,10 @@ export async function GET(req: NextRequest) {
   if (city) {
     q = q.contains('preferred_cities', [city])
   }
+  // Vetted = filled the questionnaire (submissions_count>0). Unvetted = imported leads (0).
+  const vetted = url.searchParams.get('vetted')
+  if (vetted === 'true') q = q.gt('submissions_count', 0)
+  else if (vetted === 'false') q = q.eq('submissions_count', 0)
 
   // Allow sort by created_at / updated_at / submissions_count
   const allowedSort = new Set(['created_at', 'updated_at', 'submissions_count', 'budget_max'])
