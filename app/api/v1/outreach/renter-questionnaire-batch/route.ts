@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { customAlphabet } from 'nanoid'
 import { requireAdminOrg } from '../../../../../lib/outreach/admin-context'
 import { supabaseService } from '../../../../../lib/supabase'
 import { sendTemplate, normalizePhone } from '../../../../../lib/whatsapp/meta-provider'
@@ -7,16 +6,16 @@ import { isSuppressed } from '../../../../../lib/outreach/suppression'
 import { DAILY_CAP, MANUAL_BATCH_MAX, templatesSentToday, sleepJitter } from '../../../../../lib/outreach/governance'
 
 /**
- * Send the renter questionnaire invite (renter_questionnaire_invite_v1) to a reviewed set of
- * renters — each gets a personal /r/<token> link via the template's URL button. Enforces the
- * shared daily cap + a per-click ceiling, skips suppressed phones, spaces sends with jitter.
- * Body: { renterIds: string[] }.
+ * Send the renter INTAKE opener (renter_intake_invite_v1) to a reviewed set of renters — a
+ * conversation starter with a "כן, בוא נתחיל" quick-reply. When the renter taps it, the inbound
+ * webhook routes the renter thread (tags.audience='renter') to the intake bot, which interviews
+ * them in WhatsApp. Enforces the shared daily cap + per-click ceiling, skips suppressed phones,
+ * spaces sends with jitter. Body: { renterIds: string[] }.
  */
 export const maxDuration = 60
 
-const TEMPLATE = process.env.RENTER_QUESTIONNAIRE_TEMPLATE || 'renter_questionnaire_invite_v1'
+const TEMPLATE = process.env.RENTER_INTAKE_TEMPLATE || 'renter_intake_invite_v1'
 const TEMPLATE_LANG = 'he'
-const genToken = customAlphabet('23456789abcdefghjkmnpqrstuvwxyz', 12)
 
 export async function POST(req: NextRequest) {
   const ctx = await requireAdminOrg()
@@ -56,14 +55,8 @@ export async function POST(req: NextRequest) {
       const phone = normalizePhone(renter.phone)
       if (await isSuppressed(orgId, phone)) { skipped++; results.push({ renterId, status: 'skipped', reason: 'suppressed' }); continue }
 
-      const token = genToken()
-      await sb.from('renter_invites').insert({
-        token, first_name: renter.first_name || null, phone: renter.phone, status: 'pending', created_by: 'questionnaire_batch',
-      })
-
       const components = [
         { type: 'body' as const, parameters: [{ type: 'text' as const, text: (renter.first_name || 'שלום').slice(0, 40) }] },
-        { type: 'button' as const, sub_type: 'url' as const, index: 0, parameters: [{ type: 'text' as const, text: token }] },
       ]
       const r = await sendTemplate({ to: phone, name: TEMPLATE, language: TEMPLATE_LANG, components })
 
@@ -73,7 +66,7 @@ export async function POST(req: NextRequest) {
         await sb.from('messages').insert({
           org_id: orgId, thread_id: thread.id, channel: 'whatsapp', direction: 'out', body: null,
           status: 'sent', external_id: r.messageId, meta_message_type: 'template',
-          template_name: TEMPLATE, template_params: { first_name: renter.first_name, token },
+          template_name: TEMPLATE, template_params: { first_name: renter.first_name },
         })
         await sb.from('threads').update({ last_outbound_at: new Date().toISOString(), last_message_at: new Date().toISOString() }).eq('id', thread.id)
       }
