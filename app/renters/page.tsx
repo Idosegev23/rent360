@@ -141,6 +141,8 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
   const [sort, setSort] = useState<'matches' | 'created_at' | 'budget_max' | 'updated_at'>('matches')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
   const [vetted, setVetted] = useState<'' | 'true' | 'false'>('')
+  const [sendingQ, setSendingQ] = useState(false)
+  const [sendQMsg, setSendQMsg] = useState<string | null>(null)
 
   useEffect(() => {
     let cancel = false
@@ -171,6 +173,22 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
   function toggleSort(col: typeof sort) {
     if (sort === col) setDir(d => (d === 'desc' ? 'asc' : 'desc'))
     else { setSort(col); setDir('desc') }
+  }
+
+  async function sendQuestionnaires() {
+    if (sendingQ || renters.length === 0) return
+    if (!window.confirm(`לשלוח שאלון ל-${renters.length} השוכרים המוצגים? (כפוף לתקרה היומית — ייתכן שיישלח חלק וההמשך מחר)`)) return
+    setSendingQ(true); setSendQMsg(null)
+    try {
+      const res = await fetch('/api/v1/outreach/renter-questionnaire-batch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ renterIds: renters.map(r => r.id) }),
+      })
+      const d = await res.json()
+      if (d.reason === 'template_not_approved') setSendQMsg(`התבנית עדיין באישור Meta (${d.templateStatus}) — נסה מאוחר יותר.`)
+      else if (d.reason === 'daily_cap_hit') setSendQMsg('התקרה היומית נוצלה. נסה מחר.')
+      else setSendQMsg(`נשלחו ${d.sent || 0}, דולגו ${d.skipped || 0}.`)
+    } catch { setSendQMsg('שליחה נכשלה') } finally { setSendingQ(false) }
   }
 
   return (
@@ -209,19 +227,36 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
         </div>
       </div>
 
-      <div className="flex gap-1.5 mb-3 text-xs">
-        {([{ id: '' as const, label: 'הכל' }, { id: 'false' as const, label: 'לא מטוייבים (יובאו)' }, { id: 'true' as const, label: 'מטוייבים (מילאו שאלון)' }]).map(v => (
-          <button
-            key={v.id || 'all'}
-            type="button"
-            onClick={() => setVetted(v.id)}
-            className={`px-3 py-1 rounded-full border transition ${
-              vetted === v.id ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-600 border-brand-border hover:bg-gray-50'
-            }`}
-          >
-            {v.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="flex gap-1.5 text-xs">
+          {([{ id: '' as const, label: 'הכל' }, { id: 'false' as const, label: 'לא מטוייבים (יובאו)' }, { id: 'true' as const, label: 'מטוייבים (מילאו שאלון)' }]).map(v => (
+            <button
+              key={v.id || 'all'}
+              type="button"
+              onClick={() => setVetted(v.id)}
+              className={`px-3 py-1 rounded-full border transition ${
+                vetted === v.id ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-600 border-brand-border hover:bg-gray-50'
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {vetted === 'false' && (
+          <div className="flex items-center gap-2">
+            {sendQMsg && <span className="text-xs text-gray-500">{sendQMsg}</span>}
+            <button
+              type="button"
+              onClick={sendQuestionnaires}
+              disabled={sendingQ || renters.length === 0}
+              className="btn btn-brand text-xs disabled:opacity-50"
+              title="שולח לשוכרים המוצגים קישור אישי למילוי השאלון (כפוף לתקרה היומית)"
+            >
+              {sendingQ ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              שלח שאלון למוצגים ({renters.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {loading && <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-brand-primary" /></div>}
