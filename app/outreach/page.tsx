@@ -141,6 +141,18 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     })
   }
   const allSelected = rows.length > 0 && selected.size === rows.length
+  // Select the next N currently-unselected rows (so you can send in waves of 50, not 250 at once).
+  function selectNextN(n: number) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      let added = 0
+      for (const r of rows) { if (added >= n) break; if (!next.has(r.id)) { next.add(r.id); added++ } }
+      return next
+    })
+  }
+  function selectWhere(pred: (r: QueueRow) => boolean) {
+    setSelected(new Set(rows.filter(pred).map(r => r.id)))
+  }
 
   async function sendBatch() {
     if (sending || selected.size === 0) return
@@ -235,9 +247,14 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             className="rounded-md border border-brand-border bg-white px-3 py-1.5 text-sm w-48"
           />
         )}
-        <button type="button" onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map(r => r.id)))} className="text-xs text-brand-primary hover:underline">
-          {allSelected ? 'נקה בחירה' : 'בחר הכל'}
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <button type="button" onClick={() => setSelected(new Set(rows.map(r => r.id)))} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">בחר הכל</button>
+          <button type="button" onClick={() => setSelected(new Set())} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">נקה</button>
+          <button type="button" onClick={() => selectNextN(50)} className="px-2 py-1 rounded bg-brand-primary/10 text-brand-primary font-medium hover:bg-brand-primary/20" title="בחר 50 נוספים שטרם נבחרו">+50 הבאים</button>
+          <button type="button" onClick={() => selectWhere(r => (r.received?.week || 0) === 0)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700" title="מי שלא נשלחה אליו הודעה בשבוע האחרון">שלא נוצר קשר</button>
+          <button type="button" onClick={() => selectWhere(r => (r.received?.week || 0) > 0)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700" title="מי שכבר נשלחה אליו הודעה">נשלח בעבר</button>
+          <span className="text-gray-500" title={`${selected.size} מתוך ${rows.length} מסומנים`}>· נבחרו: <strong>{selected.size}</strong> / {rows.length}</span>
+        </div>
         <div className="flex-1" />
         {mode === 'landlord' && (
           <select

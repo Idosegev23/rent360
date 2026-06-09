@@ -13,6 +13,9 @@ import { DAILY_CAP, MANUAL_BATCH_MAX, templatesSentToday, sleepJitter } from '..
  *
  * Body: `{ propertyIds: string[] }`.
  */
+// A 50-send batch with jitter can run ~2.5 min; give it room (Pro allows up to 300s).
+export const maxDuration = 180
+
 export async function POST(req: NextRequest) {
   const ctx = await requireAdminOrg()
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })

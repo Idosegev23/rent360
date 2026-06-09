@@ -18,8 +18,8 @@ const intEnv = (name: string, def: number): number => {
   return Number.isFinite(n) && n > 0 ? n : def
 }
 
-/** Shared daily template cap across landlord + renter sends. */
-export const DAILY_CAP = intEnv('OUTREACH_DAILY_CAP', 50)
+/** Shared daily template cap across landlord + renter sends (total/day). */
+export const DAILY_CAP = intEnv('OUTREACH_DAILY_CAP', 250)
 /** Only matches at/above this score are "hot" enough to alert a renter. */
 export const RENTER_MIN_SCORE = (() => {
   const n = parseFloat(process.env.RENTER_ALERT_MIN_SCORE || '')
@@ -28,10 +28,10 @@ export const RENTER_MIN_SCORE = (() => {
 /** Max recommendations per renter per day in the automatic/batch path. */
 export const RENTER_PER_DAY_CAP = intEnv('RENTER_PER_DAY_CAP', 1)
 /** Randomized inter-send delay so traffic looks organic and spreads load. */
-export const JITTER_MIN_MS = intEnv('OUTREACH_JITTER_MIN_MS', 4000)
-export const JITTER_MAX_MS = intEnv('OUTREACH_JITTER_MAX_MS', 8000)
-/** Hard cap on rows sent per manual batch click (keeps us under the Vercel function timeout). */
-export const MANUAL_BATCH_MAX = intEnv('OUTREACH_MANUAL_BATCH_MAX', 40)
+export const JITTER_MIN_MS = intEnv('OUTREACH_JITTER_MIN_MS', 1500)
+export const JITTER_MAX_MS = intEnv('OUTREACH_JITTER_MAX_MS', 3000)
+/** Hard cap on rows sent per manual batch click (send in ~50s, not 250 at once + timeout-safe). */
+export const MANUAL_BATCH_MAX = intEnv('OUTREACH_MANUAL_BATCH_MAX', 50)
 
 export type RecipientCount = { today: number; week: number }
 

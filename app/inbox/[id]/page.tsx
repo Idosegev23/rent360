@@ -217,6 +217,9 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
                 בעל הנכס ביקש שלא לקבל הודעות. שליחה חסומה.
               </div>
             )}
+            {thread.status !== 'opted_out' && (
+              <TemplateSender threadId={params.id} onSent={() => load({ silent: true })} />
+            )}
             <div className="flex gap-2">
               <textarea
                 value={draft}
@@ -285,6 +288,67 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function TemplateSender({ threadId, onSent }: { threadId: string; onSent: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [tpls, setTpls] = useState<Array<{ name: string; body_template: string | null; param_names: string[] | null }>>([])
+  const [picked, setPicked] = useState('')
+  const [vals, setVals] = useState<string[]>([])
+  const [sending, setSending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [ok, setOk] = useState(false)
+
+  async function loadTpls() {
+    setOpen(true); setErr(null)
+    try {
+      const r = await fetch(`/api/v1/threads/${threadId}/send-template`)
+      const d = await r.json()
+      setTpls(d.templates || [])
+    } catch { setErr('טעינת התבניות נכשלה') }
+  }
+  const tpl = tpls.find(t => t.name === picked)
+  const order: string[] = Array.isArray(tpl?.param_names) ? (tpl!.param_names as string[]) : []
+  const preview = tpl?.body_template ? String(tpl.body_template).replace(/\{\{(\d+)\}\}/g, (_m, n: string) => vals[Number(n) - 1] || `{{${n}}}`) : ''
+
+  async function send() {
+    if (!picked || sending) return
+    setSending(true); setErr(null)
+    try {
+      const r = await fetch(`/api/v1/threads/${threadId}/send-template`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_name: picked, params: order.map((_, i) => vals[i] || '') }),
+      })
+      const d = await r.json()
+      if (!r.ok || d.error) throw new Error(d?.error?.message || d?.error?.code || 'failed')
+      setOk(true); onSent(); setTimeout(() => { setOk(false); setOpen(false); setPicked(''); setVals([]) }, 1500)
+    } catch (e) { setErr(e instanceof Error ? e.message : 'השליחה נכשלה') } finally { setSending(false) }
+  }
+
+  if (!open) {
+    return <button type="button" onClick={loadTpls} className="mb-2 text-xs text-brand-primary hover:underline">+ שלח תבנית (אפשרי גם אחרי 24ש׳)</button>
+  }
+  return (
+    <div className="mb-2 rounded-md border border-brand-border bg-gray-50 p-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-700">שליחת תבנית מאושרת</span>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-gray-400 hover:text-gray-600">סגור</button>
+      </div>
+      <select value={picked} onChange={e => { setPicked(e.target.value); setVals([]) }} className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs">
+        <option value="">בחר תבנית…</option>
+        {tpls.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+      </select>
+      {order.map((p, i) => (
+        <input key={p} value={vals[i] || ''} onChange={e => setVals(v => { const n = [...v]; n[i] = e.target.value; return n })}
+          placeholder={p} className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs" dir="rtl" />
+      ))}
+      {preview && <div className="rounded bg-white border border-gray-200 p-2 text-xs whitespace-pre-wrap text-gray-700">{preview}</div>}
+      {err && <div className="text-xs text-red-600">{err}</div>}
+      <button type="button" onClick={send} disabled={!picked || sending} className="w-full rounded bg-brand-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+        {ok ? 'נשלח ✓' : sending ? 'שולח…' : 'שלח תבנית'}
+      </button>
     </div>
   )
 }

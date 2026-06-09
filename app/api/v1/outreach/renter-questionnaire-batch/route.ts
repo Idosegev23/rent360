@@ -12,7 +12,7 @@ import { DAILY_CAP, MANUAL_BATCH_MAX, templatesSentToday, sleepJitter } from '..
  * them in WhatsApp. Enforces the shared daily cap + per-click ceiling, skips suppressed phones,
  * spaces sends with jitter. Body: { renterIds: string[] }.
  */
-export const maxDuration = 60
+export const maxDuration = 180
 
 const TEMPLATE = process.env.RENTER_INTAKE_TEMPLATE || 'renter_intake_invite_v1'
 const TEMPLATE_LANG = 'he'

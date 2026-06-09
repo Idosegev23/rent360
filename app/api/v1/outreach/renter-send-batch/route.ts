@@ -19,6 +19,8 @@ import {
  *
  * Body: `{ matchIds: string[] }`.
  */
+export const maxDuration = 180
+
 export async function POST(req: NextRequest) {
   const ctx = await requireAdminOrg()
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
