@@ -27,6 +27,7 @@ export default function ApproveBrokerage({ propertyId }: { propertyId: string })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   async function load() {
     try {
@@ -61,14 +62,29 @@ export default function ApproveBrokerage({ propertyId }: { propertyId: string })
   if (!status.approved) {
     return (
       <div className="flex flex-col items-stretch gap-1">
-        <button
-          onClick={approve}
-          disabled={busy}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          <span>אשר תיווך</span>
-        </button>
+        {!confirming ? (
+          <button
+            onClick={() => setConfirming(true)}
+            disabled={busy}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            <span>אשר תיווך</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2">
+            <span className="text-sm font-medium text-emerald-800">לאשר תיווך לנכס?</span>
+            <button
+              onClick={approve}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              <span>כן, אשר</span>
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={busy} className="text-sm text-gray-500 hover:text-gray-700">ביטול</button>
+          </div>
+        )}
         {err && <span className="text-xs text-red-600">{err}</span>}
       </div>
     )
