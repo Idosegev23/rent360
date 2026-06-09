@@ -8,6 +8,7 @@ import OpenAI from 'openai'
 import { supabaseService } from '../../supabase'
 import { buildRenterSystemPrompt, type RenterContext } from './system-prompt'
 import { RENTER_TOOL_DEFINITIONS, executeRenterTool, type RenterToolContext } from './tools'
+import { humanizeReply } from '../humanize'
 
 let _client: OpenAI | null = null
 function client(): OpenAI {
@@ -95,7 +96,7 @@ export async function runRenterAgentTurn(input: RenterAgentInput): Promise<Rente
     })
   }
 
-  const text = extractOutputText(response)
+  const text = humanizeReply(extractOutputText(response))
   await sb.from('threads').update({ openai_response_id: response.id }).eq('id', input.threadId)
   return { text, responseId: response.id, toolCalls: allToolCalls, finishReason: response.status }
 }

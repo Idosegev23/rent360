@@ -14,6 +14,7 @@ import OpenAI from 'openai'
 import { supabaseService } from '../../supabase'
 import { buildSystemPrompt, type LandlordContext } from './system-prompt'
 import { TOOL_DEFINITIONS, executeTool, type ToolContext } from './tools'
+import { humanizeReply } from '../humanize'
 import type { ExtendedProperty } from '../../../types/property'
 
 let _client: OpenAI | null = null
@@ -154,7 +155,7 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
     })
   }
 
-  const text = extractOutputText(response)
+  const text = humanizeReply(extractOutputText(response))
   await sb.from('threads').update({ openai_response_id: response.id }).eq('id', input.threadId)
 
   return {
