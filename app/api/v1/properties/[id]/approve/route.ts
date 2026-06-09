@@ -7,6 +7,32 @@ import { generatePersonalizationInBackground } from '../../../../../../lib/ai/pr
 import { computeMatchesInBackground } from '../../../../../../lib/matching/orchestrator'
 import { normalizePropertyData } from '../../../../../../lib/data/normalize-property'
 
+// Approval status for this property (so the property page can show "מאשר תיווך" vs "מאושר").
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const cookie = cookies().get('sb-access-token')?.value
+  const userId = getUserIdFromSupabaseCookie(cookie)
+  if (!userId) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
+
+  const sb = supabaseService()
+  const { data: user } = await sb.from('users').select('org_id').eq('id', userId).maybeSingle()
+  if (!user) return NextResponse.json({ error: { code: 'NO_USER' } }, { status: 401 })
+
+  const { data: ap } = await sb
+    .from('approved_properties')
+    .select('approved_at, approval_method, approval_summary, conversation_transcript, approved_by')
+    .eq('org_id', user.org_id)
+    .eq('property_id', params.id)
+    .maybeSingle()
+  if (!ap) return NextResponse.json({ approved: false })
+
+  let approvedByName: string | null = null
+  if (ap.approved_by) {
+    const { data: u } = await sb.from('users').select('name').eq('id', ap.approved_by).maybeSingle()
+    approvedByName = u?.name ?? null
+  }
+  return NextResponse.json({ approved: true, ...ap, approved_by_name: approvedByName })
+}
+
 // Manual approval flow: agent confirms brokerage with the owner over the phone
 // and clicks "אשר תיווך" — adds the property to approved_properties with approval_method='manual'.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {

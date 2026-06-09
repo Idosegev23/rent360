@@ -8,6 +8,7 @@ import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight, Share2, 
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
 import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
 import MarkRented from '../../../components/MarkRented'
+import ApproveBrokerage from '../../../components/ApproveBrokerage'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -176,7 +177,8 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-3xl font-bold leading-tight text-gray-900">{item.title}</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
+            <ApproveBrokerage propertyId={item.id} />
             <button
               onClick={() => setShareDialogOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors shadow-sm"
