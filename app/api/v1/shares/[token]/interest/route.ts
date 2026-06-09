@@ -94,6 +94,7 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
   }
   try {
     await notifyAdminsRenterInterest({
+      renterId: share.renter_id,
       renterName: renter.first_name || 'שוכר',
       renterPhone: renter.phone,
       propertyLocation: location,

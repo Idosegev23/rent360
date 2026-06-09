@@ -11,10 +11,12 @@ import { sendTemplate } from '../whatsapp/meta-provider'
 import { parsePhoneList } from '../outreach/phone'
 import { supabaseService } from '../supabase'
 
-// Handoff alert template. v2 fixes the button URL to the working production domain
-// (rent360-vert.vercel.app/inbox/{{1}}); v1's button pointed at the dead rent360admin
-// domain (404/401). Env-overridable so we can flip to v2 the moment Meta approves it.
-const ADMIN_HANDOFF_TEMPLATE = process.env.ADMIN_HANDOFF_TEMPLATE || 'admin_handoff_alert_v1'
+// Handoff alert template. v2's button points to the working production domain
+// (rent360-vert.vercel.app/inbox/{{1}}); v1 pointed at the dead rent360admin domain (404/401).
+// v2 is approved → default to it. Env-overridable.
+const ADMIN_HANDOFF_TEMPLATE = process.env.ADMIN_HANDOFF_TEMPLATE || 'admin_handoff_alert_v2'
+// Renter-interest alert. v2 adds a button linking straight to the renter (/renters/{{1}}).
+const RENTER_INTEREST_TEMPLATE = process.env.RENTER_INTEREST_TEMPLATE || 'renter_interest_alert_v2'
 
 export type AdminHandoffPayload = {
   threadId: string
@@ -112,6 +114,7 @@ export async function notifyAdminsHandoff(payload: AdminHandoffPayload): Promise
 }
 
 export type RenterInterestPayload = {
+  renterId?: string
   renterName: string
   renterPhone: string
   propertyLocation: string
@@ -130,7 +133,7 @@ export async function notifyAdminsRenterInterest(payload: RenterInterestPayload)
   const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
   if (admins.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] }
 
-  const components = [
+  const components: any[] = [
     {
       type: 'body' as const,
       parameters: [
@@ -143,11 +146,15 @@ export async function notifyAdminsRenterInterest(payload: RenterInterestPayload)
       ],
     },
   ]
+  // v2 has a URL button → /renters/{{1}} (the renter page, where the interested apartment blinks).
+  if (RENTER_INTEREST_TEMPLATE.endsWith('_v2') && payload.renterId) {
+    components.push({ type: 'button' as const, sub_type: 'url' as const, index: 0, parameters: [{ type: 'text' as const, text: payload.renterId }] })
+  }
 
   const result: AdminAlertResult = { attempted: admins.length, sent: 0, failed: 0, errors: [] }
   for (const phone of admins) {
     try {
-      await sendTemplate({ to: phone, name: 'renter_interest_alert_v1', language: 'he', components })
+      await sendTemplate({ to: phone, name: RENTER_INTEREST_TEMPLATE, language: 'he', components })
       result.sent++
     } catch (err) {
       result.failed++
