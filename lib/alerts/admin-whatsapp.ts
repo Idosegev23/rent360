@@ -17,6 +17,9 @@ import { supabaseService } from '../supabase'
 const ADMIN_HANDOFF_TEMPLATE = process.env.ADMIN_HANDOFF_TEMPLATE || 'admin_handoff_alert_v2'
 // Renter-interest alert. v2 adds a button linking straight to the renter (/renters/{{1}}).
 const RENTER_INTEREST_TEMPLATE = process.env.RENTER_INTEREST_TEMPLATE || 'renter_interest_alert_v2'
+// Callback reminder. Dedicated template once Meta approves it; until then falls back to the
+// (already-approved) handoff template with a reminder reason — same /inbox/{{1}} button.
+const CALLBACK_REMINDER_TEMPLATE = process.env.CALLBACK_REMINDER_TEMPLATE || 'callback_reminder_v1'
 
 export type AdminHandoffPayload = {
   threadId: string
@@ -108,6 +111,71 @@ export async function notifyAdminsHandoff(payload: AdminHandoffPayload): Promise
     } catch (err) {
       result.failed++
       result.errors.push({ phone, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  return result
+}
+
+export type CallbackReminderPayload = {
+  threadId: string
+  landlordName: string
+  landlordPhone: string
+  propertyTitle: string
+  callbackDate: string // ISO YYYY-MM-DD the landlord asked us to follow up
+}
+
+function formatHebDate(iso: string): string {
+  try { return new Date(iso + 'T00:00:00').toLocaleDateString('he-IL') } catch { return iso }
+}
+
+/**
+ * Remind the admins (ADMIN_ALERT_PHONES = שי + זיו) that a landlord asked us to call back on a
+ * date that has now arrived. Fired by the daily cron. Uses the dedicated reminder template once
+ * approved, else the handoff template (same button → the thread) with a reminder reason.
+ */
+export async function notifyAdminsCallbackReminder(p: CallbackReminderPayload): Promise<AdminAlertResult> {
+  const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
+  if (admins.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] }
+  const sb = supabaseService()
+
+  const { data: tpl } = await sb.from('whatsapp_templates').select('status').eq('name', CALLBACK_REMINDER_TEMPLATE).maybeSingle()
+  const useReminder = tpl?.status === 'approved'
+  const templateName = useReminder ? CALLBACK_REMINDER_TEMPLATE : ADMIN_HANDOFF_TEMPLATE
+
+  const name = truncate(p.landlordName || 'בעל דירה', 40)
+  const phone = truncate(p.landlordPhone || '-', 20)
+  const property = truncate(p.propertyTitle || 'נכס', 50)
+  const dateLabel = formatHebDate(p.callbackDate)
+  const bodyParams = useReminder
+    ? [name, phone, property, dateLabel]
+    : [name, phone, property, truncate(`תזכורת — ביקש שנחזור אליו (${dateLabel})`, 60)]
+
+  const components = [
+    { type: 'body' as const, parameters: bodyParams.map(t => ({ type: 'text' as const, text: t })) },
+    { type: 'button' as const, sub_type: 'url' as const, index: 0, parameters: [{ type: 'text' as const, text: p.threadId }] },
+  ]
+
+  const result: AdminAlertResult = { attempted: admins.length, sent: 0, failed: 0, errors: [] }
+  const { data: org } = await sb.from('organizations').select('id').limit(1).single()
+  const orgId = org?.id
+  for (const ph of admins) {
+    try {
+      const r = await sendTemplate({ to: ph, name: templateName, language: 'he', components })
+      result.sent++
+      if (orgId) {
+        const adminThread = await upsertAdminThread(orgId, ph)
+        if (adminThread?.id) {
+          await sb.from('messages').insert({
+            org_id: orgId, thread_id: adminThread.id, channel: 'whatsapp', direction: 'out', body: null,
+            status: 'sent', external_id: r.messageId, meta_message_type: 'template',
+            template_name: templateName, template_params: { admin_phone: ph, kind: 'callback_reminder', ...p },
+            metadata: { admin_alert: true },
+          })
+        }
+      }
+    } catch (err) {
+      result.failed++
+      result.errors.push({ phone: ph, error: err instanceof Error ? err.message : String(err) })
     }
   }
   return result

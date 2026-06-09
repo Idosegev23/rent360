@@ -34,7 +34,8 @@ export function middleware(req: NextRequest) {
     pathname === '/api/v1/neighborhoods/backfill' ||
     pathname === '/api/v1/embeddings/backfill-renters' ||
     pathname === '/api/v1/properties/audit-amenities' ||
-    pathname === '/api/v1/outreach/batch-pending'
+    pathname === '/api/v1/outreach/batch-pending' ||
+    pathname === '/api/v1/cron/callback-reminders'
 
   if (
     PUBLIC_PATHS.has(pathname) ||
