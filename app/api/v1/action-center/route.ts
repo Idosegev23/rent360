@@ -31,6 +31,14 @@ function propLabel(p: any): { label: string; sublabel: string } {
   return { label: addr, sublabel: bits.join(' · ') }
 }
 
+// Dismissed via "בוצע" — hidden until the lead has new activity (a message after the dismissal).
+function isDone(tags: any, lastMsg: string | null): boolean {
+  const d = tags?.action_done_at
+  if (!d) return false
+  if (!lastMsg) return true
+  return new Date(String(d)).getTime() >= new Date(String(lastMsg)).getTime()
+}
+
 export async function GET(_req: NextRequest) {
   const cookie = cookies().get('sb-access-token')?.value
   const userId = getUserIdFromSupabaseCookie(cookie)
@@ -105,6 +113,7 @@ export async function GET(_req: NextRequest) {
 
   for (const t of intentThreads || []) {
     const tags = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
+    if (isDone(tags, t.last_message_at)) continue // dismissed ("בוצע") and no new activity since
     const intent = tags.intent
     const p = t.property_id ? propById.get(t.property_id) : null
     const { label, sublabel } = propLabel(p)
@@ -143,7 +152,10 @@ export async function GET(_req: NextRequest) {
   }).filter(it => (it.badge || '').includes('שוכרים')) // surface ones with matches to act on
     .slice(0, 20)
 
-  const renter_interests: Item[] = (interestThreads || []).map(t => {
+  const renter_interests: Item[] = (interestThreads || []).filter(t => {
+    const tags = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
+    return !isDone(tags, t.last_message_at)
+  }).map(t => {
     const tags = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
     const p = t.property_id ? propById.get(t.property_id) : null
     const { label } = propLabel(p)

@@ -24,10 +24,21 @@ type ThreadRow = {
 const TABS: Array<{ id: string; label: string }> = [
   { id: 'all', label: 'הכל' },
   { id: 'awaiting_reply', label: 'ממתינות לתגובה' },
+  { id: 'interested', label: 'מתעניינים' },
+  { id: 'price_objection', label: 'מו״מ מחיר' },
+  { id: 'callback_later', label: 'לחזור אליהם' },
   { id: 'human_takeover', label: 'בטיפול אדם' },
-  { id: 'active', label: 'פעילות' },
+  { id: 'not_relevant', label: 'לא רלוונטי' },
   { id: 'closed', label: 'סגורות' },
 ]
+
+const INTENT_LABELS: Record<string, string> = {
+  interested: 'מתעניין',
+  price_objection: 'מו״מ מחיר',
+  callback_later: 'לחזור אליו',
+  not_interested: 'לא מעוניין',
+  already_rented: 'כבר הושכר',
+}
 
 const STATUS_LABELS: Record<string, { label: string; tone: 'gray' | 'amber' | 'green' | 'red' | 'blue' | 'outline' }> = {
   active: { label: 'פעיל', tone: 'green' },
@@ -128,7 +139,7 @@ export default function InboxPage() {
                         {t.landlord_name || t.phone || 'ללא שם'}
                       </span>
                       {t.audience === 'renter' && <span className="pill pill-blue">שוכר</span>}
-                      {t.intent && <span className="pill pill-blue">{t.intent}</span>}
+                      {t.intent && <span className="pill pill-blue">{INTENT_LABELS[t.intent] || t.intent}</span>}
                     </div>
                     {t.property_title && (
                       <div className="text-xs truncate mb-1" style={{ color: 'var(--ink-3)' }}>🏠 {t.property_title}</div>

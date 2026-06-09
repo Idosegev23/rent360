@@ -10,6 +10,14 @@ const STATUS_FILTER: Record<string, string[]> = {
   human_takeover: ['human_takeover'],
   closed: ['closed_won', 'closed_lost', 'opted_out'],
   active: ['active', 'awaiting_reply'],
+  opted_out: ['opted_out'],
+}
+// Filters by the detected intent (stored in tags.intent) — "when to talk" pipeline states.
+const INTENT_FILTER: Record<string, string[]> = {
+  interested: ['interested'],
+  price_objection: ['price_objection'],
+  callback_later: ['callback_later'],
+  not_relevant: ['not_interested', 'already_rented'],
 }
 
 export async function GET(req: NextRequest) {
@@ -25,6 +33,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const filter = url.searchParams.get('filter') || 'all'
   const statuses = STATUS_FILTER[filter] ?? []
+  const intents = INTENT_FILTER[filter] ?? []
 
   let query = sb
     .from('threads')
@@ -35,7 +44,8 @@ export async function GET(req: NextRequest) {
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .limit(100)
 
-  if (statuses.length > 0) query = query.in('status', statuses)
+  if (intents.length > 0) query = query.or(intents.map(i => `tags->>intent.eq.${i}`).join(','))
+  else if (statuses.length > 0) query = query.in('status', statuses)
 
   const { data: threads, error } = await query
   if (error) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })

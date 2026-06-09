@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Flame, Coins, Clock, CheckCircle2, Heart, ChevronLeft, RefreshCw } from 'lucide-react'
+import { Flame, Coins, Clock, CheckCircle2, Heart, ChevronLeft, RefreshCw, Check } from 'lucide-react'
 
 type Item = {
   thread_id?: string
@@ -59,15 +59,36 @@ function useActionData() {
 
 export default function ActionCenter({ variant = 'compact' }: { variant?: 'compact' | 'full' }) {
   const { data, loading, error, load } = useActionData()
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  async function dismiss(threadId?: string) {
+    if (!threadId) return
+    setDismissed(s => { const n = new Set(s); n.add(threadId); return n })
+    try { await fetch('/api/v1/action-center/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: threadId }) }) } catch {/* optimistic */}
+  }
   return variant === 'full'
-    ? <FullView data={data} loading={loading} error={error} reload={load} />
-    : <CompactView data={data} loading={loading} error={error} reload={load} />
+    ? <FullView data={data} loading={loading} error={error} reload={load} dismissed={dismissed} onDismiss={dismiss} />
+    : <CompactView data={data} loading={loading} error={error} reload={load} dismissed={dismissed} onDismiss={dismiss} />
+}
+
+type ViewProps = { data: Data | null; loading: boolean; error: boolean; reload: () => void; dismissed: Set<string>; onDismiss: (threadId?: string) => void }
+
+function DoneButton({ threadId, onDismiss }: { threadId?: string | undefined; onDismiss: (t?: string) => void }) {
+  if (!threadId) return null
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDismiss(threadId) }}
+      title="בוצע — הסר מהרשימה"
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink-4)', cursor: 'pointer', flexShrink: 0 }}
+    >
+      <Check size={13} />
+    </button>
+  )
 }
 
 /* ---------------- Compact (dashboard hero) ---------------- */
-function CompactView({ data, loading, error, reload }: { data: Data | null; loading: boolean; error: boolean; reload: () => void }) {
+function CompactView({ data, loading, error, reload, dismissed, onDismiss }: ViewProps) {
   const top: (Item & { lane: LaneKey })[] = []
-  if (data) for (const key of PRIORITY) for (const it of data.lanes[key].items) top.push({ ...it, lane: key })
+  if (data) for (const key of PRIORITY) for (const it of data.lanes[key].items) if (!it.thread_id || !dismissed.has(it.thread_id)) top.push({ ...it, lane: key })
   const top3 = top.slice(0, 3)
   const activeChips = data ? LANES.filter(l => data.lanes[l.key].count > 0) : []
 
@@ -119,6 +140,7 @@ function CompactView({ data, loading, error, reload }: { data: Data | null; load
                     {(it.sublabel || it.badge) && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.badge || it.sublabel}</div>}
                   </div>
                   {it.since && <span style={{ fontSize: 11, color: 'var(--ink-4)', flexShrink: 0 }}>{ago(it.since)}</span>}
+                  <DoneButton threadId={it.thread_id} onDismiss={onDismiss} />
                   <ChevronLeft size={15} style={{ color: 'var(--ink-4)', flexShrink: 0 }} />
                 </Link>
               )
@@ -132,7 +154,7 @@ function CompactView({ data, loading, error, reload }: { data: Data | null; load
 }
 
 /* ---------------- Full (dedicated /action page) ---------------- */
-function FullView({ data, loading, error, reload }: { data: Data | null; loading: boolean; error: boolean; reload: () => void }) {
+function FullView({ data, loading, error, reload, dismissed, onDismiss }: ViewProps) {
   return (
     <section style={{ marginBottom: 24 }} dir="rtl">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -172,7 +194,7 @@ function FullView({ data, loading, error, reload }: { data: Data | null; loading
                 </div>
                 {/* Items fill the wide container in responsive columns (thin separators via gap) */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 1, background: 'var(--line)' }}>
-                  {l.items.map((it, i) => (
+                  {l.items.filter(it => !it.thread_id || !dismissed.has(it.thread_id)).map((it, i) => (
                     <Link key={i} href={it.href} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', background: 'var(--paper)', textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</div>
@@ -183,6 +205,7 @@ function FullView({ data, loading, error, reload }: { data: Data | null; loading
                           {it.since && <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{ago(it.since)}</span>}
                         </div>
                       </div>
+                      <DoneButton threadId={it.thread_id} onDismiss={onDismiss} />
                       <ChevronLeft size={16} style={{ color: 'var(--ink-4)', flexShrink: 0 }} />
                     </Link>
                   ))}
