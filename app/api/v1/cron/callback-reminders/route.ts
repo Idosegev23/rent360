@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { notifyAdminsCallbackReminder, notifyAdminsPropertyRecheck } from '../../../../../lib/alerts/admin-whatsapp'
+import { notifyStaffTask, notifyStaffMeeting } from '../../../../../lib/alerts/staff-whatsapp'
 
 /**
  * Daily cron: find landlord conversations whose requested callback date has arrived
@@ -104,7 +105,60 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, errors })
+  // --- Third pass: task reminders to the assignee (gated on staff template; no-ops until approved) ---
+  const nowIso = new Date().toISOString()
+  let taskReminders = 0
+  const { data: dueTasks } = await sb
+    .from('tasks')
+    .select('id, org_id, title, due_at, assignee_user_id')
+    .not('assignee_user_id', 'is', null)
+    .not('remind_at', 'is', null)
+    .is('reminded_at', null)
+    .in('status', ['open', 'in_progress'])
+    .lte('remind_at', nowIso)
+    .limit(200)
+  for (const t of dueTasks || []) {
+    try {
+      const dueLabel = t.due_at
+        ? new Date(t.due_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : 'ללא תאריך'
+      const res = await notifyStaffTask({ orgId: t.org_id, userId: t.assignee_user_id as string, taskId: t.id, title: t.title, dueLabel })
+      // Stamp only on a real send, so an un-approved template re-fires once it's approved.
+      if (res.sent > 0) {
+        taskReminders++
+        await sb.from('tasks').update({ reminded_at: nowIso }).eq('id', t.id)
+      }
+    } catch (err) {
+      errors.push({ threadId: `task:${t.id}`, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  // --- Fourth pass: meeting reminders for meetings starting within the next ~60 min ---
+  let meetingReminders = 0
+  const in60 = new Date(Date.now() + 60 * 60000).toISOString()
+  const { data: dueMeetings } = await sb
+    .from('meetings')
+    .select('id, org_id, title, starts_at, owner_user_id')
+    .eq('status', 'confirmed')
+    .is('whatsapp_reminded_at', null)
+    .not('owner_user_id', 'is', null)
+    .gte('starts_at', nowIso)
+    .lte('starts_at', in60)
+    .limit(200)
+  for (const m of dueMeetings || []) {
+    try {
+      const timeLabel = new Date(m.starts_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })
+      const res = await notifyStaffMeeting({ orgId: m.org_id, userId: m.owner_user_id as string, meetingId: m.id, title: m.title, timeLabel })
+      if (res.sent > 0) {
+        meetingReminders++
+        await sb.from('meetings').update({ whatsapp_reminded_at: nowIso }).eq('id', m.id)
+      }
+    } catch (err) {
+      errors.push({ threadId: `meeting:${m.id}`, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, errors })
 }
 
 export async function GET(req: NextRequest) { return run(req) }
