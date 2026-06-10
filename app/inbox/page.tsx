@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { MessageCircle, User, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import { MessageCircle, Clock, AlertCircle, Loader2 } from 'lucide-react'
+
+// Deterministic colored avatar from a name/phone.
+function initials(s: string | null | undefined): string {
+  const p = (s || '?').trim().split(/\s+/)
+  return ((p[0]?.[0] || '?') + (p[1]?.[0] || '')).toUpperCase()
+}
+function hueFor(s: string | null | undefined): string {
+  let h = 0
+  for (const c of String(s || '')) h = (h * 31 + c.charCodeAt(0)) % 360
+  return `hsl(${h} 52% 46%)`
+}
 import Topbar from '../../components/shell/Topbar'
 
 type ThreadRow = {
@@ -134,11 +145,13 @@ export default function InboxPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <User size={14} style={{ color: 'var(--ink-4)', flexShrink: 0 }} />
+                      <span className="avatar-hue" style={{ width: 28, height: 28, fontSize: 11, background: hueFor(t.landlord_name || t.phone || '?') }}>{initials(t.landlord_name || t.phone)}</span>
                       <span className="truncate" style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>
                         {t.landlord_name || t.phone || 'ללא שם'}
                       </span>
-                      {t.audience === 'renter' && <span className="pill pill-blue">שוכר</span>}
+                      {t.audience === 'renter'
+                        ? <span className="pill pill-pink">שוכר</span>
+                        : <span className="pill pill-gray">בעל דירה</span>}
                       {t.intent && <span className="pill pill-blue">{INTENT_LABELS[t.intent] || t.intent}</span>}
                     </div>
                     {t.property_title && (

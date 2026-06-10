@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Send, Loader2, AlertCircle, User, Bot, ChevronDown, Image as ImageIcon } from 'lucide-react'
+import { ArrowRight, Send, Loader2, AlertCircle, ChevronDown, Check } from 'lucide-react'
 import { ThreadGoogleActions } from '@/components/google/ThreadGoogleActions'
 
 type Message = {
@@ -209,7 +209,7 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
+          <div className="wa-thread scroll-y flex-1 overflow-y-auto p-4 flex flex-col gap-3">
             {messages.map(m => (
               <MessageBubble key={m.id} message={m} />
             ))}
@@ -377,41 +377,37 @@ function MessageBubble({ message }: { message: Message }) {
   const isOut = message.direction === 'out'
   const isTemplate = message.meta_message_type === 'template'
   const [showMeta, setShowMeta] = useState(false)
+  const md = (message as any).metadata
+  const sentByName = (md && typeof md === 'object' ? md.sent_by_name : null) as string | null
+  const outLabel = sentByName || (isTemplate ? 'תבנית' : 'בוט')
   return (
-    <div className={`flex ${isOut ? 'justify-start' : 'justify-end'}`}>
-      <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
-        isOut ? 'bg-brand-primary text-white' : 'bg-white border border-gray-200 text-gray-900'
-      }`}>
-        <div className="flex items-center gap-1 mb-1 opacity-80">
-          {isOut ? <Bot className="h-3 w-3" /> : <User className="h-3 w-3" />}
-          <span className="text-[10px]">{isOut ? 'אנחנו' : 'לקוח'}</span>
-          {isTemplate && <span className="text-[10px] uppercase tracking-wide">· תבנית</span>}
-        </div>
-        {message.media_url && (
-          <img src={message.media_url} alt="" className="rounded mb-2 max-h-64 object-cover" />
-        )}
-        {(message.body || message.rendered_body) && <div className="whitespace-pre-wrap leading-relaxed">{message.body || message.rendered_body}</div>}
-        {isTemplate && !message.body && !message.rendered_body && <div className="italic opacity-80 text-xs">[תבנית: {message.template_name}]</div>}
-        <div className="mt-1 text-[10px] opacity-70 flex items-center gap-1">
-          <span>{fmtTime(message.created_at)}</span>
-          {message.status && <span>· {message.status}</span>}
-        </div>
-        {message.ai_metadata && Object.keys(message.ai_metadata).length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowMeta(s => !s)}
-            className="mt-1 text-[10px] opacity-80 hover:opacity-100 inline-flex items-center gap-0.5"
-          >
-            <ChevronDown className={`h-3 w-3 transition-transform ${showMeta ? 'rotate-180' : ''}`} />
-            פרטי AI
-          </button>
-        )}
-        {showMeta && message.ai_metadata && (
-          <pre className="mt-1 max-h-48 overflow-auto rounded bg-black/10 p-2 text-[10px] whitespace-pre-wrap">
-            {JSON.stringify(message.ai_metadata, null, 2)}
-          </pre>
-        )}
+    <div className={`wa-bubble ${isOut ? 'wa-out' : 'wa-in'}`}>
+      {message.media_url && (
+        <img src={message.media_url} alt="" className="rounded-lg mb-2 max-h-64 object-cover" />
+      )}
+      {(message.body || message.rendered_body) && <div className="whitespace-pre-wrap leading-relaxed">{message.body || message.rendered_body}</div>}
+      {isTemplate && !message.body && !message.rendered_body && <div className="italic text-xs faint">[תבנית: {message.template_name}]</div>}
+      <div className="wa-meta" style={{ justifyContent: isOut ? 'flex-end' : 'flex-start' }}>
+        {isOut && <span style={{ fontWeight: 600 }}>{outLabel}</span>}
+        {isTemplate && <span className="pill pill-blue" style={{ fontSize: 10, padding: '0 6px' }}>תבנית</span>}
+        <span className="num">{fmtTime(message.created_at)}</span>
+        {isOut && <Check className="h-3 w-3" style={{ color: 'var(--blue)' }} />}
       </div>
+      {message.ai_metadata && Object.keys(message.ai_metadata).length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowMeta(s => !s)}
+          className="mt-1 text-[10px] faint hover:opacity-100 inline-flex items-center gap-0.5"
+        >
+          <ChevronDown className={`h-3 w-3 transition-transform ${showMeta ? 'rotate-180' : ''}`} />
+          פרטי AI
+        </button>
+      )}
+      {showMeta && message.ai_metadata && (
+        <pre className="mt-1 max-h-48 overflow-auto rounded bg-black/5 p-2 text-[10px] whitespace-pre-wrap">
+          {JSON.stringify(message.ai_metadata, null, 2)}
+        </pre>
+      )}
     </div>
   )
 }

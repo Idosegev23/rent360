@@ -1,11 +1,11 @@
 import '../styles/globals.css'
 import Providers from './providers'
 import type { Metadata } from 'next'
-import { Heebo, Frank_Ruhl_Libre, JetBrains_Mono } from 'next/font/google'
+import { Assistant, Frank_Ruhl_Libre, JetBrains_Mono } from 'next/font/google'
 
-const heebo = Heebo({
+const assistant = Assistant({
   subsets: ['hebrew', 'latin'],
-  weight: ['300', '400', '500', '600', '700', '800'],
+  weight: ['400', '500', '600', '700', '800'],
   variable: '--font-ui',
   display: 'swap',
 })
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl" className={`${heebo.variable} ${frankRuhl.variable} ${jetMono.variable}`}>
+    <html lang="he" dir="rtl" className={`${assistant.variable} ${frankRuhl.variable} ${jetMono.variable}`}>
       <body>
         <Providers>{children}</Providers>
       </body>
