@@ -20,6 +20,7 @@ import Link from 'next/link';
 import Topbar from '../shell/Topbar';
 import RecentInterest from './RecentInterest';
 import ActionCenter from './ActionCenter';
+import MyDayPanel from './MyDayPanel';
 
 interface DashboardData {
   kpis?: {
@@ -82,6 +83,7 @@ export default function ModernDashboard({ data }: { data: DashboardData }) {
       />
 
       <div className="page-wrap">
+        <MyDayPanel />
         <ActionCenter />
         <RecentInterest />
         {/* KPI Hero Row */}
