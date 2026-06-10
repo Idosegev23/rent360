@@ -7,7 +7,7 @@ type P = { id: string; street: string | null; address: string | null; city: stri
 
 /** "Other properties of this owner" — shown on the property page so the team sees the full portfolio
  *  (and avoids spamming a landlord who listed many units). */
-export default function OwnerPortfolio({ propertyId, phone, ownerName }: { propertyId: string; phone: string | null | undefined; ownerName?: string | null }) {
+export default function OwnerPortfolio({ propertyId, phone, ownerName }: { propertyId: string; phone: string | null | undefined; ownerName?: string | null | undefined }) {
   const [items, setItems] = useState<P[] | null>(null)
   useEffect(() => {
     if (!phone) { setItems([]); return }
