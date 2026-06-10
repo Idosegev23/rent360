@@ -20,6 +20,7 @@ type QueueRow = {
   score?: number
   coverImage: string | null
   received: Received
+  createdAt?: string | null   // when the property was added to the system ("מתי עלה")
 }
 
 type SendResult = { id: string; status: 'sent' | 'skipped'; reason?: string }
@@ -110,6 +111,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             phone: r.phone,
             coverImage: r.coverImage,
             received: r.received || { today: 0, week: 0 },
+            createdAt: r.createdAt ?? null,
           }
         : {
             id: r.matchId,
@@ -154,9 +156,14 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     setSelected(new Set(rows.filter(pred).map(r => r.id)))
   }
 
-  async function sendBatch() {
-    if (sending || selected.size === 0) return
-    const ids = rows.filter(r => selected.has(r.id)).map(r => r.id)
+  // First N rows we haven't messaged yet (received.week === 0), for the "send to 50 unsent" button.
+  function uncontactedIds(n: number): string[] {
+    return rows.filter(r => (r.received?.week || 0) === 0).slice(0, n).map(r => r.id)
+  }
+
+  async function sendBatch(overrideIds?: string[]) {
+    const ids = Array.isArray(overrideIds) ? overrideIds : rows.filter(r => selected.has(r.id)).map(r => r.id)
+    if (sending || ids.length === 0) return
     if (!window.confirm(`לשלוח ל-${ids.length} נמענים? (אצווה — כפופה לתקרה היומית)`)) return
     setSending(true)
     setResults(null)
@@ -267,9 +274,21 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             <option value="basic">בסיסי בלבד</option>
           </select>
         )}
+        {mode === 'landlord' && (
+          <button
+            type="button"
+            onClick={() => sendBatch(uncontactedIds(50))}
+            disabled={sending}
+            title="שולח אוטומטית ל-50 הראשונים שטרם נשלחה אליהם הודעה"
+            className="btn disabled:opacity-50 border border-brand-primary text-brand-primary hover:bg-brand-primary/5"
+          >
+            <Send size={14} />
+            שלח ל-50 שטרם נשלח
+          </button>
+        )}
         <button
           type="button"
-          onClick={sendBatch}
+          onClick={() => sendBatch()}
           disabled={sending || selected.size === 0 || (mode === 'renter' && !templateApproved)}
           className="btn btn-brand disabled:opacity-50"
         >
@@ -311,6 +330,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
                   {r.score != null && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">{Math.round(r.score)}% התאמה</span>}
                 </div>
                 <div className="text-xs text-gray-500 truncate">{r.subtitle || r.phone}</div>
+                {r.createdAt && <div className="text-[11px] text-gray-400">עלה למערכת {addedAgo(r.createdAt)}</div>}
               </div>
               <ReceivedBadge received={r.received} />
               {mode === 'landlord' && (

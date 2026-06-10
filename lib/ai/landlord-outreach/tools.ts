@@ -471,7 +471,7 @@ async function handoff(args: { reason: string; urgency?: 'low' | 'medium' | 'hig
       propertyTitle = p.title || [p.street || p.address, p.city].filter(Boolean).join(', ') || ''
     }
   }
-  const base = ctx.appBaseUrl || process.env.APP_BASE_URL || 'https://rent360.vercel.app'
+  const base = ctx.appBaseUrl || process.env.APP_BASE_URL || 'https://rent360-vert.vercel.app'
   await notifyAdminsHandoff({
     threadId: ctx.threadId,
     landlordName,
