@@ -27,8 +27,7 @@ DROP POLICY IF EXISTS google_connections_self ON public.google_connections;
 CREATE POLICY google_connections_self ON public.google_connections
   FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
-ALTER TABLE public.threads
-  ADD COLUMN IF NOT EXISTS assigned_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL;
+-- Note: thread→user assignment uses the pre-existing public.threads.assigned_to column.
 
 ALTER TABLE public.settings
   ADD COLUMN IF NOT EXISTS default_calendar_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL;

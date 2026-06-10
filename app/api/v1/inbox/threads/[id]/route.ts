@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const { data: thread, error } = await sb
     .from('threads')
-    .select('id, phone, status, channel, last_inbound_at, last_outbound_at, last_message_at, tags, property_id, opted_out_at, openai_response_id, ai_summary')
+    .select('id, phone, status, channel, last_inbound_at, last_outbound_at, last_message_at, tags, property_id, opted_out_at, openai_response_id, ai_summary, assigned_to')
     .eq('id', params.id)
     .eq('org_id', orgId)
     .maybeSingle()

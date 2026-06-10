@@ -14,8 +14,8 @@ export function israelLocalToDate(local: string): Date {
 
 async function resolveOwner(orgId: string, threadId: string): Promise<string | null> {
   const sb = supabaseService()
-  const { data: thread } = await sb.from('threads').select('assigned_user_id').eq('id', threadId).maybeSingle()
-  if (thread?.assigned_user_id) return thread.assigned_user_id
+  const { data: thread } = await sb.from('threads').select('assigned_to').eq('id', threadId).maybeSingle()
+  if (thread?.assigned_to) return thread.assigned_to
   const { data: settings } = await sb
     .from('settings')
     .select('default_calendar_user_id')
