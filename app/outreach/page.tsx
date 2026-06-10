@@ -101,6 +101,8 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     try {
       const params = new URLSearchParams()
       if (mode === 'landlord' && city.trim()) params.set('city', city.trim())
+      // "שטרם נשלח" pulls uncontacted owners from the WHOLE queue (server-side), not just this page.
+      if (mode === 'landlord' && viewFilter === 'unsent') params.set('freshOnly', '1')
       const res = await fetch(`${ep.queue}?${params.toString()}`)
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data?.error?.message || data?.error?.code || 'load failed')
@@ -132,7 +134,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     } finally {
       setLoading(false)
     }
-  }, [ep.queue, mode, city])
+  }, [ep.queue, mode, city, viewFilter])
 
   useEffect(() => { load() }, [load, refreshKey])
 
@@ -160,9 +162,19 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     })
   }
 
-  // First N rows we haven't messaged yet (received.week === 0), for the "send to 50 unsent" button.
-  function uncontactedIds(n: number): string[] {
-    return rows.filter(r => (r.received?.week || 0) === 0).slice(0, n).map(r => r.id)
+  // Pull the next 50 owners we've NEVER messaged from the whole queue (server-side, deduped by
+  // phone), then send to them — so "unsent" isn't limited to whoever happens to be on this page.
+  async function sendFreshBatch() {
+    if (sending) return
+    let ids: string[] = []
+    try {
+      const res = await fetch(`${ep.queue}?freshOnly=1&limit=50`)
+      const data = await res.json()
+      ids = (data.rows || []).map((r: any) => r.propertyId).filter(Boolean)
+    } catch { setError('טעינת הנמענים הטריים נכשלה'); return }
+    if (ids.length === 0) { window.alert('אין כרגע בעלי דירות שטרם נוצר איתם קשר.'); return }
+    await sendBatch(ids)
+    load()
   }
 
   async function sendBatch(overrideIds?: string[]) {
@@ -288,9 +300,9 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
         {mode === 'landlord' && (
           <button
             type="button"
-            onClick={() => sendBatch(uncontactedIds(50))}
+            onClick={sendFreshBatch}
             disabled={sending}
-            title="שולח אוטומטית ל-50 הראשונים שטרם נשלחה אליהם הודעה"
+            title="מביא מהתור 50 בעלי דירות שטרם נוצר איתם קשר (מכל התור, לא רק העמוד) ושולח אליהם"
             className="btn disabled:opacity-50 border border-brand-primary text-brand-primary hover:bg-brand-primary/5"
           >
             <Send size={14} />
