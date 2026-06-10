@@ -142,6 +142,15 @@ The OAuth consent screen is **Published ("In production")**, User type External.
   ~100-user cap; not required to use it now.
 - Confirm consent-screen **User type = External** (plain Gmail accounts, not a Workspace org).
 
+**Removing the red "unverified app" screen:** the team has no Google Workspace, so the fast
+"Internal" path is unavailable. The only way to remove the warning is full **External
+verification**, which requires a **custom domain you own** (the `*.vercel.app` URL is NOT
+verifiable in Search Console), a privacy policy + terms + home page on that domain, an app
+logo, per-scope justifications, and a demo video — review takes days to weeks (sensitive
+scopes, no CASA). **Decision: defer verification.** For the 4-person team the warning is a
+one-time per-user click-through (Advanced → proceed) and does not block anything; revisit
+verification if/when a custom domain exists or usage expands.
+
 ## 7. Token security
 
 - Encrypt `refresh_token` with **AES-256-GCM** (`lib/crypto/secret-box.ts`), key from new
