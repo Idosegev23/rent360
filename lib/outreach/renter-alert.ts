@@ -22,7 +22,9 @@ import { supabaseService } from '../supabase'
 import { sendTemplate, normalizePhone } from '../whatsapp/meta-provider'
 import { isSuppressed } from './suppression'
 
-const TEMPLATE_NAME = 'renter_match_alert_v1'
+// Prefer the clean (no-emoji) v2 once Meta approves it; fall back to v1 until then.
+const PREFERRED_TEMPLATE = process.env.RENTER_MATCH_TEMPLATE || 'renter_match_alert_v2'
+const FALLBACK_TEMPLATE = 'renter_match_alert_v1'
 const TEMPLATE_LANG = 'he'
 
 function appBaseUrl(): string {
@@ -86,16 +88,18 @@ export async function dispatchRenterMatchAlert(opts: {
     if (m?.renter_notified_at) return { ok: false, code: 'ALREADY_NOTIFIED', message: 'כבר נשלחה התראה על התאמה זו' }
   }
 
-  // ---- Template approval gate ----
-  const { data: tpl } = await sb
+  // ---- Template approval gate (pick the approved one: clean v2 if ready, else v1) ----
+  const { data: tplRows } = await sb
     .from('whatsapp_templates')
-    .select('status')
-    .eq('name', TEMPLATE_NAME)
+    .select('name, status')
+    .in('name', [PREFERRED_TEMPLATE, FALLBACK_TEMPLATE])
     .eq('language', TEMPLATE_LANG)
-    .maybeSingle()
-  if (!tpl) return { ok: false, code: 'TEMPLATE_MISSING', message: `תבנית ${TEMPLATE_NAME} חסרה במסד` }
-  if (tpl.status !== 'approved') {
-    return { ok: false, code: 'TEMPLATE_NOT_APPROVED', message: `תבנית ${TEMPLATE_NAME} עדיין בסטטוס ${tpl.status} ב-Meta` }
+  const approvedNames = new Set((tplRows || []).filter(t => t.status === 'approved').map(t => t.name))
+  const templateName = approvedNames.has(PREFERRED_TEMPLATE) ? PREFERRED_TEMPLATE
+    : approvedNames.has(FALLBACK_TEMPLATE) ? FALLBACK_TEMPLATE
+    : null
+  if (!templateName) {
+    return { ok: false, code: 'TEMPLATE_NOT_APPROVED', message: `אין תבנית התאמה מאושרת (${PREFERRED_TEMPLATE}/${FALLBACK_TEMPLATE})` }
   }
 
   // ---- Share link for the button (renter-specific get-or-create) ----
@@ -130,7 +134,7 @@ export async function dispatchRenterMatchAlert(opts: {
 
   let sent
   try {
-    sent = await sendTemplate({ to: phone, name: TEMPLATE_NAME, language: TEMPLATE_LANG, components: components as any })
+    sent = await sendTemplate({ to: phone, name: templateName, language: TEMPLATE_LANG, components: components as any })
   } catch (err) {
     return { ok: false, code: 'META_SEND_FAILED', message: err instanceof Error ? err.message : String(err) }
   }
@@ -148,7 +152,7 @@ export async function dispatchRenterMatchAlert(opts: {
     status: 'sent',
     external_id: sent.messageId,
     meta_message_type: 'template',
-    template_name: TEMPLATE_NAME,
+    template_name: templateName,
     template_params: {
       first_name: firstName,
       location,
