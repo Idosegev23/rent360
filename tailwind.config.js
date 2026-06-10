@@ -22,6 +22,13 @@ export default {
           4: "#9C9389",
           5: "#BDB4A8"
         },
+        // Remap Tailwind's cool default gray to the warm palette, so every existing
+        // text-gray-*/bg-gray-*/border-gray-* across the app matches the editorial look.
+        gray: {
+          50: "#FAF6F0", 100: "#F3ECE0", 200: "#E8DFCE", 300: "#D9CFB9",
+          400: "#BDB4A8", 500: "#9C9389", 600: "#6B6259", 700: "#3A332C",
+          800: "#241E18", 900: "#1A1612"
+        },
         // Semantic colors with -soft variants
         green: { DEFAULT: "#14826E", soft: "#DDEEEA" },
         amber: { DEFAULT: "#D9881E", soft: "#FFEAD0" },
@@ -71,9 +78,9 @@ export default {
       },
       fontFamily: {
         display: ["var(--font-display)", "Frank Ruhl Libre", "Georgia", "serif"],
-        ui: ["var(--font-ui)", "Heebo", "system-ui", "sans-serif"],
+        ui: ["var(--font-ui)", "Assistant", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "JetBrains Mono", "ui-monospace", "monospace"],
-        sans: ["var(--font-ui)", "Heebo", "system-ui", "sans-serif"]
+        sans: ["var(--font-ui)", "Assistant", "system-ui", "sans-serif"]
       },
       letterSpacing: {
         tightish: "-0.01em",
