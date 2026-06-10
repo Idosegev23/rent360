@@ -12,6 +12,7 @@ import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import { AddTaskButton } from '@/components/tasks/AddTaskButton'
 import { RelatedItems } from '@/components/RelatedItems'
 import DocumentsPanel from '@/components/DocumentsPanel'
+import ScheduleMeetingButton from '@/components/ScheduleMeetingButton'
 
 type Renter = Record<string, any>
 type MatchProperty = {
@@ -336,16 +337,13 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           )}
         </div>
       )}
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <ScheduleMeetingButton renterId={params.id} label="קבע פגישה עם השוכר" />
         <AddTaskButton entityType="renter" entityId={params.id} />
       </div>
-      <div className="mt-3">
+      <div className="mt-3 grid gap-3 md:grid-cols-2 items-start">
         <RelatedItems entityType="renter" entityId={params.id} />
-      </div>
-      <div className="mt-3">
         <DocumentsPanel entityType="renter" entityId={params.id} />
-      </div>
-      <div className="mt-3">
         <ActivityTimeline entityType="renter" entityId={params.id} />
       </div>
     </div>

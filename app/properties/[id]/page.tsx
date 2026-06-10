@@ -416,16 +416,10 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         <ScheduleMeetingButton propertyId={item.id} label="קבע פגישה על הנכס" />
         <AddTaskButton entityType="property" entityId={params.id} label="הוסף משימה לנכס" />
       </div>
-      <div className="mt-3">
-        <OwnerPortfolio propertyId={item.id} phone={(item as any).contact_phone} ownerName={item.contact_name} />
-      </div>
-      <div className="mt-3">
+      <div className="mt-3 grid gap-3 md:grid-cols-2 items-start">
         <RelatedItems entityType="property" entityId={params.id} />
-      </div>
-      <div className="mt-3">
+        <OwnerPortfolio propertyId={item.id} phone={(item as any).contact_phone} ownerName={item.contact_name} />
         <DocumentsPanel entityType="property" entityId={params.id} />
-      </div>
-      <div className="mt-3">
         <ActivityTimeline entityType="property" entityId={params.id} />
       </div>
     </main>
