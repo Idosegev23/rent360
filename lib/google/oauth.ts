@@ -11,7 +11,7 @@ function stateSecret(): string {
   return process.env.GOOGLE_TOKEN_ENC_KEY || process.env.SUPABASE_SERVICE_ROLE || 'dev-state-secret'
 }
 
-export type OAuthState = { uid: string; orgId: string; nonce: string }
+export type OAuthState = { purpose: 'login' | 'connect'; nonce: string; uid?: string; orgId?: string }
 
 export function signState(payload: OAuthState): string {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
