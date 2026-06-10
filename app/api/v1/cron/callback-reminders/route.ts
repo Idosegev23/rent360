@@ -161,7 +161,44 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, templateSync, errors })
+  // --- Fifth pass: speed-to-lead — stalled conversations get an auto follow-up task (no lead falls) ---
+  const STALE_DAYS = Number(process.env.FOLLOWUP_STALE_DAYS || '3')
+  let followups = 0
+  const staleBefore = new Date(Date.now() - STALE_DAYS * 86400000).toISOString()
+  const { data: staleThreads } = await sb
+    .from('threads')
+    .select('id, org_id, phone, assigned_to, tags, last_message_at, status')
+    .not('status', 'in', '("opted_out","closed_won","closed_lost","admin_alerts")')
+    .not('last_outbound_at', 'is', null)
+    .lt('last_message_at', staleBefore)
+    .limit(200)
+  const staleCandidates = (staleThreads || []).filter(t => {
+    const tg = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
+    if (tg.intent === 'not_interested' || tg.intent === 'already_rented') return false
+    if (tg.callback_at && String(tg.callback_at) >= israelNow) return false // already scheduled to return
+    return true
+  })
+  if (staleCandidates.length) {
+    const ids = staleCandidates.map(t => t.id)
+    const { data: openTasks } = await sb.from('tasks').select('entity_id').eq('entity_type', 'thread').in('entity_id', ids).in('status', ['open', 'in_progress'])
+    const hasTask = new Set((openTasks || []).map(t => t.entity_id as string))
+    const nowIso2 = new Date().toISOString()
+    for (const t of staleCandidates) {
+      if (hasTask.has(t.id)) continue
+      try {
+        const { error } = await sb.from('tasks').insert({
+          org_id: t.org_id, title: `מעקב — אין מענה ${STALE_DAYS}+ ימים (${t.phone || 'שיחה'})`,
+          assignee_user_id: t.assigned_to || null, entity_type: 'thread', entity_id: t.id,
+          due_at: nowIso2, remind_at: t.assigned_to ? nowIso2 : null, priority: 'normal', status: 'open',
+        })
+        if (!error) followups++
+      } catch (err) {
+        errors.push({ threadId: `followup:${t.id}`, error: err instanceof Error ? err.message : String(err) })
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, followups, templateSync, errors })
 }
 
 export async function GET(req: NextRequest) { return run(req) }
