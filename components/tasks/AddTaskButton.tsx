@@ -6,7 +6,7 @@ import { DateTimeField } from '@/components/ui/DateTimePicker'
 type Member = { id: string; name: string | null }
 
 /** Quick-add a task linked to the current entity (renter / property). Assignee = a staff member. */
-export function AddTaskButton(props: { entityType: 'renter' | 'property'; entityId: string; label?: string }) {
+export function AddTaskButton(props: { entityType: 'renter' | 'property' | 'thread' | 'tenancy' | 'meeting'; entityId: string; label?: string }) {
   const [open, setOpen] = useState(false)
   const [team, setTeam] = useState<Member[]>([])
   const [title, setTitle] = useState('')

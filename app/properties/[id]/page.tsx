@@ -12,6 +12,7 @@ import ApproveBrokerage from '../../../components/ApproveBrokerage'
 import SentMatchBadge from '../../../components/SentMatchBadge'
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import { AddTaskButton } from '@/components/tasks/AddTaskButton'
+import { RelatedItems } from '@/components/RelatedItems'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -408,6 +409,9 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
       />
       <div className="mt-4 flex justify-end">
         <AddTaskButton entityType="property" entityId={params.id} label="הוסף משימה לנכס" />
+      </div>
+      <div className="mt-3">
+        <RelatedItems entityType="property" entityId={params.id} />
       </div>
       <div className="mt-3">
         <ActivityTimeline entityType="property" entityId={params.id} />

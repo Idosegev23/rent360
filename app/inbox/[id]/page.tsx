@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Send, Loader2, AlertCircle, ChevronDown, Check } from 'lucide-react'
 import { ThreadGoogleActions } from '@/components/google/ThreadGoogleActions'
+import { RelatedItems } from '@/components/RelatedItems'
+import { AddTaskButton } from '@/components/tasks/AddTaskButton'
 
 type Message = {
   id: string
@@ -286,6 +288,11 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
               לא משויך נכס לשיחה זו עדיין.
             </div>
           )}
+
+          <div className="rounded-lg border border-brand-border bg-white p-3">
+            <AddTaskButton entityType="thread" entityId={thread.id} label="הוסף משימה מהשיחה" />
+          </div>
+          <RelatedItems entityType="thread" entityId={thread.id} />
 
           <div className="rounded-lg border border-brand-border bg-white p-3 text-xs space-y-2">
             <div className="flex justify-between"><span className="text-gray-500">סטטוס</span><span>{thread.status}</span></div>

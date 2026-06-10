@@ -12,6 +12,10 @@ export async function GET(req: NextRequest) {
   const ownerUserId = q.get('ownerUserId')
   const from = q.get('from') // ISO
   const to = q.get('to')
+  const propertyId = q.get('propertyId')
+  const renterId = q.get('renterId')
+  const threadId = q.get('threadId')
+  const byEntity = !!(propertyId || renterId || threadId)
 
   let query = ctx.sb
     .from('meetings')
@@ -19,10 +23,17 @@ export async function GET(req: NextRequest) {
     .eq('org_id', ctx.orgId)
     .neq('status', 'cancelled')
   if (ownerUserId) query = query.eq('owner_user_id', ownerUserId)
-  query = query.gte('starts_at', from || new Date().toISOString())
-  if (to) query = query.lte('starts_at', to)
+  if (propertyId) query = query.eq('property_id', propertyId)
+  if (renterId) query = query.eq('renter_id', renterId)
+  if (threadId) query = query.eq('thread_id', threadId)
+  // Entity-linked view shows all (past + upcoming) for that entity, newest first; the calendar
+  // view shows upcoming only.
+  if (!byEntity) {
+    query = query.gte('starts_at', from || new Date().toISOString())
+    if (to) query = query.lte('starts_at', to)
+  }
 
-  const { data, error } = await query.order('starts_at', { ascending: true }).limit(200)
+  const { data, error } = await query.order('starts_at', { ascending: !byEntity }).limit(200)
   if (error) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
   return NextResponse.json({ meetings: data || [] })
 }

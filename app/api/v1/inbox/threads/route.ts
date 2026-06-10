@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
   const filter = url.searchParams.get('filter') || 'all'
   const statuses = STATUS_FILTER[filter] ?? []
   const intents = INTENT_FILTER[filter] ?? []
+  const propertyId = url.searchParams.get('propertyId')   // conversations linked to a property
+  const renterId = url.searchParams.get('renterId')       // conversations linked to a renter
 
   let query = sb
     .from('threads')
@@ -43,6 +45,8 @@ export async function GET(req: NextRequest) {
     .neq('status', 'admin_alerts')
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .limit(100)
+  if (propertyId) query = query.eq('property_id', propertyId)
+  if (renterId) query = query.eq('tags->>renter_id', renterId)
 
   if (intents.length > 0) query = query.or(intents.map(i => `tags->>intent.eq.${i}`).join(','))
   else if (statuses.length > 0) query = query.in('status', statuses)

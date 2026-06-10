@@ -10,6 +10,7 @@ import {
 import MarkRented from '../../../components/MarkRented'
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import { AddTaskButton } from '@/components/tasks/AddTaskButton'
+import { RelatedItems } from '@/components/RelatedItems'
 
 type Renter = Record<string, any>
 type MatchProperty = {
@@ -336,6 +337,9 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       )}
       <div className="mt-4 flex justify-end">
         <AddTaskButton entityType="renter" entityId={params.id} />
+      </div>
+      <div className="mt-3">
+        <RelatedItems entityType="renter" entityId={params.id} />
       </div>
       <div className="mt-3">
         <ActivityTimeline entityType="renter" entityId={params.id} />
