@@ -128,13 +128,19 @@ http://localhost:3000/api/google/callback              (local dev)
 ```
 Authorized JavaScript origins: `https://rent360-vert.vercel.app`, `http://localhost:3000`.
 
-### ⚠️ Google verification / Test Users
-`calendar.events` and `gmail.send` are **sensitive** scopes (gmail.send is sensitive, not
-"restricted" — no third-party security assessment required; verify current classification
-in the console). On an **External**, unverified app only **Test Users** may grant them.
-**Action:** add the team Google addresses (triroars@gmail.com, zivatia301089@gmail.com,
-shay20036@gmail.com, dashkin10@gmail.com) as Test Users in the OAuth consent screen — or
-complete app verification. This is almost certainly why "publish" alone wasn't enough.
+### ⚠️ Publishing status, verification & refresh-token lifetime
+The OAuth consent screen is **Published ("In production")**, User type External.
+- **Test Users are a *Testing*-mode concept only** — once the app is Published they no longer
+  apply, so there is **no need to add the team as Test Users**.
+- Publishing is the **correct** choice here: in *Testing* mode Google expires refresh tokens
+  after **7 days** (forcing weekly reconnects); in *Production* refresh tokens are long-lived,
+  which matches our stored per-user refresh-token model.
+- `calendar.events` and `gmail.send` are **sensitive** scopes and the app is not *verified*, so
+  on first connect users see an **"unverified app" warning** ("Google hasn't verified this app").
+  They proceed via **Advanced → Go to rent360 (unsafe)** and grant access — acceptable for an
+  internal 4-person team. Completing Google verification later removes the warning and lifts the
+  ~100-user cap; not required to use it now.
+- Confirm consent-screen **User type = External** (plain Gmail accounts, not a Workspace org).
 
 ## 7. Token security
 
@@ -251,7 +257,7 @@ Manual, in dev against a real Test-User Google account:
 4. OAuth routes + middleware allowlist.
 5. Action endpoints + UI.
 6. Auto callback hook.
-7. Console: register redirect URIs + add team Test Users.
+7. Console: register redirect URIs (consent screen already Published/External; no Test Users needed — expect the "unverified app" warning, proceed via Advanced).
 8. Set env vars in prod; `npx vercel --prod` (deploy is manual — not git-auto).
 
 ## 17. Future (v2)
