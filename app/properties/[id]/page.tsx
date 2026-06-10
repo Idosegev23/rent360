@@ -15,6 +15,7 @@ import { AddTaskButton } from '@/components/tasks/AddTaskButton'
 import { RelatedItems } from '@/components/RelatedItems'
 import OwnerPortfolio from '../../../components/OwnerPortfolio'
 import RentStatus from '../../../components/RentStatus'
+import DocumentsPanel from '../../../components/DocumentsPanel'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -418,6 +419,9 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
       </div>
       <div className="mt-3">
         <RelatedItems entityType="property" entityId={params.id} />
+      </div>
+      <div className="mt-3">
+        <DocumentsPanel entityType="property" entityId={params.id} />
       </div>
       <div className="mt-3">
         <ActivityTimeline entityType="property" entityId={params.id} />

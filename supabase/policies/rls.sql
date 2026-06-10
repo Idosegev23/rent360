@@ -33,3 +33,7 @@ create policy org_all_webhooks on public.webhooks for all using (org_id = public
 create policy org_all_inbound on public.inbound_events for all using (org_id = public.jwt_org_id()) with check (org_id = public.jwt_org_id());
 create policy org_all_settings on public.settings for all using (org_id = public.jwt_org_id()) with check (org_id = public.jwt_org_id());
 create policy org_all_audit on public.audit_log for all using (org_id = public.jwt_org_id()) with check (org_id = public.jwt_org_id());
+
+-- documents (0024)
+alter table public.documents enable row level security;
+create policy org_all_documents on public.documents for all using (org_id = public.jwt_org_id()) with check (org_id = public.jwt_org_id());

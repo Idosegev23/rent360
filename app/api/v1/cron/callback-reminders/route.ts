@@ -198,7 +198,29 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, followups, templateSync, errors })
+  // --- Sixth pass: round-robin assign unassigned engaged threads so every lead has an owner ---
+  let assigned = 0
+  const { data: staff } = await sb.from('users').select('id').eq('is_active', true).not('phone', 'is', null).order('created_at', { ascending: true })
+  const staffIds = (staff || []).map(s => s.id as string)
+  if (staffIds.length) {
+    const { data: unassigned } = await sb.from('threads')
+      .select('id, tags, status')
+      .is('assigned_to', null)
+      .in('status', ['active', 'human_takeover'])
+      .limit(100)
+    const need = (unassigned || []).filter(t => {
+      const tg = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
+      return t.status === 'human_takeover' || ['interested', 'price_objection', 'callback_later'].includes(tg.intent)
+    })
+    let i = 0
+    for (const t of need) {
+      const owner = staffIds[i % staffIds.length]; i++
+      const { error } = await sb.from('threads').update({ assigned_to: owner }).eq('id', t.id)
+      if (!error) assigned++
+    }
+  }
+
+  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, followups, assigned, templateSync, errors })
 }
 
 export async function GET(req: NextRequest) { return run(req) }

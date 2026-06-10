@@ -17,6 +17,8 @@ import {
   CheckSquare,
   CalendarDays,
   GitBranch,
+  Coins,
+  BarChart3,
 } from 'lucide-react'
 
 type Me = { name: string | null; email: string | null; google: { connected: boolean; email: string | null } }
@@ -44,6 +46,8 @@ const main: NavLink[] = [
 ]
 
 const secondary: NavLink[] = [
+  { href: '/commissions', label: 'עמלות', Icon: Coins },
+  { href: '/reports', label: 'דוחות', Icon: BarChart3 },
   { href: '/admin', label: 'הגדרות', Icon: Settings },
 ]
 

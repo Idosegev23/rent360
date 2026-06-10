@@ -13,12 +13,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
   const { sb, orgId, uid } = ctx
 
-  let body: { status?: string } = {}
+  let body: { status?: string; commission_status?: string; commission_amount?: number } = {}
   try { body = await req.json() } catch {/* empty */}
-  if (body.status !== 'ended') return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'status must be "ended"' } }, { status: 400 })
 
   const { data: ten } = await sb.from('tenancies').select('id, property_id, renter_id, status').eq('id', params.id).eq('org_id', orgId).maybeSingle()
   if (!ten) return NextResponse.json({ error: { code: 'NOT_FOUND' } }, { status: 404 })
+
+  // Commission update (collected / pending / waived / amount) — no re-rent side effects.
+  if (body.commission_status || body.commission_amount != null) {
+    const upd: Record<string, unknown> = {}
+    if (body.commission_status && ['pending', 'collected', 'waived'].includes(body.commission_status)) {
+      upd.commission_status = body.commission_status
+      upd.commission_collected_at = body.commission_status === 'collected' ? new Date().toISOString() : null
+    }
+    if (body.commission_amount != null) upd.commission_amount = body.commission_amount
+    await sb.from('tenancies').update(upd).eq('id', ten.id).eq('org_id', orgId)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (body.status !== 'ended') return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'status must be "ended"' } }, { status: 400 })
 
   await sb.from('tenancies').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', ten.id).eq('org_id', orgId)
 

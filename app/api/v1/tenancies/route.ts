@@ -105,7 +105,8 @@ export async function POST(req: NextRequest) {
     await sb.from('tenancies').update({ renter_id, match_id: m?.id || null, started_at, monthly_rent, updated_at: new Date().toISOString() }).eq('id', existing.id)
   } else {
     const { data: created, error } = await sb.from('tenancies').insert({
-      org_id: orgId, renter_id, property_id, match_id: m?.id || null, started_at, monthly_rent, status: 'active', created_by: uid,
+      org_id: orgId, renter_id, property_id, match_id: m?.id || null, started_at, monthly_rent,
+      commission_amount: monthly_rent ?? null, status: 'active', created_by: uid,
     }).select('id').single()
     if (error) return NextResponse.json({ error: { code: 'INSERT_FAILED', message: error.message } }, { status: 500 })
     tenancyId = created?.id
