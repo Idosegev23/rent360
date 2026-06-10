@@ -13,8 +13,17 @@ type Meeting = {
   starts_at: string
   ends_at: string
   status: string
+  kind?: string
+  outcome?: string | null
 }
 type Member = { id: string; name: string | null }
+
+const OUTCOMES: Array<{ key: string; label: string; cls: string }> = [
+  { key: 'interested', label: 'התעניין/ה', cls: 'bg-emerald-600' },
+  { key: 'maybe', label: 'אולי', cls: 'bg-amber-500' },
+  { key: 'not_interested', label: 'לא מתאים', cls: 'bg-gray-500' },
+  { key: 'no_show', label: 'לא הגיע/ה', cls: 'bg-red-600' },
+]
 
 function fmt(iso: string): string {
   return new Date(iso).toLocaleString('he-IL', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -22,6 +31,8 @@ function fmt(iso: string): string {
 
 export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([])
+  const [pending, setPending] = useState<Meeting[]>([])
+  const [fbNote, setFbNote] = useState<Record<string, string>>({})
   const [team, setTeam] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
@@ -35,10 +46,20 @@ export default function MeetingsPage() {
 
   async function load() {
     setLoading(true)
-    const r = await fetch('/api/v1/meetings')
+    const [r, rf] = await Promise.all([fetch('/api/v1/meetings'), fetch('/api/v1/meetings?needsFeedback=1')])
     const d = await r.json().catch(() => ({ meetings: [] }))
+    const df = await rf.json().catch(() => ({ meetings: [] }))
     setMeetings(d.meetings || [])
+    setPending(df.meetings || [])
     setLoading(false)
+  }
+
+  async function recordOutcome(id: string, outcome: string) {
+    setPending((prev) => prev.filter((m) => m.id !== id))
+    await fetch(`/api/v1/meetings/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outcome, feedback: fbNote[id] || null }),
+    }).catch(() => load())
   }
   useEffect(() => {
     fetch('/api/v1/team').then((r) => (r.ok ? r.json() : { members: [] })).then((d) => setTeam((d.members || []).map((m: Member) => ({ id: m.id, name: m.name })))).catch(() => {})
@@ -105,6 +126,26 @@ export default function MeetingsPage() {
         </div>
       )}
 
+      {pending.length > 0 && (
+        <div className="surface-card mb-4 p-3">
+          <div className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-amber-600" /> צפיות לתיעוד ({pending.length})</div>
+          <div className="space-y-2">
+            {pending.map((m) => (
+              <div key={m.id} className="rounded-md border border-amber-200 bg-amber-50 p-2">
+                <div className="text-sm font-medium">{m.title}</div>
+                <div className="mb-2 inline-flex items-center gap-1 text-xs text-gray-500"><Clock className="h-3 w-3" />{fmt(m.starts_at)} · {nameOf(m.owner_user_id)}</div>
+                <input value={fbNote[m.id] || ''} onChange={(e) => setFbNote((s) => ({ ...s, [m.id]: e.target.value }))} placeholder="פידבק קצר (לא חובה)…" className="mb-2 w-full rounded-md border border-gray-300 px-2 py-1 text-xs" />
+                <div className="flex flex-wrap gap-1.5">
+                  {OUTCOMES.map((o) => (
+                    <button key={o.key} onClick={() => recordOutcome(m.id, o.key)} className={`rounded-md px-2.5 py-1 text-xs font-medium text-white ${o.cls}`}>{o.label}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-brand-primary" /></div>
       ) : meetings.length === 0 ? (
@@ -116,7 +157,7 @@ export default function MeetingsPage() {
           {meetings.map((m) => (
             <div key={m.id} className="surface-card flex items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{m.title}</div>
+                <div className="text-sm font-medium">{m.kind === 'viewing' && <span className="pill pill-blue" style={{ fontSize: 10, marginInlineEnd: 6 }}>צפייה</span>}{m.title}</div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                   <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{fmt(m.starts_at)}</span>
                   <span className="inline-flex items-center gap-1"><UserIcon className="h-3 w-3" />{nameOf(m.owner_user_id)}</span>

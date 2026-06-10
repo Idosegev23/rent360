@@ -314,7 +314,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       )}
 
       <div className="grid grid-cols-1 gap-2">
-        {strongMatches.map(m => <MatchRow key={m.id} match={m} />)}
+        {strongMatches.map(m => <MatchRow key={m.id} match={m} renterId={params.id} />)}
       </div>
 
       {hiddenCount > 0 && (
@@ -330,7 +330,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           </button>
           {showLowMatches && (
             <div className="grid grid-cols-1 gap-2 mt-2">
-              {[...lowMatches, ...dqMatches].map(m => <MatchRow key={m.id} match={m} />)}
+              {[...lowMatches, ...dqMatches].map(m => <MatchRow key={m.id} match={m} renterId={params.id} />)}
             </div>
           )}
         </div>
@@ -357,12 +357,34 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
   )
 }
 
-function MatchRow({ match }: { match: Match }) {
+function MatchRow({ match, renterId }: { match: Match; renterId: string }) {
   const [expanded, setExpanded] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [vOpen, setVOpen] = useState(false)
+  const [vWhen, setVWhen] = useState('')
+  const [vBusy, setVBusy] = useState(false)
+  const [vDone, setVDone] = useState(false)
   const p = match.property
   if (!p) return null
+
+  // Schedule a VIEWING (property × renter) — a meeting with kind=viewing that shows on /meetings,
+  // reminds the staff owner, and prompts post-viewing feedback.
+  async function scheduleViewing() {
+    if (vBusy || !vWhen) return
+    setVBusy(true)
+    try {
+      const start = new Date(vWhen)
+      const end = new Date(start.getTime() + 30 * 60000)
+      const res = await fetch('/api/v1/meetings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: `צפייה — ${p!.title || p!.street || p!.address || 'נכס'}`, kind: 'viewing', property_id: p!.id, renter_id: renterId, starts_at: start.toISOString(), ends_at: end.toISOString() }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d?.error?.message || 'נכשל')
+      setVDone(true); setVOpen(false)
+    } catch (e) { window.alert(e instanceof Error ? e.message : 'תיאום הצפייה נכשל') } finally { setVBusy(false) }
+  }
 
   // Send THIS apartment to the renter (manual, one-click). Bypasses rate caps but the
   // server still enforces opt-out, dedup (renter_notified_at) and template approval.
@@ -430,6 +452,7 @@ function MatchRow({ match }: { match: Match }) {
           </div>
         </div>
         {!match.is_disqualified && (
+          <>
           <button
             type="button"
             onClick={sendApartment}
@@ -440,6 +463,20 @@ function MatchRow({ match }: { match: Match }) {
             {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : alreadySent ? <Check className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
             {alreadySent ? 'נשלח' : 'שלח לשוכר'}
           </button>
+          {vDone ? (
+            <span className="shrink-0 inline-flex items-center gap-1 text-xs text-blue-700"><Calendar className="h-3.5 w-3.5" /> צפייה נקבעה</span>
+          ) : vOpen ? (
+            <span className="shrink-0 inline-flex items-center gap-1">
+              <input type="datetime-local" value={vWhen} onChange={e => setVWhen(e.target.value)} className="rounded-md border border-gray-300 px-1.5 py-1 text-xs" />
+              <button onClick={scheduleViewing} disabled={!vWhen || vBusy} className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white disabled:opacity-50">{vBusy ? '…' : 'קבע'}</button>
+              <button onClick={() => setVOpen(false)} className="text-xs text-gray-400">ביטול</button>
+            </span>
+          ) : (
+            <button type="button" onClick={() => setVOpen(true)} title="קבע צפייה לשוכר בנכס" className="shrink-0 inline-flex items-center gap-1 rounded-md border border-blue-200 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50">
+              <Calendar className="h-3.5 w-3.5" /> קבע צפייה
+            </button>
+          )}
+          </>
         )}
         <button onClick={() => setExpanded(s => !s)} className="shrink-0 text-gray-400 hover:text-gray-700">
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

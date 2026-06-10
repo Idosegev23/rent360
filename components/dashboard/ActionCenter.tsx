@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Flame, Coins, Clock, CheckCircle2, Heart, ChevronLeft, RefreshCw, Check, CheckSquare } from 'lucide-react'
+import { Flame, Coins, Clock, CheckCircle2, Heart, ChevronLeft, RefreshCw, Check, CheckSquare, CalendarDays } from 'lucide-react'
 
 type Item = {
   thread_id?: string
@@ -15,11 +15,12 @@ type Item = {
   href: string
 }
 type Lane = { count: number; items: Item[] }
-type LaneKey = 'my_tasks' | 'hot_leads' | 'price_objections' | 'callbacks_due' | 'approved_to_send' | 'renter_interests'
+type LaneKey = 'my_tasks' | 'viewings_to_log' | 'hot_leads' | 'price_objections' | 'callbacks_due' | 'approved_to_send' | 'renter_interests'
 type Data = { generated_at: string; total: number; lanes: Record<LaneKey, Lane> }
 
 const LANES: { key: LaneKey; title: string; short: string; sub: string; icon: any; color: string; bg: string }[] = [
   { key: 'my_tasks', title: 'המשימות שלי', short: 'משימות', sub: 'משימות פתוחות שלך', icon: CheckSquare, color: '#7c3aed', bg: 'rgba(124,58,237,0.08)' },
+  { key: 'viewings_to_log', title: 'צפיות לתיעוד', short: 'צפיות', sub: 'צפיות שעברו — לתעד פידבק', icon: CalendarDays, color: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
   { key: 'callbacks_due', title: 'לחזור היום', short: 'לחזור', sub: 'ביקשו שנחזור', icon: Clock, color: '#1d4ed8', bg: 'rgba(37,99,235,0.08)' },
   { key: 'hot_leads', title: 'לסגירה', short: 'לסגירה', sub: 'התעניינו ולא אישרו', icon: Flame, color: '#c2410c', bg: 'rgba(234,88,12,0.08)' },
   { key: 'price_objections', title: 'מו״מ עמלה', short: 'מו״מ', sub: 'מתלבטים על המחיר', icon: Coins, color: '#a16207', bg: 'rgba(202,138,4,0.08)' },
@@ -28,7 +29,7 @@ const LANES: { key: LaneKey; title: string; short: string; sub: string; icon: an
 ]
 const LANE_BY_KEY = Object.fromEntries(LANES.map(l => [l.key, l])) as Record<LaneKey, typeof LANES[number]>
 // Priority order for the compact "top actions" merge (most time-sensitive first).
-const PRIORITY: LaneKey[] = ['my_tasks', 'callbacks_due', 'hot_leads', 'price_objections', 'renter_interests', 'approved_to_send']
+const PRIORITY: LaneKey[] = ['my_tasks', 'viewings_to_log', 'callbacks_due', 'hot_leads', 'price_objections', 'renter_interests', 'approved_to_send']
 
 function ago(iso?: string | null): string {
   if (!iso) return ''

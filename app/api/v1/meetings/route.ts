@@ -15,11 +15,12 @@ export async function GET(req: NextRequest) {
   const propertyId = q.get('propertyId')
   const renterId = q.get('renterId')
   const threadId = q.get('threadId')
+  const needsFeedback = q.get('needsFeedback') === '1' // past viewings awaiting an outcome
   const byEntity = !!(propertyId || renterId || threadId)
 
   let query = ctx.sb
     .from('meetings')
-    .select('id, title, location, notes, owner_user_id, property_id, renter_id, thread_id, google_event_id, starts_at, ends_at, status, created_at')
+    .select('id, title, location, notes, owner_user_id, property_id, renter_id, thread_id, kind, outcome, feedback, google_event_id, starts_at, ends_at, status, created_at')
     .eq('org_id', ctx.orgId)
     .neq('status', 'cancelled')
   if (ownerUserId) query = query.eq('owner_user_id', ownerUserId)
@@ -28,12 +29,14 @@ export async function GET(req: NextRequest) {
   if (threadId) query = query.eq('thread_id', threadId)
   // Entity-linked view shows all (past + upcoming) for that entity, newest first; the calendar
   // view shows upcoming only.
-  if (!byEntity) {
+  if (needsFeedback) {
+    query = query.eq('kind', 'viewing').is('outcome', null).lte('starts_at', new Date().toISOString())
+  } else if (!byEntity) {
     query = query.gte('starts_at', from || new Date().toISOString())
     if (to) query = query.lte('starts_at', to)
   }
 
-  const { data, error } = await query.order('starts_at', { ascending: !byEntity }).limit(200)
+  const { data, error } = await query.order('starts_at', { ascending: !(byEntity || needsFeedback) }).limit(200)
   if (error) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
   return NextResponse.json({ meetings: data || [] })
 }
@@ -49,6 +52,7 @@ const CreateBody = z.object({
   renter_id: z.string().uuid().nullable().optional(),
   thread_id: z.string().uuid().nullable().optional(),
   attendees: z.array(z.string().email()).optional(),
+  kind: z.enum(['meeting', 'viewing']).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -91,6 +95,7 @@ export async function POST(req: NextRequest) {
       property_id: b.property_id ?? null,
       renter_id: b.renter_id ?? null,
       thread_id: b.thread_id ?? null,
+      kind: b.kind ?? 'meeting',
       google_event_id: googleEventId,
       starts_at: b.starts_at,
       ends_at: b.ends_at,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireOrg } from '@/lib/api/org-context'
 import { updateCalendarEvent, cancelCalendarEvent } from '@/lib/google/calendar'
+import { logActivity } from '@/lib/activity/log'
 
 const PatchBody = z.object({
   title: z.string().min(1).optional(),
@@ -9,7 +10,13 @@ const PatchBody = z.object({
   location: z.string().nullable().optional(),
   starts_at: z.string().datetime().optional(),
   ends_at: z.string().datetime().optional(),
+  outcome: z.enum(['interested', 'not_interested', 'maybe', 'no_show']).optional(),
+  feedback: z.string().nullable().optional(),
 })
+
+const OUTCOME_HE: Record<string, string> = {
+  interested: 'התעניין/ה', not_interested: 'לא מתאים', maybe: 'אולי', no_show: 'לא הגיע/ה',
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireOrg()
@@ -20,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { data: m } = await ctx.sb
     .from('meetings')
-    .select('owner_user_id, google_event_id')
+    .select('owner_user_id, google_event_id, property_id, renter_id, title')
     .eq('id', params.id)
     .eq('org_id', ctx.orgId)
     .maybeSingle()
@@ -32,6 +39,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (b.location !== undefined) update.location = b.location
   if (b.starts_at !== undefined) update.starts_at = b.starts_at
   if (b.ends_at !== undefined) update.ends_at = b.ends_at
+  if (b.feedback !== undefined) update.feedback = b.feedback
+  if (b.outcome !== undefined) { update.outcome = b.outcome; update.outcome_at = new Date().toISOString() }
   // Time change re-arms the reminder.
   if (b.starts_at !== undefined) update.whatsapp_reminded_at = null
   if (Object.keys(update).length === 0) return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'no fields' } }, { status: 400 })
@@ -53,6 +62,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { error } = await ctx.sb.from('meetings').update(update).eq('id', params.id).eq('org_id', ctx.orgId)
   if (error) return NextResponse.json({ error: { code: 'UPDATE_FAILED', message: error.message } }, { status: 500 })
+
+  // Post-viewing feedback → activity timeline on the linked renter + property.
+  if (b.outcome !== undefined) {
+    const body = `צפייה — ${OUTCOME_HE[b.outcome] || b.outcome}${b.feedback ? `: ${b.feedback}` : ''}`
+    if (m.renter_id) await logActivity({ orgId: ctx.orgId, entityType: 'renter', entityId: m.renter_id, kind: 'meeting', body, authorUserId: ctx.uid })
+    if (m.property_id) await logActivity({ orgId: ctx.orgId, entityType: 'property', entityId: m.property_id, kind: 'meeting', body, authorUserId: ctx.uid })
+  }
   return NextResponse.json({ ok: true })
 }
 

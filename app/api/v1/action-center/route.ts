@@ -185,8 +185,21 @@ export async function GET(_req: NextRequest) {
     href: '/tasks',
   }))
 
+  // Past viewings awaiting feedback — drive the "how did it go?" loop.
+  const { data: dueViewings } = await sb
+    .from('meetings')
+    .select('id, title, starts_at')
+    .eq('org_id', orgId).eq('kind', 'viewing').is('outcome', null).eq('status', 'confirmed')
+    .lte('starts_at', new Date().toISOString())
+    .order('starts_at', { ascending: false })
+    .limit(20)
+  const viewings_to_log: Item[] = (dueViewings || []).map(v => ({
+    label: v.title, badge: 'לתעד פידבק', since: v.starts_at || null, href: '/meetings',
+  }))
+
   const lanes = {
     my_tasks: { count: my_tasks.length, items: my_tasks.slice(0, 20) },
+    viewings_to_log: { count: viewings_to_log.length, items: viewings_to_log.slice(0, 20) },
     hot_leads: { count: hot_leads.length, items: hot_leads.slice(0, 20) },
     price_objections: { count: price_objections.length, items: price_objections.slice(0, 20) },
     callbacks_due: { count: callbacks_due.length, items: callbacks_due.slice(0, 20) },
