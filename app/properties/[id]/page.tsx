@@ -9,6 +9,7 @@ import PropertyImageGallery from '../../../components/PropertyImageGallery'
 import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
 import MarkRented from '../../../components/MarkRented'
 import ApproveBrokerage from '../../../components/ApproveBrokerage'
+import SentMatchBadge from '../../../components/SentMatchBadge'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -219,6 +220,8 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
             </div>
           )}
         </div>
+
+        <SentMatchBadge propertyId={item.id} />
       </div>
 
       {/* Image Gallery */}

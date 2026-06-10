@@ -36,6 +36,7 @@ type Match = {
   status: string | null
   property: MatchProperty | null
   interested?: boolean
+  renter_notified_at?: string | null
 }
 
 const DIM_LABEL: Record<string, string> = {
@@ -103,6 +104,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
   const [error, setError] = useState<string | null>(null)
   const [recomputing, setRecomputing] = useState(false)
   const [sendingInvite, setSendingInvite] = useState(false)
+  const [sendingTop, setSendingTop] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -156,6 +158,30 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
     }
   }
 
+  // Send the renter their top-5 matches (90%+) in one click. The server picks the eligible set
+  // (not disqualified, not already sent to this renter, not offered to another renter).
+  async function sendTop5() {
+    if (sendingTop) return
+    const eligible = matches.filter(m => !m.is_disqualified && (m.score || 0) >= 90 && !m.renter_notified_at)
+    if (eligible.length === 0) { alert('אין התאמות 90%+ שטרם נשלחו.'); return }
+    if (!window.confirm(`לשלוח לשוכר את ${Math.min(eligible.length, 5)} ההתאמות הכי טובות (90%+) בוואטסאפ?`)) return
+    setSendingTop(true)
+    try {
+      const res = await fetch(`/api/v1/renters/${params.id}/send-top-matches`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error?.message || 'שליחה נכשלה')
+      const parts = [`נשלחו ${data.sent}`]
+      if (data.skipped) parts.push(`דולגו ${data.skipped}`)
+      if (data.skippedTaken) parts.push(`${data.skippedTaken} כבר נשלחו לשוכר אחר`)
+      alert(parts.join(' · '))
+      load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'שליחה נכשלה')
+    } finally {
+      setSendingTop(false)
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-brand-primary" /></div>
   if (error) return <div className="mx-auto max-w-3xl p-4"><div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="inline h-4 w-4 ml-1" />{error}</div></div>
   if (!renter) return null
@@ -170,6 +196,8 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
 
   const nonDqMatches = matches.filter(m => !m.is_disqualified)
   const dqMatches = matches.filter(m => m.is_disqualified)
+  // Top matches eligible for the one-click send: 90%+, not yet sent to this renter.
+  const topEligible = nonDqMatches.filter(m => (m.score || 0) >= 90 && !m.renter_notified_at).slice(0, 5)
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 pb-32">
@@ -249,8 +277,19 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       <QuestionnaireDetails renter={renter} lastSubmission={lastSubmission} />
 
       {/* Matches */}
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold text-lg">התאמות לנכסים ({nonDqMatches.length} מתאימים{dqMatches.length ? ` + ${dqMatches.length} פסולים` : ''})</h2>
+        {topEligible.length > 0 && (
+          <button
+            onClick={sendTop5}
+            disabled={sendingTop}
+            title="שולח בלחיצה אחת את ההתאמות הכי טובות (90%+) שטרם נשלחו"
+            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {sendingTop ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            שלח {topEligible.length} התאמות מובילות (90%+)
+          </button>
+        )}
       </div>
 
       {matches.length === 0 && (
@@ -306,6 +345,7 @@ function MatchRow({ match }: { match: Match }) {
   }
 
   const score = Math.round(match.score || 0)
+  const alreadySent = sent || !!match.renter_notified_at
   const scoreTone =
     match.is_disqualified ? 'bg-red-100 text-red-700 border-red-200' :
     score >= 80 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
@@ -331,6 +371,11 @@ function MatchRow({ match }: { match: Match }) {
                 ✋ מעוניין/ת לראות!
               </span>
             )}
+            {alreadySent && (
+              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                <Check className="h-3 w-3" /> נשלח לשוכר
+              </span>
+            )}
           </div>
           <div className="text-xs text-gray-500 mb-1">
             {[p.street || p.address, p.city].filter(Boolean).join(', ')}
@@ -346,12 +391,12 @@ function MatchRow({ match }: { match: Match }) {
           <button
             type="button"
             onClick={sendApartment}
-            disabled={sending || sent}
+            disabled={sending || alreadySent}
             title="שלח לשוכר את הדירה הזו בוואטסאפ"
             className="shrink-0 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : sent ? <Check className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
-            {sent ? 'נשלח' : 'שלח לשוכר'}
+            {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : alreadySent ? <Check className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+            {alreadySent ? 'נשלח' : 'שלח לשוכר'}
           </button>
         )}
         <button onClick={() => setExpanded(s => !s)} className="shrink-0 text-gray-400 hover:text-gray-700">

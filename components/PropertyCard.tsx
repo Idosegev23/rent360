@@ -126,6 +126,11 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
           {isBrokerage && (
             <span className="pill pill-brand"><Building2 size={11} />תיווך</span>
           )}
+          {item.notified_renters && item.notified_renters.length > 0 && (
+            <span className="pill" style={{ background: '#dbeafe', color: '#1d4ed8' }} title={`נשלח כהתאמה ל: ${item.notified_renters.join(', ')}`}>
+              <Target size={11} />נשלח כהתאמה
+            </span>
+          )}
         </div>
 
         {/* Matches badge (top-end) */}

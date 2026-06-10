@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   let q = sb
     .from('matches')
-    .select('id, renter_id, property_id, score, is_disqualified, disqualifying_reasons, breakdown, reasons, status, updated_at')
+    .select('id, renter_id, property_id, score, is_disqualified, disqualifying_reasons, breakdown, reasons, status, updated_at, renter_notified_at')
     .eq('org_id', orgId)
   if (propertyId) q = q.eq('property_id', propertyId)
   if (renterId) q = q.eq('renter_id', renterId)

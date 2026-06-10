@@ -190,7 +190,31 @@ export async function GET(req: NextRequest){
       .in('property_id', propertyIds)
     approvedSet = new Set((approved || []).map(a => a.property_id))
   }
-  const enriched = (data || []).map(p => ({ ...p, is_approved: approvedSet.has(p.id) }))
+
+  // Which properties were already sent as a match to a renter (so the card can tag it and we don't
+  // blast the same apartment to several people). Bulk: matches with renter_notified_at + renter name.
+  const notifiedMap = new Map<string, string[]>()
+  if (propertyIds.length > 0) {
+    const { data: notified } = await sb
+      .from('matches')
+      .select('property_id, renter_id, renter_notified_at')
+      .eq('org_id', orgId)
+      .in('property_id', propertyIds)
+      .not('renter_notified_at', 'is', null)
+    const rIds = Array.from(new Set((notified || []).map(n => n.renter_id))).filter(Boolean) as string[]
+    const nameById = new Map<string, string>()
+    if (rIds.length > 0) {
+      const { data: rs } = await sb.from('renters').select('id, first_name, last_name').in('id', rIds)
+      for (const r of rs || []) nameById.set(r.id, [r.first_name, r.last_name].filter(Boolean).join(' ') || 'שוכר')
+    }
+    for (const n of notified || []) {
+      const arr = notifiedMap.get(n.property_id) || []
+      const nm = nameById.get(n.renter_id) || 'שוכר'
+      if (!arr.includes(nm)) arr.push(nm)
+      notifiedMap.set(n.property_id, arr)
+    }
+  }
+  const enriched = (data || []).map(p => ({ ...p, is_approved: approvedSet.has(p.id), notified_renters: notifiedMap.get(p.id) || [] }))
 
   const totalPages = Math.ceil((count || 0) / limit)
 

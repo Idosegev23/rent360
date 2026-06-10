@@ -66,6 +66,9 @@ export interface ExtendedProperty {
   // Set when fetched via /api/v1/properties — true if the property already exists in approved_properties
   is_approved?: boolean;
 
+  // Set when fetched via /api/v1/properties — renters this property was already sent to as a match
+  notified_renters?: string[];
+
   // Outreach state — used by the "פנייה ראשונה" button
   initial_message_sent?: boolean;
   outreach_blocked?: boolean;
