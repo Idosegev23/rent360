@@ -8,7 +8,7 @@
  */
 
 import { sendTemplate } from '../whatsapp/meta-provider'
-import { parsePhoneList } from '../outreach/phone'
+import { staffAlertPhones } from './staff-recipients'
 import { supabaseService } from '../supabase'
 
 // Handoff alert template. v2's button points to the working production domain
@@ -45,7 +45,7 @@ function truncate(s: string, max: number): string {
 }
 
 export async function notifyAdminsHandoff(payload: AdminHandoffPayload): Promise<AdminAlertResult> {
-  const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
+  const admins = await staffAlertPhones()
   if (admins.length === 0) {
     return { attempted: 0, sent: 0, failed: 0, errors: [] }
   }
@@ -143,7 +143,7 @@ function formatHebDate(iso: string): string {
  * approved, else the handoff template (same button → the thread) with a reminder reason.
  */
 export async function notifyAdminsCallbackReminder(p: CallbackReminderPayload): Promise<AdminAlertResult> {
-  const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
+  const admins = await staffAlertPhones()
   if (admins.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] }
   const sb = supabaseService()
 
@@ -202,7 +202,7 @@ export type PropertyRecheckPayload = {
  * ago. No-op (with an error note) until property_recheck_reminder_v1 is approved at Meta.
  */
 export async function notifyAdminsPropertyRecheck(p: PropertyRecheckPayload): Promise<AdminAlertResult> {
-  const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
+  const admins = await staffAlertPhones()
   if (admins.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] }
   const sb = supabaseService()
 
@@ -266,7 +266,7 @@ export type RenterInterestPayload = {
  * the template.
  */
 export async function notifyAdminsRenterInterest(payload: RenterInterestPayload): Promise<AdminAlertResult> {
-  const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
+  const admins = await staffAlertPhones()
   if (admins.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] }
 
   const components: any[] = [
