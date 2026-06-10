@@ -11,6 +11,7 @@ import MarkRented from '../../../components/MarkRented'
 import ApproveBrokerage from '../../../components/ApproveBrokerage'
 import SentMatchBadge from '../../../components/SentMatchBadge'
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
+import { AddTaskButton } from '@/components/tasks/AddTaskButton'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -405,7 +406,10 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         isOpen={shareDialogOpen}
         onClose={() => setShareDialogOpen(false)}
       />
-      <div className="mt-4">
+      <div className="mt-4 flex justify-end">
+        <AddTaskButton entityType="property" entityId={params.id} label="הוסף משימה לנכס" />
+      </div>
+      <div className="mt-3">
         <ActivityTimeline entityType="property" entityId={params.id} />
       </div>
     </main>
