@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Building2,
@@ -8,12 +9,14 @@ import {
   Inbox,
   CheckCircle2,
   Settings,
-  ChevronDown,
   Send,
   ListChecks,
   Archive,
   UserCog,
+  LogOut,
 } from 'lucide-react'
+
+type Me = { name: string | null; email: string | null; google: { connected: boolean; email: string | null } }
 
 type NavLink = {
   href: string
@@ -46,6 +49,26 @@ function isActive(pathname: string | null, href: string) {
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [me, setMe] = useState<Me | null>(null)
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setMe(d))
+      .catch(() => {})
+  }, [])
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    window.location.href = '/auth/login'
+  }
+
+  const displayName = me?.name || me?.email || 'rent360'
+  const displaySub = me?.email || (me ? 'admin' : '…')
+  const initials = me?.name
+    ? me.name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('')
+    : 'R3'
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -94,13 +117,15 @@ export default function Sidebar() {
       })}
 
       <div className="sidebar-footer">
-        <div className="avatar-pill">R3</div>
+        <div className="avatar-pill" title={me?.google.connected ? `Google מחובר: ${me.google.email}` : undefined}>{initials}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>rent360</div>
-          <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>admin</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+          <div style={{ fontSize: 11, color: 'var(--ink-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {me?.google.connected && <span style={{ color: '#16a34a' }}>● </span>}{displaySub}
+          </div>
         </div>
-        <button type="button" className="icon-btn" style={{ width: 30, height: 30 }} aria-label="more">
-          <ChevronDown size={14} />
+        <button type="button" onClick={logout} className="icon-btn" style={{ width: 30, height: 30 }} aria-label="התנתק" title="התנתק">
+          <LogOut size={14} />
         </button>
       </div>
     </aside>
