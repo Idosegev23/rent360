@@ -272,10 +272,9 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
         )}
         {/* Filter — narrows the list. Then select within the filtered view. */}
         {mode === 'landlord' && (
-          <div className="flex items-center gap-1 text-xs rounded-md border border-brand-border p-0.5">
-            {([['all', `הכל (${rows.length})`], ['unsent', `שטרם נשלח (${unsentCount})`], ['sent', `נשלח בעבר (${rows.length - unsentCount})`]] as const).map(([k, label]) => (
-              <button key={k} type="button" onClick={() => setViewFilter(k)}
-                className={`px-2.5 py-1 rounded ${viewFilter === k ? 'bg-brand-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{label}</button>
+          <div className="seg">
+            {([['all', `הכל · ${rows.length}`], ['unsent', `שטרם נשלח · ${unsentCount}`], ['sent', `נשלח בעבר · ${rows.length - unsentCount}`]] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setViewFilter(k)} className={viewFilter === k ? 'active' : ''}>{label}</button>
             ))}
           </div>
         )}
@@ -550,14 +549,12 @@ function CountersBar({ counters }: { counters: Counters | null }) {
   if (!counters) return null
   const pct = counters.dailyCap > 0 ? Math.min(100, Math.round((counters.sentToday / counters.dailyCap) * 100)) : 0
   return (
-    <div className="rounded-lg border border-brand-border bg-white p-3 flex flex-wrap items-center gap-4 text-sm">
-      <span className="inline-flex items-center gap-1.5 font-medium text-gray-700"><Gauge className="h-4 w-4" />מגבלות היום</span>
-      <span className="text-gray-600">נשלחו <b>{counters.sentToday}</b> / {counters.dailyCap}</span>
-      <span className="text-gray-600">נותרו <b>{counters.remaining}</b></span>
-      {counters.minScore != null && <span className="text-gray-500 text-xs">סף ציון: {counters.minScore}</span>}
-      <div className="flex-1 min-w-[120px] h-2 rounded-full bg-gray-100 overflow-hidden">
-        <div className="h-full bg-brand-primary" style={{ width: `${pct}%` }} />
+    <div className="surface-card" style={{ padding: '14px 18px' }}>
+      <div className="flex flex-wrap items-center justify-between gap-2" style={{ marginBottom: 8 }}>
+        <span className="inline-flex items-center gap-1.5" style={{ fontWeight: 700, fontSize: 14 }}><Gauge className="h-4 w-4" />מגבלת שליחה יומית (תקרה משותפת לצוות)</span>
+        <span className="num muted" style={{ fontSize: 13 }}>נשלחו {counters.sentToday} / {counters.dailyCap} · נותרו {counters.remaining}{counters.minScore != null ? ` · סף ${counters.minScore}` : ''}</span>
       </div>
+      <div className="progress"><div style={{ width: `${pct}%` }} /></div>
     </div>
   )
 }
