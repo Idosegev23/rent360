@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { notifyAdminsCallbackReminder, notifyAdminsPropertyRecheck } from '../../../../../lib/alerts/admin-whatsapp'
 import { notifyStaffTask, notifyStaffMeeting } from '../../../../../lib/alerts/staff-whatsapp'
+import { syncTemplateStatuses } from '../../../../../lib/whatsapp/template-sync'
 
 /**
  * Daily cron: find landlord conversations whose requested callback date has arrived
@@ -21,6 +22,8 @@ async function run(req: NextRequest) {
   }
 
   const sb = supabaseService()
+  // Auto-sync Meta template statuses first, so newly-approved staff templates start sending this run.
+  const templateSync = await syncTemplateStatuses()
   // Current Israel local time as a sortable string ("2026-06-10T16:30:45"). callback_at is stored
   // Israel-local ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"), so a lexicographic <= comparison is correct
   // for both date-only (fires that day) and time-specific (fires once the hour passes) callbacks.
@@ -158,7 +161,7 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, errors })
+  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, templateSync, errors })
 }
 
 export async function GET(req: NextRequest) { return run(req) }
