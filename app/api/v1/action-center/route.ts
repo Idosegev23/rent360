@@ -168,7 +168,25 @@ export async function GET(_req: NextRequest) {
     } as Item
   })
 
+  // 4) My open tasks — due today or overdue (or undated).
+  const { data: myTasks } = await sb
+    .from('tasks')
+    .select('id, title, due_at, priority')
+    .eq('org_id', orgId)
+    .eq('assignee_user_id', userId)
+    .in('status', ['open', 'in_progress'])
+    .or(`due_at.is.null,due_at.lte.${todayISO}`)
+    .order('due_at', { ascending: true, nullsFirst: false })
+    .limit(20)
+  const my_tasks: Item[] = (myTasks || []).map(t => ({
+    label: t.title,
+    badge: t.due_at ? `יעד: ${String(t.due_at).slice(0, 10)}` : 'ללא תאריך',
+    since: t.due_at || null,
+    href: '/tasks',
+  }))
+
   const lanes = {
+    my_tasks: { count: my_tasks.length, items: my_tasks.slice(0, 20) },
     hot_leads: { count: hot_leads.length, items: hot_leads.slice(0, 20) },
     price_objections: { count: price_objections.length, items: price_objections.slice(0, 20) },
     callbacks_due: { count: callbacks_due.length, items: callbacks_due.slice(0, 20) },
