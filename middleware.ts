@@ -38,6 +38,10 @@ export function middleware(req: NextRequest) {
     pathname === '/api/v1/cron/callback-reminders' ||
     pathname === '/api/v1/auth/seed-team'
 
+  // Google OAuth callback — Google redirects here; identity comes from the signed `state`,
+  // so it must be reachable without our session middleware blocking it.
+  const isGoogleOAuthCallback = pathname === '/api/google/callback'
+
   if (
     PUBLIC_PATHS.has(pathname) ||
     pathname.startsWith('/auth') ||
@@ -45,7 +49,8 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/api/v1/integrations') ||
     isPublicRenter ||
     isPublicShare ||
-    isCronAuthed
+    isCronAuthed ||
+    isGoogleOAuthCallback
   ) {
     return NextResponse.next()
   }
