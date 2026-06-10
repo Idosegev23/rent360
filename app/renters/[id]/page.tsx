@@ -8,6 +8,7 @@ import {
   Send, Check,
 } from 'lucide-react'
 import MarkRented from '../../../components/MarkRented'
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 
 type Renter = Record<string, any>
 type MatchProperty = {
@@ -332,6 +333,9 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           )}
         </div>
       )}
+      <div className="mt-4">
+        <ActivityTimeline entityType="renter" entityId={params.id} />
+      </div>
     </div>
   )
 }

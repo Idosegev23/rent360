@@ -10,6 +10,7 @@ import SharePropertyDialog from '../../../components/properties/SharePropertyDia
 import MarkRented from '../../../components/MarkRented'
 import ApproveBrokerage from '../../../components/ApproveBrokerage'
 import SentMatchBadge from '../../../components/SentMatchBadge'
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -404,6 +405,9 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         isOpen={shareDialogOpen}
         onClose={() => setShareDialogOpen(false)}
       />
+      <div className="mt-4">
+        <ActivityTimeline entityType="property" entityId={params.id} />
+      </div>
     </main>
   )
 }
