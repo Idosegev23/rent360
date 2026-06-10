@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Plus, Loader2 } from 'lucide-react'
+import { DateTimeField } from '@/components/ui/DateTimePicker'
 
 type Member = { id: string; name: string | null }
 
@@ -9,7 +10,7 @@ export function AddTaskButton(props: { entityType: 'renter' | 'property'; entity
   const [open, setOpen] = useState(false)
   const [team, setTeam] = useState<Member[]>([])
   const [title, setTitle] = useState('')
-  const [due, setDue] = useState('')
+  const [dueDate, setDueDate] = useState<Date | null>(null)
   const [assignee, setAssignee] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
@@ -27,13 +28,13 @@ export function AddTaskButton(props: { entityType: 'renter' | 'property'; entity
     if (!title.trim() || busy) return
     setBusy(true)
     const body: Record<string, unknown> = { title: title.trim(), entity_type: props.entityType, entity_id: props.entityId }
-    if (due) body.due_at = new Date(due).toISOString()
+    if (dueDate) body.due_at = dueDate.toISOString()
     if (assignee) body.assignee_user_id = assignee
     const r = await fetch('/api/v1/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setBusy(false)
     if (r.ok) {
       setDone(true)
-      setTitle(''); setDue(''); setAssignee('')
+      setTitle(''); setDueDate(null); setAssignee('')
       setTimeout(() => { setDone(false); setOpen(false) }, 1200)
     }
   }
@@ -49,7 +50,7 @@ export function AddTaskButton(props: { entityType: 'renter' | 'property'; entity
     <div className="surface-card space-y-2 p-3" dir="rtl">
       <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="משימה (תשויך לכרטיס הזה)" className="w-full rounded-md border border-brand-border px-3 py-2 text-sm" />
       <div className="flex flex-wrap items-center gap-2">
-        <input type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} className="rounded-md border border-brand-border px-2 py-1.5 text-sm" />
+        <DateTimeField value={dueDate} onChange={setDueDate} placeholder="מועד יעד" />
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="rounded-md border border-brand-border px-2 py-1.5 text-sm">
           <option value="">משויך אליי</option>
           {team.map((m) => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}

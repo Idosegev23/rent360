@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Loader2, Plus, MapPin, Clock, User as UserIcon, X, CalendarDays } from 'lucide-react'
+import { DateTimeField } from '@/components/ui/DateTimePicker'
 
 type Meeting = {
   id: string
@@ -26,7 +27,9 @@ export default function MeetingsPage() {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const [f, setF] = useState({ title: '', owner: '', start: '', end: '', location: '', notes: '' })
+  const [f, setF] = useState({ title: '', owner: '', location: '', notes: '' })
+  const [startDate, setStartDate] = useState<Date | null>(null)
+  const [endDate, setEndDate] = useState<Date | null>(null)
 
   const nameOf = (id: string | null) => team.find((m) => m.id === id)?.name || '—'
 
@@ -43,11 +46,11 @@ export default function MeetingsPage() {
   }, [])
 
   async function create() {
-    if (!f.title.trim() || !f.start || busy) return
+    if (!f.title.trim() || !startDate || busy) return
     setBusy(true)
     setMsg(null)
-    const start = new Date(f.start)
-    const end = f.end ? new Date(f.end) : new Date(start.getTime() + 60 * 60000)
+    const start = startDate
+    const end = endDate || new Date(start.getTime() + 60 * 60000)
     const body: Record<string, unknown> = { title: f.title.trim(), starts_at: start.toISOString(), ends_at: end.toISOString() }
     if (f.owner) body.owner_user_id = f.owner
     if (f.location) body.location = f.location
@@ -57,7 +60,8 @@ export default function MeetingsPage() {
     setBusy(false)
     if (r.ok) {
       setMsg(d.warning || 'הפגישה נוצרה' + (d.google_event_id ? ' וסונכרנה ליומן Google' : ''))
-      setF({ title: '', owner: '', start: '', end: '', location: '', notes: '' })
+      setF({ title: '', owner: '', location: '', notes: '' })
+      setStartDate(null); setEndDate(null)
       setOpen(false)
       load()
     } else {
@@ -90,12 +94,12 @@ export default function MeetingsPage() {
               <option value="">היומן שלי</option>
               {team.map((m) => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
             </select>
-            <label className="text-xs text-gray-500">התחלה <input type="datetime-local" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} className="rounded-md border border-brand-border px-2 py-1.5 text-sm" /></label>
-            <label className="text-xs text-gray-500">סיום <input type="datetime-local" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} className="rounded-md border border-brand-border px-2 py-1.5 text-sm" /></label>
+            <span className="flex items-center gap-1 text-xs text-gray-500">התחלה <DateTimeField value={startDate} onChange={setStartDate} placeholder="מתי?" /></span>
+            <span className="flex items-center gap-1 text-xs text-gray-500">סיום <DateTimeField value={endDate} onChange={setEndDate} placeholder="(אופציונלי)" /></span>
           </div>
           <input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} placeholder="מיקום (לא חובה)" className="w-full rounded-md border border-brand-border px-3 py-2 text-sm" />
           <textarea value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="הערות (לא חובה)" rows={2} className="w-full rounded-md border border-brand-border px-3 py-2 text-sm" />
-          <button onClick={create} disabled={!f.title.trim() || !f.start || busy} className="flex items-center gap-1 rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+          <button onClick={create} disabled={!f.title.trim() || !startDate || busy} className="flex items-center gap-1 rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} צור פגישה
           </button>
         </div>

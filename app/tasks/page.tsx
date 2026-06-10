@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Loader2, Plus, Check, Clock, User as UserIcon } from 'lucide-react'
+import { DateTimeField } from '@/components/ui/DateTimePicker'
 
 type Task = {
   id: string
@@ -42,7 +43,7 @@ export default function TasksPage() {
   const [team, setTeam] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState('')
-  const [due, setDue] = useState('')
+  const [dueDate, setDueDate] = useState<Date | null>(null)
   const [assignee, setAssignee] = useState('')
   const [adding, setAdding] = useState(false)
 
@@ -72,7 +73,7 @@ export default function TasksPage() {
     if (!title.trim() || adding) return
     setAdding(true)
     const body: Record<string, unknown> = { title: title.trim() }
-    if (due) body.due_at = new Date(due).toISOString()
+    if (dueDate) body.due_at = dueDate.toISOString()
     if (assignee) body.assignee_user_id = assignee
     const r = await fetch('/api/v1/tasks', {
       method: 'POST',
@@ -82,7 +83,7 @@ export default function TasksPage() {
     setAdding(false)
     if (r.ok) {
       setTitle('')
-      setDue('')
+      setDueDate(null)
       setAssignee('')
       load(tab)
     }
@@ -110,12 +111,7 @@ export default function TasksPage() {
           placeholder="משימה חדשה…"
           className="min-w-[200px] flex-1 rounded-md border border-brand-border px-3 py-2 text-sm"
         />
-        <input
-          type="datetime-local"
-          value={due}
-          onChange={(e) => setDue(e.target.value)}
-          className="rounded-md border border-brand-border px-2 py-2 text-sm"
-        />
+        <DateTimeField value={dueDate} onChange={setDueDate} placeholder="מועד יעד" />
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="rounded-md border border-brand-border px-2 py-2 text-sm">
           <option value="">משויך אליי</option>
           {team.map((m) => (
