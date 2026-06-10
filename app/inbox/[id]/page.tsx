@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Send, Loader2, AlertCircle, User, Bot, ChevronDown, Image as ImageIcon } from 'lucide-react'
+import { ThreadGoogleActions } from '@/components/google/ThreadGoogleActions'
 
 type Message = {
   id: string
@@ -27,6 +28,7 @@ type Thread = {
   last_outbound_at: string | null
   tags: Record<string, unknown> | null
   opted_out_at: string | null
+  assigned_to: string | null
 }
 
 type Property = {
@@ -70,6 +72,7 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [statusUpdating, setStatusUpdating] = useState(false)
+  const [team, setTeam] = useState<Array<{ id: string; name: string | null }>>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   async function load(opts?: { silent?: boolean }) {
@@ -107,6 +110,13 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  useEffect(() => {
+    fetch('/api/v1/team')
+      .then((r) => (r.ok ? r.json() : { members: [] }))
+      .then((d) => setTeam((d.members || []).map((m: { id: string; name: string | null }) => ({ id: m.id, name: m.name }))))
+      .catch(() => {})
+  }, [])
 
   const windowOpen = inWindow(thread?.last_inbound_at)
   const inHumanMode = thread?.status === 'human_takeover'
@@ -243,6 +253,16 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
 
         {/* Sidebar */}
         <div className="space-y-3">
+          <div className="rounded-lg border border-brand-border bg-white p-3">
+            <div className="text-xs text-gray-500 mb-2">שיוך ופעולות Google</div>
+            <ThreadGoogleActions
+              threadId={thread.id}
+              assignedUserId={thread.assigned_to}
+              team={team}
+              contactEmail={null}
+            />
+          </div>
+
           {property ? (
             <div className="rounded-lg border border-brand-border bg-white p-3">
               <div className="text-xs text-gray-500 mb-1">נכס מקושר</div>
