@@ -16,6 +16,7 @@ import { RelatedItems } from '@/components/RelatedItems'
 import OwnerPortfolio from '../../../components/OwnerPortfolio'
 import RentStatus from '../../../components/RentStatus'
 import DocumentsPanel from '../../../components/DocumentsPanel'
+import ScheduleMeetingButton from '../../../components/ScheduleMeetingButton'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -411,7 +412,8 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         isOpen={shareDialogOpen}
         onClose={() => setShareDialogOpen(false)}
       />
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <ScheduleMeetingButton propertyId={item.id} label="קבע פגישה על הנכס" />
         <AddTaskButton entityType="property" entityId={params.id} label="הוסף משימה לנכס" />
       </div>
       <div className="mt-3">

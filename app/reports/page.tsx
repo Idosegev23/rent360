@@ -9,6 +9,7 @@ type Data = {
   commissions: { expected: number; collected: number; pending: number }
   viewings: Record<string, number>
   sources: Array<{ name: string; n: number }>
+  byStaff: Array<{ id: string; name: string; meetings: number; viewings: number; tasks: number; tasksDone: number; conversations: number; deals: number }>
 }
 const ils = (n: number) => `₪${Math.round(n).toLocaleString('he-IL')}`
 const VIEW_LABEL: Record<string, string> = { interested: 'התעניינו', not_interested: 'לא התאים', maybe: 'אולי', no_show: 'לא הגיעו', pending: 'לתיעוד' }
@@ -54,6 +55,37 @@ export default function ReportsPage() {
       <div style={grid} className="mb-5">
         {Object.keys(d.viewings).length === 0 ? <div className="text-sm faint">אין צפיות עדיין.</div> :
           Object.entries(d.viewings).map(([k, n]) => <Kpi key={k} label={VIEW_LABEL[k] || k} value={n} />)}
+      </div>
+
+      <h2 className="font-display mb-2" style={{ fontSize: 16 }}>ביצועי צוות</h2>
+      <div className="surface-card mb-5" style={{ padding: 0, overflowX: 'auto' }}>
+        <table className="w-full text-sm" style={{ borderCollapse: 'collapse', minWidth: 520 }}>
+          <thead>
+            <tr style={{ textAlign: 'right', color: 'var(--ink-3)', fontSize: 12 }}>
+              <th style={{ padding: '10px 14px' }}>עובד</th>
+              <th style={{ padding: '10px 8px' }}>פגישות</th>
+              <th style={{ padding: '10px 8px' }}>צפיות</th>
+              <th style={{ padding: '10px 8px' }}>משימות</th>
+              <th style={{ padding: '10px 8px' }}>בוצעו</th>
+              <th style={{ padding: '10px 8px' }}>שיחות</th>
+              <th style={{ padding: '10px 8px' }}>עסקאות</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(d.byStaff || []).map(s => (
+              <tr key={s.id} style={{ borderTop: '1px solid var(--line)' }}>
+                <td style={{ padding: '10px 14px', fontWeight: 600 }}>{s.name}</td>
+                <td className="num" style={{ padding: '10px 8px' }}>{s.meetings}</td>
+                <td className="num" style={{ padding: '10px 8px' }}>{s.viewings}</td>
+                <td className="num" style={{ padding: '10px 8px' }}>{s.tasks}</td>
+                <td className="num" style={{ padding: '10px 8px', color: 'var(--green)' }}>{s.tasksDone}</td>
+                <td className="num" style={{ padding: '10px 8px' }}>{s.conversations}</td>
+                <td className="num" style={{ padding: '10px 8px', color: 'var(--brand)' }}>{s.deals}</td>
+              </tr>
+            ))}
+            {(!d.byStaff || d.byStaff.length === 0) && <tr><td colSpan={7} style={{ padding: 16, color: 'var(--ink-4)' }}>אין נתוני צוות.</td></tr>}
+          </tbody>
+        </table>
       </div>
 
       <h2 className="font-display mb-2" style={{ fontSize: 16 }}>מקורות לידים</h2>

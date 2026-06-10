@@ -6,8 +6,8 @@ import { CalendarDays, ListChecks, MessageCircle } from 'lucide-react'
 type EntityType = 'thread' | 'property' | 'renter'
 const MEETING_PARAM: Record<EntityType, string> = { thread: 'threadId', property: 'propertyId', renter: 'renterId' }
 
-type Meeting = { id: string; title: string; starts_at: string; thread_id: string | null; property_id: string | null }
-type Task = { id: string; title: string; status: string }
+type Meeting = { id: string; title: string; starts_at: string; thread_id: string | null; property_id: string | null; owner_user_id?: string | null }
+type Task = { id: string; title: string; status: string; assignee_user_id?: string | null; created_by?: string | null }
 type Convo = { id: string; landlord_name?: string | null; phone?: string | null; intent?: string | null; status?: string }
 
 function fmt(iso: string): string {
@@ -20,6 +20,16 @@ export function RelatedItems({ entityType, entityId }: { entityType: EntityType;
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [convos, setConvos] = useState<Convo[]>([])
+  const [team, setTeam] = useState<Record<string, string>>({})
+  const nameOf = (id: string | null | undefined) => (id && team[id]) || ''
+
+  useEffect(() => {
+    fetch('/api/v1/team').then(r => r.json()).then(d => {
+      const map: Record<string, string> = {}
+      for (const m of (d.members || [])) map[m.id] = m.name || 'ללא שם'
+      setTeam(map)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     fetch(`/api/v1/meetings?${MEETING_PARAM[entityType]}=${entityId}`).then(r => r.json()).then(d => setMeetings(d.meetings || [])).catch(() => {})
@@ -57,7 +67,7 @@ export function RelatedItems({ entityType, entityId }: { entityType: EntityType;
           <div className="faint inline-flex items-center gap-1.5 mt-2" style={{ fontSize: 11.5 }}><CalendarDays size={12} /> פגישות</div>
           {meetings.map(m => (
             <Link key={m.id} href={m.thread_id ? `/inbox/${m.thread_id}` : (m.property_id ? `/properties/${m.property_id}` : '/meetings')} className={row} style={rowStyle}>
-              <span className="flex-1 truncate">{m.title}</span>
+              <span className="flex-1 truncate">{m.title}{nameOf(m.owner_user_id) && <span className="faint"> · {nameOf(m.owner_user_id)}</span>}</span>
               <span className="num faint" style={{ fontSize: 11.5 }}>{fmt(m.starts_at)}</span>
             </Link>
           ))}
@@ -70,6 +80,8 @@ export function RelatedItems({ entityType, entityId }: { entityType: EntityType;
           {tasks.map(t => (
             <Link key={t.id} href="/tasks" className={row} style={rowStyle}>
               <span className="flex-1 truncate">{t.title}</span>
+              {nameOf(t.assignee_user_id) && <span className="pill pill-gray" style={{ fontSize: 10 }}>ל-{nameOf(t.assignee_user_id)}</span>}
+              {nameOf(t.created_by) && <span className="faint" style={{ fontSize: 10.5 }}>הזין {nameOf(t.created_by)}</span>}
             </Link>
           ))}
         </div>
