@@ -48,7 +48,7 @@ export default function MarkRented({ mode, id, onDone }: { mode: 'property' | 'r
   if (done) {
     return (
       <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-800">
-        <CheckCircle2 className="h-4 w-4" /> סומן כהושכר ✓
+        <CheckCircle2 className="h-4 w-4" /> העסקה נסגרה ✓ — שויכה והעמלה חושבה
       </div>
     )
   }
@@ -56,8 +56,8 @@ export default function MarkRented({ mode, id, onDone }: { mode: 'property' | 'r
   if (!open) {
     return (
       <button type="button" onClick={load}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">
-        <Home className="h-4 w-4" /> {mode === 'property' ? 'סמן כהושכר' : 'סמן כשכר/ה דירה'}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+        <Home className="h-4 w-4" /> נסגרה עסקה
       </button>
     )
   }
@@ -65,7 +65,7 @@ export default function MarkRented({ mode, id, onDone }: { mode: 'property' | 'r
   return (
     <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm" style={{ minWidth: 280 }} dir="rtl">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-sm font-bold text-gray-900">{mode === 'property' ? 'מי שכר את הנכס?' : 'איזו דירה נשכרה?'}</div>
+        <div className="text-sm font-bold text-gray-900">{mode === 'property' ? 'עם מי נסגרה העסקה?' : 'איזו דירה נסגרה?'}</div>
         <button type="button" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
       </div>
 
@@ -85,13 +85,14 @@ export default function MarkRented({ mode, id, onDone }: { mode: 'property' | 'r
               </option>
             ))}
           </select>
-          <div className="flex gap-2 mb-2">
-            <input type="number" inputMode="numeric" dir="ltr" value={rent} onChange={e => setRent(e.target.value)} placeholder="שכ״ד ₪ (לא חובה)" className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          <div className="flex gap-2 mb-1">
+            <input type="number" inputMode="numeric" dir="ltr" value={rent} onChange={e => setRent(e.target.value)} placeholder="שכ״ד חודשי ₪" className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
             <input type="date" value={startedAt} onChange={e => setStartedAt(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" title="תאריך כניסה" />
           </div>
+          <div className="text-[11px] text-gray-500 mb-2">דמי התיווך יחושבו לפי חודש שכירות{rent ? ` — ₪${Number(rent).toLocaleString('he-IL')}` : ''}. ניתן לעדכן ב"עמלות".</div>
           <button type="button" onClick={submit} disabled={!picked || saving}
             className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} אישור — סמן כהושכר
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} סגירת עסקה ושיוך שוכר
           </button>
         </>
       )}

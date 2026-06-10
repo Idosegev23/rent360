@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { CalendarDays, Loader2, Check } from 'lucide-react'
+import { DateTimeField } from '@/components/ui/DateTimePicker'
 
 type Member = { id: string; name: string | null }
 
@@ -12,7 +13,7 @@ export default function ScheduleMeetingButton(props: { propertyId?: string; rent
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [owner, setOwner] = useState('')
-  const [when, setWhen] = useState('')
+  const [when, setWhen] = useState<Date | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -24,7 +25,7 @@ export default function ScheduleMeetingButton(props: { propertyId?: string; rent
     if (busy || !title.trim() || !when) return
     setBusy(true)
     try {
-      const start = new Date(when); const end = new Date(start.getTime() + 30 * 60000)
+      const start = when; const end = new Date(start.getTime() + 30 * 60000)
       const body: Record<string, unknown> = { title: title.trim(), starts_at: start.toISOString(), ends_at: end.toISOString() }
       if (owner) body.owner_user_id = owner
       if (props.propertyId) body.property_id = props.propertyId
@@ -32,7 +33,7 @@ export default function ScheduleMeetingButton(props: { propertyId?: string; rent
       if (props.threadId) body.thread_id = props.threadId
       const r = await fetch('/api/v1/meetings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!r.ok) throw new Error('failed')
-      setDone(true); setOpen(false); setTitle(''); setWhen(''); setOwner('')
+      setDone(true); setOpen(false); setTitle(''); setWhen(null); setOwner('')
       props.onDone?.()
       setTimeout(() => setDone(false), 2500)
     } catch { window.alert('תיאום הפגישה נכשל') } finally { setBusy(false) }
@@ -50,7 +51,7 @@ export default function ScheduleMeetingButton(props: { propertyId?: string; rent
     <div className="rounded-lg border border-brand-border bg-white p-2 space-y-2" style={{ minWidth: 240 }}>
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="נושא הפגישה" className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
       <div className="flex flex-wrap gap-2">
-        <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+        <DateTimeField value={when} onChange={setWhen} placeholder="מתי?" />
         <select value={owner} onChange={e => setOwner(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" title="למי הפגישה">
           <option value="">היומן שלי</option>
           {team.map(m => <option key={m.id} value={m.id}>{m.name || m.id}</option>)}
