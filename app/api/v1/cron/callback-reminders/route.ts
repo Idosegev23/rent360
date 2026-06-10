@@ -20,13 +20,16 @@ async function run(req: NextRequest) {
   }
 
   const sb = supabaseService()
-  const today = new Date().toISOString().slice(0, 10)
+  // Current Israel local time as a sortable string ("2026-06-10T16:30:45"). callback_at is stored
+  // Israel-local ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"), so a lexicographic <= comparison is correct
+  // for both date-only (fires that day) and time-specific (fires once the hour passes) callbacks.
+  const israelNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T')
 
   const { data: threads } = await sb
     .from('threads')
     .select('id, org_id, phone, property_id, tags')
     .eq('tags->>intent', 'callback_later')
-    .lte('tags->>callback_at', today)
+    .lte('tags->>callback_at', israelNow)
     .neq('status', 'opted_out')
     .limit(200)
 
@@ -60,7 +63,9 @@ async function run(req: NextRequest) {
       })
       if (res.sent > 0) {
         reminded++
-        await sb.from('threads').update({ tags: { ...tg, callback_reminded_at: new Date().toISOString() } }).eq('id', t.id)
+        // Stamp the callback_at value we reminded for (not "now") — TZ-independent, and a later
+        // reschedule (bigger callback_at) re-arms the reminder via the guard above.
+        await sb.from('threads').update({ tags: { ...tg, callback_reminded_at: String(tg.callback_at) } }).eq('id', t.id)
       } else if (res.errors.length) {
         errors.push({ threadId: t.id, error: res.errors[0]!.error })
       }

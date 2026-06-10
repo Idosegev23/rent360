@@ -92,6 +92,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   // landlord: which row's template preview is open + batch template preference
   const [previewRow, setPreviewRow] = useState<string | null>(null)
   const [prefer, setPrefer] = useState<'personalized' | 'basic'>('personalized')
+  const [viewFilter, setViewFilter] = useState<'all' | 'unsent' | 'sent'>('all')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -125,7 +126,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
       setRows(mapped)
       setCounters(data.counters || null)
       setTemplateApproved(mode === 'renter' ? data.templateApproved !== false : true)
-      setSelected(new Set(mapped.map(m => m.id)))
+      setSelected(new Set()) // start empty — build the batch with the filter + select tools
     } catch (err) {
       setError(err instanceof Error ? err.message : 'load failed')
     } finally {
@@ -142,18 +143,21 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
       return next
     })
   }
-  const allSelected = rows.length > 0 && selected.size === rows.length
-  // Select the next N currently-unselected rows (so you can send in waves of 50, not 250 at once).
+  // Real filter: narrow the visible list so selection + sending operate on a focused set.
+  const visibleRows = rows.filter(r =>
+    viewFilter === 'unsent' ? (r.received?.week || 0) === 0
+    : viewFilter === 'sent' ? (r.received?.week || 0) > 0
+    : true)
+  const unsentCount = rows.filter(r => (r.received?.week || 0) === 0).length
+  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every(r => selected.has(r.id))
+  // Select the next N unselected rows from the VISIBLE set (send in waves of 50, not all at once).
   function selectNextN(n: number) {
     setSelected(prev => {
       const next = new Set(prev)
       let added = 0
-      for (const r of rows) { if (added >= n) break; if (!next.has(r.id)) { next.add(r.id); added++ } }
+      for (const r of visibleRows) { if (added >= n) break; if (!next.has(r.id)) { next.add(r.id); added++ } }
       return next
     })
-  }
-  function selectWhere(pred: (r: QueueRow) => boolean) {
-    setSelected(new Set(rows.filter(pred).map(r => r.id)))
   }
 
   // First N rows we haven't messaged yet (received.week === 0), for the "send to 50 unsent" button.
@@ -254,13 +258,20 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             className="rounded-md border border-brand-border bg-white px-3 py-1.5 text-sm w-48"
           />
         )}
+        {/* Filter — narrows the list. Then select within the filtered view. */}
+        {mode === 'landlord' && (
+          <div className="flex items-center gap-1 text-xs rounded-md border border-brand-border p-0.5">
+            {([['all', `הכל (${rows.length})`], ['unsent', `שטרם נשלח (${unsentCount})`], ['sent', `נשלח בעבר (${rows.length - unsentCount})`]] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setViewFilter(k)}
+                className={`px-2.5 py-1 rounded ${viewFilter === k ? 'bg-brand-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{label}</button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <button type="button" onClick={() => setSelected(new Set(rows.map(r => r.id)))} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">בחר הכל</button>
+          <button type="button" onClick={() => setSelected(prev => { const n = new Set(prev); if (allVisibleSelected) visibleRows.forEach(r => n.delete(r.id)); else visibleRows.forEach(r => n.add(r.id)); return n })} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">{allVisibleSelected ? 'נקה מוצגים' : 'בחר הכל'}</button>
           <button type="button" onClick={() => setSelected(new Set())} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">נקה</button>
-          <button type="button" onClick={() => selectNextN(50)} className="px-2 py-1 rounded bg-brand-primary/10 text-brand-primary font-medium hover:bg-brand-primary/20" title="בחר 50 נוספים שטרם נבחרו">+50 הבאים</button>
-          <button type="button" onClick={() => selectWhere(r => (r.received?.week || 0) === 0)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700" title="מי שלא נשלחה אליו הודעה בשבוע האחרון">שלא נוצר קשר</button>
-          <button type="button" onClick={() => selectWhere(r => (r.received?.week || 0) > 0)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700" title="מי שכבר נשלחה אליו הודעה">נשלח בעבר</button>
-          <span className="text-gray-500" title={`${selected.size} מתוך ${rows.length} מסומנים`}>· נבחרו: <strong>{selected.size}</strong> / {rows.length}</span>
+          <button type="button" onClick={() => selectNextN(50)} className="px-2 py-1 rounded bg-brand-primary/10 text-brand-primary font-medium hover:bg-brand-primary/20" title="בחר 50 נוספים מהרשימה המוצגת שטרם נבחרו">+50 הבאים</button>
+          <span className="text-gray-500" title={`${selected.size} מסומנים`}>· נבחרו: <strong>{selected.size}</strong></span>
         </div>
         <div className="flex-1" />
         {mode === 'landlord' && (
@@ -315,9 +326,12 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
           <p>אין כרגע נמענים כשירים בתור.</p>
         </div>
       )}
+      {!loading && !error && rows.length > 0 && visibleRows.length === 0 && (
+        <div className="text-center py-8 text-sm text-gray-500">אין נמענים בקטגוריה הזו. <button type="button" onClick={() => setViewFilter('all')} className="text-brand-primary hover:underline">הצג הכל</button></div>
+      )}
 
       <div className="grid grid-cols-1 gap-2">
-        {rows.map(r => (
+        {visibleRows.map(r => (
           <div key={r.id} className="rounded-lg border border-brand-border bg-white">
             <div className="p-3 flex flex-wrap items-center gap-3">
               <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4 shrink-0" />

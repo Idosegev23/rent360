@@ -107,13 +107,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     name: 'record_landlord_intent',
-    description: 'Mark the conversation outcome. Call this once per turn when the landlord state is clear. For callback_later, also set callback_at when the landlord names a time.',
+    description: 'Mark the conversation outcome. Call this once per turn when the landlord state is clear. For callback_later, ALWAYS set callback_at — and include the clock time when they name one.',
     parameters: {
       type: 'object',
       properties: {
         intent: { type: 'string', enum: ['interested', 'not_interested', 'already_rented', 'callback_later', 'price_objection'] },
         notes: { type: 'string' },
-        callback_at: { type: 'string', description: 'ISO date (YYYY-MM-DD) when the landlord asked us to follow up — set this for callback_later when they give a time ("next month", "after the holiday", a date).' },
+        callback_at: { type: 'string', description: 'When to follow up, in Israel local time. Use "YYYY-MM-DD" for a day, or "YYYY-MM-DDTHH:MM" when the landlord names a specific hour (e.g. "תחזרו אליי ב-16:10 היום" → today\'s date + T16:10; "מחר ב-9" → tomorrow + T09:00). Set this whenever they give any time reference.' },
       },
       required: ['intent'],
       additionalProperties: false,

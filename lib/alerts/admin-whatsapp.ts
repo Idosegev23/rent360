@@ -124,8 +124,14 @@ export type CallbackReminderPayload = {
   callbackDate: string // ISO YYYY-MM-DD the landlord asked us to follow up
 }
 
+// Format a callback moment for the alert. Handles both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM"
+// (Israel local) — string-based so there are no timezone surprises. → "10.6.2026" or "10.6.2026 16:10".
 function formatHebDate(iso: string): string {
-  try { return new Date(iso + 'T00:00:00').toLocaleDateString('he-IL') } catch { return iso }
+  const [d, t] = String(iso).split('T')
+  const [y, mo, da] = (d || '').split('-')
+  if (!y || !mo || !da) return iso
+  const dateStr = `${Number(da)}.${Number(mo)}.${y}`
+  return t ? `${dateStr} ${t.slice(0, 5)}` : dateStr
 }
 
 /**
