@@ -15,6 +15,7 @@ import { sendImage } from '../../whatsapp/meta-provider'
 import { recordOptOut } from '../../outreach/suppression'
 import { isInSessionWindow } from '../../whatsapp/window-guard'
 import { notifyAdminsHandoff } from '../../alerts/admin-whatsapp'
+import { syncCallbackEvent } from '@/lib/google/auto-callback-event'
 
 export type ToolContext = {
   orgId: string
@@ -136,7 +137,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     name: 'approve_brokerage',
-    description: 'Call ONLY when the landlord clearly agrees in the conversation to let Rent360 handle the brokerage (e.g. "כן בואו נתחיל", "אני מאשר", "סגור, קדימה"). This moves the property to APPROVED. Provide a clear, readable Hebrew summary of what was agreed and the details collected (NOT json).',
+    description: 'Call ONLY when the landlord clearly agrees in the conversation to let Rent360 handle the brokerage (e.g. "כן בואו נתחיל", "אני מאשר", "סגור, קדימה"). This moves the property to APPROVED. HARD PRECONDITION: you must have ALREADY stated the commission to the landlord, out loud, in this chat — one month\'s rent INCLUDING VAT — VAT is inside the amount, never added on top (or half a month if that was negotiated) — and gotten a "yes" AFTER the fee was said. The system rejects this call (commission_not_disclosed) if no outgoing message in the thread mentioned the fee. Provide a clear, readable Hebrew summary of what was agreed and the details collected, including the commission (NOT json).',
     parameters: {
       type: 'object',
       properties: {
@@ -316,6 +317,16 @@ async function recordIntent(args: { intent: string; notes?: string; callback_at?
     if (args.intent === 'already_rented') upd.is_active = false
     await sb.from('properties').update(upd).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
   }
+
+  // Best-effort: mirror a scheduled callback into the responsible user's Google Calendar.
+  if (args.intent === 'callback_later' && args.callback_at) {
+    await syncCallbackEvent({
+      orgId: ctx.orgId,
+      threadId: ctx.threadId,
+      propertyId: ctx.propertyId,
+      callbackAt: args.callback_at,
+    })
+  }
   return { ok: true, intent: args.intent }
 }
 
@@ -341,6 +352,28 @@ async function updatePropertyField(args: { field: string; value: unknown }, ctx:
   const { error } = await sb.from('properties').update(update).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
   if (error) return { ok: false, error: error.message }
   return { ok: true, field: args.field }
+}
+
+/**
+ * Did we actually tell the landlord the commission, out loud, in this thread?
+ * A property must NEVER move to APPROVED before the owner heard what the service costs.
+ * We scan OUTGOING messages only (AI or human takeover) for an explicit fee figure:
+ *   - "חצי חודש" (the negotiated floor), OR
+ *   - a month's-rent fee paired with מע״מ or the word עמלה.
+ * Plain "חודש שכירות" alone is deliberately NOT enough — it also appears in the value
+ * pitch ("every empty month is a month's rent lost"), which is not the fee.
+ */
+function commissionWasDisclosed(outgoingBodies: string[]): boolean {
+  return outgoingBodies.some(raw => {
+    const t = String(raw).replace(/["'״׳”“]/g, '') // normalize quotes: מע"מ / מע״מ → מעמ
+    const hasVat = /מעמ/.test(t)
+    const hasFeeWord = /עמלה/.test(t)
+    const hasMonthRent = /חודש\s*שכירות/.test(t)
+    const hasHalfMonth = /חצי\s*חודש/.test(t)
+    return hasHalfMonth
+      || (hasMonthRent && (hasVat || hasFeeWord))
+      || (hasFeeWord && hasVat)
+  })
 }
 
 /**
@@ -377,6 +410,20 @@ async function approveBrokerage(args: { summary?: string }, ctx: ToolContext) {
   if (existing) {
     await sb.from('approved_properties').update({ approval_summary: summary, conversation_transcript: transcript }).eq('id', existing.id)
     return { ok: true, already_approved: true }
+  }
+
+  // HARD GATE — the owner must have heard the price before we move them to APPROVED.
+  // The system prompt asks for a recap+fee before closing, but a soft instruction gets
+  // skipped (it was, in production). This guarantees no approval without a stated fee.
+  const outgoing = (msgs || [])
+    .filter(m => m.direction !== 'in' && m.body && String(m.body).trim())
+    .map(m => String(m.body))
+  if (!commissionWasDisclosed(outgoing)) {
+    return {
+      ok: false,
+      error: 'commission_not_disclosed',
+      instruction: 'אסור לאשר תיווך לפני שמסרת לבעל הנכס את העמלה במפורש בשיחה. קודם תגיד לו בבירור מה העמלה — חודש שכירות אחד כולל מע״מ (המע״מ בתוך הסכום, לא בנוסף; או חצי חודש אם זה מה שסוכם), עשה חזרה-ואישור קצרה ("אז סיכמנו ... והעמלה חודש שכירות אחד כולל מע״מ, מאשר שנתחיל?"), וחכה ל"כן" מפורש שניתן *אחרי* שהעמלה נאמרה. רק אז קרא שוב ל-approve_brokerage.',
+    }
   }
 
   // Insert with the full payload; fall back to core columns if the new columns aren't in
