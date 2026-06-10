@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
-import { notifyAdminsCallbackReminder } from '../../../../../lib/alerts/admin-whatsapp'
+import { notifyAdminsCallbackReminder, notifyAdminsPropertyRecheck } from '../../../../../lib/alerts/admin-whatsapp'
 
 /**
  * Daily cron: find landlord conversations whose requested callback date has arrived
@@ -74,7 +74,37 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, reminded, errors })
+  // --- Second pass: ~1-year recheck reminders for properties marked "irrelevant" ---
+  const todayDate = israelNow.slice(0, 10)
+  let rechecks = 0
+  const { data: dueRechecks } = await sb
+    .from('approved_properties')
+    .select('id, org_id, property_id, irrelevant_at, irrelevant_reason, recheck_at')
+    .not('irrelevant_at', 'is', null)
+    .is('recheck_reminded_at', null)
+    .lte('recheck_at', todayDate)
+    .limit(100)
+  for (const ap of dueRechecks || []) {
+    let propertyTitle = 'נכס'
+    const { data: p } = await sb.from('properties').select('title, street, city').eq('id', ap.property_id).maybeSingle()
+    if (p) propertyTitle = [(p as any).street, (p as any).city].filter(Boolean).join(', ') || (p as any).title || propertyTitle
+    try {
+      const res = await notifyAdminsPropertyRecheck({
+        propertyId: ap.property_id, propertyTitle,
+        markedAt: String(ap.irrelevant_at), reason: ap.irrelevant_reason || 'לא צוין',
+      })
+      if (res.sent > 0) {
+        rechecks++
+        await sb.from('approved_properties').update({ recheck_reminded_at: new Date().toISOString() }).eq('id', ap.id)
+      } else if (res.errors.length) {
+        errors.push({ threadId: `recheck:${ap.property_id}`, error: res.errors[0]!.error })
+      }
+    } catch (err) {
+      errors.push({ threadId: `recheck:${ap.property_id}`, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, errors })
 }
 
 export async function GET(req: NextRequest) { return run(req) }

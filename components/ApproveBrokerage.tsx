@@ -10,6 +10,9 @@ type Status = {
   approval_summary?: string | null
   conversation_transcript?: string | null
   approved_by_name?: string | null
+  irrelevant_at?: string | null
+  irrelevant_reason?: string | null
+  recheck_at?: string | null
 }
 
 const methodLabel = (m?: string | null) =>
@@ -55,6 +58,31 @@ export default function ApproveBrokerage({ propertyId }: { propertyId: string })
       if (!r.ok) throw new Error('failed')
       await load()
     } catch { setErr('הביטול נכשל') } finally { setBusy(false) }
+  }
+
+  async function setIrrelevant() {
+    const reason = window.prompt('למה הנכס לא רלוונטי? (למשל: הושכר שלא דרכנו). אפשר להשאיר ריק:')
+    if (reason === null) return // cancelled
+    setBusy(true); setErr(null)
+    try {
+      const r = await fetch(`/api/v1/properties/${propertyId}/approve`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ irrelevant: true, reason }),
+      })
+      const d = await r.json()
+      if (!r.ok || d.error) throw new Error(d?.error?.message || 'failed')
+      await load()
+    } catch (e) { setErr(e instanceof Error ? e.message : 'הסימון נכשל') } finally { setBusy(false) }
+  }
+  async function setRelevant() {
+    if (busy) return
+    setBusy(true); setErr(null)
+    try {
+      const r = await fetch(`/api/v1/properties/${propertyId}/approve`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ irrelevant: false }),
+      })
+      if (!r.ok) throw new Error('failed')
+      await load()
+    } catch { setErr('נכשל') } finally { setBusy(false) }
   }
 
   if (!status) return null
@@ -115,7 +143,18 @@ export default function ApproveBrokerage({ propertyId }: { propertyId: string })
           )}
         </div>
       )}
-      <button onClick={revoke} disabled={busy} className="self-start text-xs text-gray-400 hover:text-red-600">בטל אישור</button>
+      {status.irrelevant_at ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <div className="font-semibold">מסומן כלא רלוונטי{status.recheck_at ? ` · תזכורת לבדיקה חוזרת ב-${fmt(status.recheck_at)}` : ''}</div>
+          {status.irrelevant_reason && <div className="mt-0.5">סיבה: {status.irrelevant_reason}</div>}
+          <button onClick={setRelevant} disabled={busy} className="mt-1 underline hover:text-amber-900">החזר לרלוונטי</button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <button onClick={revoke} disabled={busy} className="text-xs text-gray-400 hover:text-red-600">בטל אישור</button>
+          <button onClick={setIrrelevant} disabled={busy} className="text-xs text-gray-400 hover:text-amber-700">סמן כלא רלוונטי</button>
+        </div>
+      )}
       {err && <span className="text-xs text-red-600">{err}</span>}
     </div>
   )

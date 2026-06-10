@@ -45,6 +45,7 @@ interface ModernPropertiesPageProps {
   showApproveButton?: boolean;
   showDeleteButton?: boolean;
   showOutreachButton?: boolean;
+  extraParams?: Record<string, string>;
 }
 
 interface FilterState {
@@ -65,7 +66,8 @@ export default function ModernPropertiesPage({
   pageTitle = 'נכסים',
   showApproveButton = false,
   showDeleteButton = false,
-  showOutreachButton = false
+  showOutreachButton = false,
+  extraParams,
 }: ModernPropertiesPageProps) {
   const [properties, setProperties] = useState<ExtendedProperty[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -112,6 +114,7 @@ export default function ModernPropertiesPage({
       if (currentFilters.isActive) searchParams.set('is_active', currentFilters.isActive);
       if (currentFilters.amenities.length > 0) searchParams.set('amenities', currentFilters.amenities.join(','));
       if (currentFilters.isBrokerage) searchParams.set('is_brokerage', currentFilters.isBrokerage);
+      if (extraParams) for (const [k, v] of Object.entries(extraParams)) searchParams.set(k, v);
 
       const response = await fetch(`${apiEndpoint}?${searchParams}`);
       if (!response.ok) throw new Error('Failed to fetch properties');

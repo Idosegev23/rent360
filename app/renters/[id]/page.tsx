@@ -105,6 +105,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
   const [recomputing, setRecomputing] = useState(false)
   const [sendingInvite, setSendingInvite] = useState(false)
   const [sendingTop, setSendingTop] = useState(false)
+  const [showLowMatches, setShowLowMatches] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -196,8 +197,12 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
 
   const nonDqMatches = matches.filter(m => !m.is_disqualified)
   const dqMatches = matches.filter(m => m.is_disqualified)
+  // Show strong matches (90%+) by default; weaker + disqualified hide behind an accordion.
+  const strongMatches = nonDqMatches.filter(m => (m.score || 0) >= 90)
+  const lowMatches = nonDqMatches.filter(m => (m.score || 0) < 90)
+  const hiddenCount = lowMatches.length + dqMatches.length
   // Top matches eligible for the one-click send: 90%+, not yet sent to this renter.
-  const topEligible = nonDqMatches.filter(m => (m.score || 0) >= 90 && !m.renter_notified_at).slice(0, 5)
+  const topEligible = strongMatches.filter(m => !m.renter_notified_at).slice(0, 5)
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 pb-32">
@@ -278,7 +283,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
 
       {/* Matches */}
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold text-lg">התאמות לנכסים ({nonDqMatches.length} מתאימים{dqMatches.length ? ` + ${dqMatches.length} פסולים` : ''})</h2>
+        <h2 className="font-semibold text-lg">התאמות מובילות ({strongMatches.length} ב-90%+{topEligible.length < strongMatches.length ? `, ${strongMatches.length - topEligible.length} כבר נשלחו` : ''})</h2>
         {topEligible.length > 0 && (
           <button
             onClick={sendTop5}
@@ -299,9 +304,34 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
         </div>
       )}
 
+      {matches.length > 0 && strongMatches.length === 0 && (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-4 text-center text-sm text-gray-500 mb-2">
+          אין התאמות מעל 90%. אפשר לפתוח את ההתאמות הנמוכות יותר למטה.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-2">
-        {[...nonDqMatches, ...dqMatches].map(m => <MatchRow key={m.id} match={m} />)}
+        {strongMatches.map(m => <MatchRow key={m.id} match={m} />)}
       </div>
+
+      {hiddenCount > 0 && (
+        <div className="mt-3">
+          <button
+            onClick={() => setShowLowMatches(s => !s)}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            {showLowMatches ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            {showLowMatches
+              ? 'הסתר התאמות נמוכות יותר'
+              : `הצג ${hiddenCount} התאמות נוספות${lowMatches.length ? ` (מתחת ל-90%)` : ''}${dqMatches.length ? ` + ${dqMatches.length} פסולות` : ''}`}
+          </button>
+          {showLowMatches && (
+            <div className="grid grid-cols-1 gap-2 mt-2">
+              {[...lowMatches, ...dqMatches].map(m => <MatchRow key={m.id} match={m} />)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

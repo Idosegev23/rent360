@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Send,
   ListChecks,
+  Archive,
 } from 'lucide-react'
 
 type NavLink = {
@@ -25,6 +26,7 @@ const main: NavLink[] = [
   { href: '/action',               label: 'מה לעשות',        Icon: ListChecks },
   { href: '/properties',           label: 'נכסים',           Icon: Building2 },
   { href: '/approved-properties',  label: 'מאושרים',        Icon: CheckCircle2 },
+  { href: '/approved-properties/irrelevant', label: 'לא רלוונטיים', Icon: Archive },
   { href: '/renters',              label: 'שוכרים',          Icon: Users },
   { href: '/outreach',             label: 'שליחה',           Icon: Send },
   { href: '/inbox',                label: 'שיחות',           Icon: Inbox },

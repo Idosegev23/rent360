@@ -20,6 +20,9 @@ const RENTER_INTEREST_TEMPLATE = process.env.RENTER_INTEREST_TEMPLATE || 'renter
 // Callback reminder. Dedicated template once Meta approves it; until then falls back to the
 // (already-approved) handoff template with a reminder reason — same /inbox/{{1}} button.
 const CALLBACK_REMINDER_TEMPLATE = process.env.CALLBACK_REMINDER_TEMPLATE || 'callback_reminder_v1'
+// Yearly recheck reminder for a property marked "irrelevant". Gated on approval (rechecks are ~1
+// year out, so there's ample time for Meta to approve — no fallback needed).
+const PROPERTY_RECHECK_TEMPLATE = process.env.PROPERTY_RECHECK_TEMPLATE || 'property_recheck_reminder_v1'
 
 export type AdminHandoffPayload = {
   threadId: string
@@ -175,6 +178,65 @@ export async function notifyAdminsCallbackReminder(p: CallbackReminderPayload): 
             org_id: orgId, thread_id: adminThread.id, channel: 'whatsapp', direction: 'out', body: null,
             status: 'sent', external_id: r.messageId, meta_message_type: 'template',
             template_name: templateName, template_params: { admin_phone: ph, kind: 'callback_reminder', ...p },
+            metadata: { admin_alert: true },
+          })
+        }
+      }
+    } catch (err) {
+      result.failed++
+      result.errors.push({ phone: ph, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  return result
+}
+
+export type PropertyRecheckPayload = {
+  propertyId: string
+  propertyTitle: string
+  markedAt: string // ISO timestamp the property was marked irrelevant
+  reason: string
+}
+
+/**
+ * Yearly "go check this property" reminder to שי + זיו for a property marked irrelevant ~1 year
+ * ago. No-op (with an error note) until property_recheck_reminder_v1 is approved at Meta.
+ */
+export async function notifyAdminsPropertyRecheck(p: PropertyRecheckPayload): Promise<AdminAlertResult> {
+  const admins = parsePhoneList(process.env.ADMIN_ALERT_PHONES)
+  if (admins.length === 0) return { attempted: 0, sent: 0, failed: 0, errors: [] }
+  const sb = supabaseService()
+
+  const { data: tpl } = await sb.from('whatsapp_templates').select('status').eq('name', PROPERTY_RECHECK_TEMPLATE).maybeSingle()
+  if (tpl?.status !== 'approved') {
+    return { attempted: admins.length, sent: 0, failed: admins.length, errors: [{ phone: '*', error: `template ${PROPERTY_RECHECK_TEMPLATE} not approved` }] }
+  }
+
+  const components = [
+    {
+      type: 'body' as const,
+      parameters: [
+        { type: 'text' as const, text: truncate(p.propertyTitle || 'נכס', 60) },
+        { type: 'text' as const, text: formatHebDate(String(p.markedAt).slice(0, 10)) },
+        { type: 'text' as const, text: truncate(p.reason || 'לא צוין', 60) },
+      ],
+    },
+    { type: 'button' as const, sub_type: 'url' as const, index: 0, parameters: [{ type: 'text' as const, text: p.propertyId }] },
+  ]
+
+  const result: AdminAlertResult = { attempted: admins.length, sent: 0, failed: 0, errors: [] }
+  const { data: org } = await sb.from('organizations').select('id').limit(1).single()
+  const orgId = org?.id
+  for (const ph of admins) {
+    try {
+      const r = await sendTemplate({ to: ph, name: PROPERTY_RECHECK_TEMPLATE, language: 'he', components })
+      result.sent++
+      if (orgId) {
+        const adminThread = await upsertAdminThread(orgId, ph)
+        if (adminThread?.id) {
+          await sb.from('messages').insert({
+            org_id: orgId, thread_id: adminThread.id, channel: 'whatsapp', direction: 'out', body: null,
+            status: 'sent', external_id: r.messageId, meta_message_type: 'template',
+            template_name: PROPERTY_RECHECK_TEMPLATE, template_params: { admin_phone: ph, kind: 'property_recheck', ...p },
             metadata: { admin_alert: true },
           })
         }

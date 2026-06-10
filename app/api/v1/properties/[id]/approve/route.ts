@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const { data: ap } = await sb
     .from('approved_properties')
-    .select('approved_at, approval_method, approval_summary, conversation_transcript, approved_by')
+    .select('approved_at, approval_method, approval_summary, conversation_transcript, approved_by, irrelevant_at, irrelevant_reason, recheck_at')
     .eq('org_id', user.org_id)
     .eq('property_id', params.id)
     .maybeSingle()
@@ -31,6 +31,42 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     approvedByName = u?.name ?? null
   }
   return NextResponse.json({ approved: true, ...ap, approved_by_name: approvedByName })
+}
+
+// Mark an approved property "irrelevant" (e.g. rented NOT via us): it leaves the main approved
+// list, moves to the irrelevant list, and gets a ~1-year recheck reminder. { irrelevant:false } reverts.
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const cookie = cookies().get('sb-access-token')?.value
+  const userId = getUserIdFromSupabaseCookie(cookie)
+  if (!userId) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
+  const sb = supabaseService()
+  const { data: user } = await sb.from('users').select('org_id').eq('id', userId).maybeSingle()
+  if (!user) return NextResponse.json({ error: { code: 'NO_USER' } }, { status: 401 })
+
+  let body: { irrelevant?: unknown; reason?: unknown } = {}
+  try { body = await req.json() } catch {/* empty */}
+  const markIrrelevant = body.irrelevant !== false // default to marking irrelevant
+  const reason = String(body.reason || '').slice(0, 300) || null
+
+  const { data: ap } = await sb.from('approved_properties').select('id').eq('org_id', user.org_id).eq('property_id', params.id).maybeSingle()
+  if (!ap) return NextResponse.json({ error: { code: 'NOT_APPROVED', message: 'הנכס אינו ברשימת המאושרים' } }, { status: 404 })
+
+  if (markIrrelevant) {
+    const now = new Date()
+    const recheck = new Date(now.getTime())
+    recheck.setFullYear(recheck.getFullYear() + 1)
+    const recheckDate = recheck.toISOString().slice(0, 10)
+    const { error } = await sb.from('approved_properties').update({
+      irrelevant_at: now.toISOString(), irrelevant_reason: reason, recheck_at: recheckDate, recheck_reminded_at: null,
+    }).eq('id', ap.id)
+    if (error) return NextResponse.json({ error: { code: 'UPDATE_FAILED', message: error.message } }, { status: 500 })
+    return NextResponse.json({ ok: true, status: 'irrelevant', recheck_at: recheckDate })
+  }
+  const { error } = await sb.from('approved_properties').update({
+    irrelevant_at: null, irrelevant_reason: null, recheck_at: null, recheck_reminded_at: null,
+  }).eq('id', ap.id)
+  if (error) return NextResponse.json({ error: { code: 'UPDATE_FAILED', message: error.message } }, { status: 500 })
+  return NextResponse.json({ ok: true, status: 'relevant' })
 }
 
 // Manual approval flow: agent confirms brokerage with the owner over the phone

@@ -30,11 +30,17 @@ export async function GET(req: NextRequest){
   const orgId = user.org_id
   const offset = (page - 1) * limit
   
-  // Step 1: Get approved property IDs with pagination and count
+  // Step 1: Get approved property IDs with pagination and count.
+  // Default list excludes "irrelevant" approvals; ?irrelevant=1 returns only those.
+  const wantIrrelevant = url.searchParams.get('irrelevant') === '1'
   let approvedQuery = sb
     .from('approved_properties')
     .select('*', { count: 'exact' })
     .eq('org_id', orgId)
+  approvedQuery = wantIrrelevant
+    ? approvedQuery.not('irrelevant_at', 'is', null)
+    : approvedQuery.is('irrelevant_at', null)
+  approvedQuery = approvedQuery
     .order('approved_at', { ascending: false })
     .range(offset, offset + limit - 1)
   
@@ -170,6 +176,9 @@ export async function GET(req: NextRequest){
         approved_by_name: approval.approved_by ? approverNameById.get(approval.approved_by) || null : null,
         approval_summary: (approval as any).approval_summary || null,
         approval_transcript: (approval as any).conversation_transcript || null,
+        irrelevant_at: (approval as any).irrelevant_at || null,
+        irrelevant_reason: (approval as any).irrelevant_reason || null,
+        recheck_at: (approval as any).recheck_at || null,
         matches_count: agg.count,
         matches_top_score: agg.topScore,
       }
