@@ -42,6 +42,27 @@ export async function createCalendarEvent(args: {
   }
 }
 
+export async function cancelCalendarEvent(args: {
+  orgId: string
+  userId: string
+  eventId: string
+}): Promise<void> {
+  const auth = await getGoogleClientForUser(args.orgId, args.userId)
+  const calendar = google.calendar({ version: 'v3', auth })
+  try {
+    await calendar.events.delete({ calendarId: 'primary', eventId: args.eventId })
+  } catch (err) {
+    if (isGoogleAuthError(err)) {
+      await invalidateConnection(args.orgId, args.userId)
+      throw new GoogleNotConnectedError()
+    }
+    // 404/410 = already gone; treat as success.
+    const status = (err as { code?: number; response?: { status?: number } })?.code ?? (err as { response?: { status?: number } })?.response?.status
+    if (status === 404 || status === 410) return
+    throw err
+  }
+}
+
 export async function updateCalendarEvent(args: {
   orgId: string
   userId: string

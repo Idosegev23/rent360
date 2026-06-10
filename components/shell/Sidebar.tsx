@@ -15,6 +15,7 @@ import {
   UserCog,
   LogOut,
   CheckSquare,
+  CalendarDays,
 } from 'lucide-react'
 
 type Me = { name: string | null; email: string | null; google: { connected: boolean; email: string | null } }
@@ -30,6 +31,7 @@ const main: NavLink[] = [
   { href: '/dashboard',            label: 'דשבורד',         Icon: LayoutDashboard },
   { href: '/action',               label: 'מה לעשות',        Icon: ListChecks },
   { href: '/tasks',                label: 'משימות',          Icon: CheckSquare },
+  { href: '/meetings',             label: 'פגישות',          Icon: CalendarDays },
   { href: '/properties',           label: 'נכסים',           Icon: Building2 },
   { href: '/approved-properties',  label: 'מאושרים',        Icon: CheckCircle2 },
   { href: '/approved-properties/irrelevant', label: 'לא רלוונטיים', Icon: Archive },
