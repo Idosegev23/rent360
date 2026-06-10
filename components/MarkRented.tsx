@@ -89,7 +89,7 @@ export default function MarkRented({ mode, id, onDone }: { mode: 'property' | 'r
             <input type="number" inputMode="numeric" dir="ltr" value={rent} onChange={e => setRent(e.target.value)} placeholder="שכ״ד חודשי ₪" className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
             <input type="date" value={startedAt} onChange={e => setStartedAt(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" title="תאריך כניסה" />
           </div>
-          <div className="text-[11px] text-gray-500 mb-2">דמי התיווך יחושבו לפי חודש שכירות{rent ? ` — ₪${Number(rent).toLocaleString('he-IL')}` : ''}. ניתן לעדכן ב"עמלות".</div>
+          <div className="text-[11px] text-gray-500 mb-2">דמי התיווך יחושבו לפי חודש שכירות{rent ? ` — ₪${Number(rent).toLocaleString('he-IL')}` : ''}. ניתן לעדכן במסך עמלות.</div>
           <button type="button" onClick={submit} disabled={!picked || saving}
             className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} סגירת עסקה ושיוך שוכר
