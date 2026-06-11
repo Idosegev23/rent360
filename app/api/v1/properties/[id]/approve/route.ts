@@ -83,6 +83,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const orgId = user.org_id
   const propertyId = params.id
 
+  // Approval REQUIRES: how viewings are coordinated + which agent owns the property.
+  let body: { scheduling_mode?: unknown; assigned_agent_user_id?: unknown } = {}
+  try { body = await req.json() } catch {/* empty */}
+  const schedulingMode = String(body.scheduling_mode || '')
+  const agentId = body.assigned_agent_user_id ? String(body.assigned_agent_user_id) : ''
+  if (schedulingMode !== 'self_access' && schedulingMode !== 'requires_owner') {
+    return NextResponse.json({ error: { code: 'SCHEDULING_MODE_REQUIRED', message: 'בחרו מצב תיאום פגישות (גישה עצמאית / מצריך בעל נכס)' } }, { status: 400 })
+  }
+  if (!agentId) {
+    return NextResponse.json({ error: { code: 'AGENT_REQUIRED', message: 'יש לשייך את הנכס לסוכן' } }, { status: 400 })
+  }
+  const { data: agent } = await sb.from('users').select('id, is_active, handles_properties').eq('id', agentId).eq('org_id', orgId).maybeSingle()
+  if (!agent || agent.is_active === false || !agent.handles_properties) {
+    return NextResponse.json({ error: { code: 'BAD_AGENT', message: 'סוכן לא תקין' } }, { status: 400 })
+  }
+
   const { data: property } = await sb
     .from('properties')
     .select('id, city, neighborhood, street, floor')
@@ -90,6 +106,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .eq('org_id', orgId)
     .maybeSingle()
   if (!property) return NextResponse.json({ error: { code: 'NOT_FOUND' } }, { status: 404 })
+
+  // Persist the scheduling mode + agent assignment on the property.
+  await sb.from('properties').update({ scheduling_mode: schedulingMode, assigned_agent_user_id: agentId }).eq('id', propertyId).eq('org_id', orgId)
 
   // Clean up scraper artifacts before the match engine sees it:
   // "חיפה - מגורים" → "חיפה", and split the concatenated

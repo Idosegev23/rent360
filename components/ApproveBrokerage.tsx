@@ -25,12 +25,23 @@ function fmt(d?: string | null) {
 
 /** "אשר תיווך" on the property page — POSTs the manual approval, or shows the existing approval
  *  (incl. the conversational summary the bot captured) with an option to revoke. */
+type Agent = { id: string; name: string | null }
+
 export default function ApproveBrokerage({ propertyId }: { propertyId: string }) {
   const [status, setStatus] = useState<Status | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [mode, setMode] = useState<'self_access' | 'requires_owner' | ''>('')
+  const [agentId, setAgentId] = useState('')
+
+  useEffect(() => {
+    fetch('/api/v1/team').then(r => r.json())
+      .then(d => setAgents((d.members || []).filter((m: any) => m.handles_properties).map((m: any) => ({ id: m.id, name: m.name }))))
+      .catch(() => {})
+  }, [])
 
   async function load() {
     try {
@@ -41,10 +52,13 @@ export default function ApproveBrokerage({ propertyId }: { propertyId: string })
   useEffect(() => { load() }, [propertyId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function approve() {
-    if (busy) return
+    if (busy || !mode || !agentId) return
     setBusy(true); setErr(null)
     try {
-      const r = await fetch(`/api/v1/properties/${propertyId}/approve`, { method: 'POST' })
+      const r = await fetch(`/api/v1/properties/${propertyId}/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduling_mode: mode, assigned_agent_user_id: agentId }),
+      })
       const d = await r.json()
       if (!r.ok || d.error) throw new Error(d?.error?.message || 'failed')
       await load()
@@ -100,17 +114,39 @@ export default function ApproveBrokerage({ propertyId }: { propertyId: string })
             <span>אשר תיווך</span>
           </button>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2">
-            <span className="text-sm font-medium text-emerald-800">לאשר תיווך לנכס?</span>
-            <button
-              onClick={approve}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              <span>כן, אשר</span>
-            </button>
-            <button onClick={() => setConfirming(false)} disabled={busy} className="text-sm text-gray-500 hover:text-gray-700">ביטול</button>
+          <div className="space-y-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-3" style={{ minWidth: 280 }}>
+            <div className="text-sm font-semibold text-emerald-900">אישור תיווך</div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-gray-700">תיאום פגישות:</div>
+              <div className="flex flex-col gap-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="mode" checked={mode === 'self_access'} onChange={() => setMode('self_access')} />
+                  יש לנו גישה לנכס (מפתח/זמינות מלאה) — תיאום ללא בעל הנכס
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="mode" checked={mode === 'requires_owner'} onChange={() => setMode('requires_owner')} />
+                  בעל הבית בתמונה — מצריך אישורו לכל צפייה
+                </label>
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-gray-700">סוכן מטפל:</div>
+              <select value={agentId} onChange={e => setAgentId(e.target.value)} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                <option value="">בחר/י סוכן…</option>
+                {agents.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={approve}
+                disabled={busy || !mode || !agentId}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                <span>אשר תיווך</span>
+              </button>
+              <button onClick={() => setConfirming(false)} disabled={busy} className="text-sm text-gray-500 hover:text-gray-700">ביטול</button>
+            </div>
           </div>
         )}
         {err && <span className="text-xs text-red-600">{err}</span>}
