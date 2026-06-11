@@ -122,6 +122,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
   const [item, setItem] = useState<ExtendedProperty | null>(null)
   const [loading, setLoading] = useState(true)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [tab, setTab] = useState<'overview' | 'matches' | 'related' | 'docs' | 'activity'>('overview')
   const router = useRouter()
 
   useEffect(() => {
@@ -182,64 +183,55 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         </button>
       </div>
 
-      {/* Header Section */}
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl font-bold leading-tight text-gray-900">{item.title}</h1>
-          <div className="flex items-start gap-2">
-            <ApproveBrokerage propertyId={item.id} />
-            <button
-              onClick={() => setShareDialogOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors shadow-sm"
-            >
-              <Share2 className="h-4 w-4" />
-              <span>שתף נכס</span>
-            </button>
-            {item.status && (
-              <div className="inline-block rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-800 shadow-sm">
-                {item.status}
+      {/* HERO */}
+      <div className="surface-card overflow-hidden">
+        {Array.isArray(item.images) && item.images.length > 0 && (
+          <PropertyImageGallery images={item.images} title={item.title} />
+        )}
+        <div className="p-5 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="font-display text-2xl font-bold leading-tight text-gray-900">{item.title}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+                <span className="num text-xl font-bold text-brand-primary">₪{Number(item.price || 0).toLocaleString('he-IL')}</span>
+                <span className="text-gray-400">לחודש</span>
+                {item.rooms != null && <span>· {item.rooms} חד׳</span>}
+                {item.sqm != null && <span>· {item.sqm} מ״ר</span>}
+                {(item.city || item.neighborhood) && <span className="inline-flex items-center gap-1">· <MapPin className="h-3.5 w-3.5" />{item.city}{item.neighborhood ? ` · ${item.neighborhood}` : ''}</span>}
               </div>
-            )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <ApproveBrokerage propertyId={item.id} />
+              <button onClick={() => setShareDialogOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600">
+                <Share2 className="h-4 w-4" /> שתף
+              </button>
+            </div>
           </div>
-        </div>
-        
-        {/* Quick Info Bar */}
-        <div className="flex flex-wrap items-center gap-6 text-lg">
-          <div className="flex items-center gap-2">
-            <span className="text-3xl font-bold text-brand-primary">₪{Number(item.price || 0).toLocaleString()}</span>
-            <span className="text-gray-500">לחודש</span>
-          </div>
-          {item.rooms && (
-            <div className="flex items-center gap-1 text-gray-700">
-              <span className="font-semibold">{item.rooms}</span>
-              <span>חדרים</span>
-            </div>
-          )}
-          {item.sqm && (
-            <div className="flex items-center gap-1 text-gray-700">
-              <span className="font-semibold">{item.sqm}</span>
-              <span>מ״ר</span>
-            </div>
-          )}
-          {(item.city || item.neighborhood) && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <MapPin className="h-5 w-5" />
-              <span>{item.city}{item.neighborhood && ` · ${item.neighborhood}`}</span>
-            </div>
-          )}
-        </div>
 
-        <SentMatchBadge propertyId={item.id} />
-        <RentStatus propertyId={item.id} />
-        <AssignAgent propertyId={item.id} current={(item as any).assigned_agent_user_id} />
+          <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+            <AssignAgent propertyId={item.id} current={(item as any).assigned_agent_user_id} />
+            <SentMatchBadge propertyId={item.id} />
+            <RentStatus propertyId={item.id} />
+            {item.status && <span className="pill pill-green">{item.status}</span>}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <ScheduleMeetingButton propertyId={item.id} label="קבע פגישה" />
+            <AddTaskButton entityType="property" entityId={params.id} label="הוסף משימה" />
+            <MarkRented mode="property" id={item.id} />
+          </div>
+        </div>
       </div>
 
-      {/* Image Gallery */}
-      {Array.isArray(item.images) && item.images.length > 0 && (
-        <PropertyImageGallery images={item.images} title={item.title} />
-      )}
+      {/* TABS */}
+      <div className="seg" role="tablist" style={{ overflowX: 'auto' }}>
+        {([['overview', 'סקירה'], ['matches', 'התאמות'], ['related', 'קשור'], ['docs', 'מסמכים'], ['activity', 'פעילות']] as const).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setTab(k)} className={tab === k ? 'active' : ''}>{label}</button>
+        ))}
+      </div>
 
-      {/* Property Details Grid */}
+      {/* OVERVIEW */}
+      {tab === 'overview' && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Main Details */}
         <div className="lg:col-span-2 space-y-5">
@@ -296,7 +288,6 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                 <FlagToggle propertyId={item.id} amenity="garden" label="חצר / גינה" initial={!!(item.amenities as any)?.garden} />
               </div>
               <p className="text-xs text-gray-500">משפיע על התאמות: «מחולקת» פוסל שוכרים שביקשו דירה שלמה; «חצר» מתאים למי שביקש/ה חצר.</p>
-              <div className="pt-2"><MarkRented mode="property" id={item.id} /></div>
             </div>
           </div>
 
@@ -309,9 +300,6 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           )}
-
-          {/* Matching Renters */}
-          <MatchingRentersSection propertyId={params.id} />
 
           {/* Timeline */}
           {item.timeline && item.timeline.length > 0 && (
@@ -407,23 +395,31 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      {/* Share Dialog */}
+      )}
+
+      {/* MATCHES */}
+      {tab === 'matches' && <MatchingRentersSection propertyId={params.id} />}
+
+      {/* RELATED */}
+      {tab === 'related' && (
+        <div className="grid gap-3 md:grid-cols-2 items-start">
+          <RelatedItems entityType="property" entityId={params.id} />
+          <OwnerPortfolio propertyId={item.id} phone={(item as any).contact_phone} ownerName={item.contact_name} />
+        </div>
+      )}
+
+      {/* DOCS */}
+      {tab === 'docs' && <DocumentsPanel entityType="property" entityId={params.id} />}
+
+      {/* ACTIVITY */}
+      {tab === 'activity' && <ActivityTimeline entityType="property" entityId={params.id} />}
+
       <SharePropertyDialog
         propertyId={params.id}
         propertyTitle={item.title}
         isOpen={shareDialogOpen}
         onClose={() => setShareDialogOpen(false)}
       />
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <ScheduleMeetingButton propertyId={item.id} label="קבע פגישה על הנכס" />
-        <AddTaskButton entityType="property" entityId={params.id} label="הוסף משימה לנכס" />
-      </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-2 items-start">
-        <RelatedItems entityType="property" entityId={params.id} />
-        <OwnerPortfolio propertyId={item.id} phone={(item as any).contact_phone} ownerName={item.contact_name} />
-        <DocumentsPanel entityType="property" entityId={params.id} />
-        <ActivityTimeline entityType="property" entityId={params.id} />
-      </div>
     </main>
   )
 }
