@@ -10,11 +10,12 @@ const PatchBody = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
   due_at: z.string().datetime().nullable().optional(),
   remind_at: z.string().datetime().nullable().optional(),
-  recurrence: z.enum(['daily', 'weekdays', 'weekly']).nullable().optional(),
+  recurrence: z.enum(['daily', 'weekdays', 'weekly', 'monthly']).nullable().optional(),
 })
 
 function nextOccurrence(base: Date, rec: string): Date {
   const d = new Date(base)
+  if (rec === 'monthly') { d.setMonth(d.getMonth() + 1); return d }
   if (rec === 'weekly') { d.setDate(d.getDate() + 7); return d }
   d.setDate(d.getDate() + 1)
   if (rec === 'weekdays') while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1) // skip Fri/Sat

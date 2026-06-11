@@ -53,7 +53,7 @@ const CreateBody = z.object({
   remind_at: z.string().datetime().nullable().optional(),
   entity_type: z.enum(['property', 'renter', 'thread', 'tenancy', 'meeting', 'contact']).nullable().optional(),
   entity_id: z.string().uuid().nullable().optional(),
-  recurrence: z.enum(['daily', 'weekdays', 'weekly']).nullable().optional(),
+  recurrence: z.enum(['daily', 'weekdays', 'weekly', 'monthly']).nullable().optional(),
 })
 
 export async function POST(req: NextRequest) {

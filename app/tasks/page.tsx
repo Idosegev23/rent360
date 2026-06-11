@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, Plus, Check, Clock, User as UserIcon, Pencil, Repeat, X } from 'lucide-react'
 import { DateTimeField } from '@/components/ui/DateTimePicker'
 
-type Recurrence = 'daily' | 'weekdays' | 'weekly' | ''
+type Recurrence = 'daily' | 'weekdays' | 'weekly' | 'monthly' | ''
 type Task = {
   id: string
   title: string
@@ -18,7 +18,7 @@ type Task = {
 }
 type Member = { id: string; name: string | null }
 
-const RECUR: Record<string, string> = { daily: 'כל יום', weekdays: 'ימי חול', weekly: 'כל שבוע' }
+const RECUR: Record<string, string> = { daily: 'כל יום', weekdays: 'ימי חול', weekly: 'כל שבוע', monthly: 'כל חודש' }
 const PRIORITIES: Array<{ k: Task['priority']; label: string }> = [
   { k: 'normal', label: 'רגיל' }, { k: 'low', label: 'נמוך' }, { k: 'high', label: 'גבוה' }, { k: 'urgent', label: 'דחוף' },
 ]
@@ -151,6 +151,7 @@ export default function TasksPage() {
           <option value="daily">כל יום</option>
           <option value="weekdays">ימי חול</option>
           <option value="weekly">כל שבוע</option>
+          <option value="monthly">כל חודש</option>
         </select>
         <button onClick={add} disabled={!title.trim() || adding} className="flex items-center gap-1 rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} הוסף
@@ -239,6 +240,7 @@ function EditTaskModal({ task, team, onClose, onSave }: { task: Task; team: Memb
               <option value="daily">כל יום</option>
               <option value="weekdays">ימי חול</option>
               <option value="weekly">כל שבוע</option>
+              <option value="monthly">כל חודש</option>
             </select>
           </div>
           <div className="flex justify-end gap-2 pt-1">
