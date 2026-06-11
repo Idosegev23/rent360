@@ -15,6 +15,7 @@ import { AddTaskButton } from '@/components/tasks/AddTaskButton'
 import { RelatedItems } from '@/components/RelatedItems'
 import OwnerPortfolio from '../../../components/OwnerPortfolio'
 import RentStatus from '../../../components/RentStatus'
+import AssignAgent from '../../../components/AssignAgent'
 import DocumentsPanel from '../../../components/DocumentsPanel'
 import ScheduleMeetingButton from '../../../components/ScheduleMeetingButton'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
@@ -230,6 +231,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
 
         <SentMatchBadge propertyId={item.id} />
         <RentStatus propertyId={item.id} />
+        <AssignAgent propertyId={item.id} current={(item as any).assigned_agent_user_id} />
       </div>
 
       {/* Image Gallery */}

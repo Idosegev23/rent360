@@ -12,11 +12,11 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
   const { data, error } = await ctx.sb
     .from('users')
-    .select('id, name, email, phone, role, title, is_active, receives_alerts, created_at')
+    .select('id, name, email, phone, role, title, is_active, receives_alerts, handles_properties, created_at')
     .eq('org_id', ctx.orgId)
     .order('created_at', { ascending: true })
   if (error) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
-  return NextResponse.json({ members: data || [] })
+  return NextResponse.json({ members: (data || []).filter(m => m.is_active !== false) })
 }
 
 export async function POST(req: NextRequest) {
