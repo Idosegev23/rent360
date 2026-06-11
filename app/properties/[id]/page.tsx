@@ -225,10 +225,21 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      {/* TABS */}
-      <div className="seg" role="tablist" style={{ overflowX: 'auto' }}>
+      {/* TABS — capsules */}
+      <div className="sticky top-2 z-10 flex flex-nowrap gap-2 overflow-x-auto py-1" role="tablist" style={{ scrollbarWidth: 'none' }}>
         {([['overview', 'סקירה'], ['matches', 'שוכרים מתאימים'], ['related', 'קשור'], ['docs', 'מסמכים'], ['activity', 'פעילות']] as const).map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setTab(k)} className={tab === k ? 'active' : ''}>{label}</button>
+          <button
+            key={k}
+            type="button"
+            onClick={() => setTab(k)}
+            className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+              tab === k
+                ? 'bg-brand-primary text-white shadow-md shadow-brand-primary/20'
+                : 'border border-brand-border bg-white/80 text-gray-600 backdrop-blur hover:bg-white hover:text-gray-900'
+            }`}
+          >
+            {label}
+          </button>
         ))}
       </div>
 
