@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const entityType = q.get('entity_type'); const entityId = q.get('entity_id')
   if (!entityType || !entityId) return NextResponse.json({ documents: [] })
   const { data } = await ctx.sb
-    .from('documents').select('id, name, url, kind, created_at')
+    .from('documents').select('id, name, url, kind, storage_path, created_at')
     .eq('org_id', ctx.orgId).eq('entity_type', entityType).eq('entity_id', entityId)
     .order('created_at', { ascending: false })
   return NextResponse.json({ documents: data || [] })

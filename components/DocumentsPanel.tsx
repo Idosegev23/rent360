@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { FileText, Plus, ExternalLink, X } from 'lucide-react'
+import { FileText, Plus, ExternalLink, X, Upload, Loader2 } from 'lucide-react'
 
-type Doc = { id: string; name: string; url: string; kind: string | null; created_at: string }
+type Doc = { id: string; name: string; url: string; kind: string | null; storage_path?: string | null; created_at: string }
 type EntityType = 'property' | 'renter' | 'tenancy' | 'thread'
 
 const KINDS: Array<{ k: string; label: string }> = [
@@ -22,6 +22,18 @@ export default function DocumentsPanel({ entityType, entityId }: { entityType: E
   const [open, setOpen] = useState(false)
   const [f, setF] = useState({ name: '', url: '', kind: 'broker_agreement' })
   const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  async function uploadFile(file: File) {
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file); fd.append('entity_type', entityType); fd.append('entity_id', entityId); fd.append('kind', f.kind)
+      const r = await fetch('/api/v1/documents/upload', { method: 'POST', body: fd })
+      if (!r.ok) throw new Error('failed')
+      load()
+    } catch { window.alert('העלאת הקובץ נכשלה') } finally { setUploading(false) }
+  }
 
   async function load() {
     try {
@@ -59,14 +71,19 @@ export default function DocumentsPanel({ entityType, entityId }: { entityType: E
             <select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value })} className="rounded-md border border-gray-300 px-2 py-1.5 text-xs flex-1">
               {KINDS.map(k => <option key={k.k} value={k.k}>{k.label}</option>)}
             </select>
-            <button onClick={add} disabled={busy} className="rounded-md bg-brand-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">הוסף</button>
+            <button onClick={add} disabled={busy || !f.url.trim()} className="rounded-md bg-brand-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">הוסף קישור</button>
           </div>
+          <label className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-gray-300 px-2 py-2 text-xs text-gray-600 cursor-pointer hover:bg-gray-100">
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {uploading ? 'מעלה…' : 'או העלאת קובץ/צילום (פרטי)'}
+            <input type="file" className="hidden" disabled={uploading} onChange={e => { const file = e.target.files?.[0]; if (file) uploadFile(file); e.target.value = '' }} />
+          </label>
         </div>
       )}
       {docs.length === 0 ? <div className="text-sm faint py-1">אין מסמכים עדיין.</div> : docs.map(d => (
         <div key={d.id} className="flex items-center gap-2 py-1.5" style={{ borderTop: '1px solid var(--line)' }}>
           <span className="pill pill-gray" style={{ fontSize: 10 }}>{kindLabel(d.kind)}</span>
-          <a href={d.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-sm inline-flex items-center gap-1" style={{ color: 'var(--brand-ink, var(--brand))' }}>{d.name}<ExternalLink size={11} /></a>
+          <a href={d.storage_path ? `/api/v1/documents/${d.id}/file` : d.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-sm inline-flex items-center gap-1" style={{ color: 'var(--brand-ink, var(--brand))' }}>{d.name}<ExternalLink size={11} /></a>
           <button onClick={() => remove(d.id)} className="text-gray-400 hover:text-red-600" title="הסר"><X size={13} /></button>
         </div>
       ))}
