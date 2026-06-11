@@ -16,6 +16,7 @@ import { RelatedItems } from '@/components/RelatedItems'
 import OwnerPortfolio from '../../../components/OwnerPortfolio'
 import RentStatus from '../../../components/RentStatus'
 import AssignAgent from '../../../components/AssignAgent'
+import PropertyConversationLink from '../../../components/PropertyConversationLink'
 import DocumentsPanel from '../../../components/DocumentsPanel'
 import ScheduleMeetingButton from '../../../components/ScheduleMeetingButton'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
@@ -216,6 +217,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <PropertyConversationLink propertyId={item.id} />
             <ScheduleMeetingButton propertyId={item.id} label="קבע פגישה" />
             <AddTaskButton entityType="property" entityId={params.id} label="הוסף משימה" />
             <MarkRented mode="property" id={item.id} />
@@ -225,7 +227,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
 
       {/* TABS */}
       <div className="seg" role="tablist" style={{ overflowX: 'auto' }}>
-        {([['overview', 'סקירה'], ['matches', 'התאמות'], ['related', 'קשור'], ['docs', 'מסמכים'], ['activity', 'פעילות']] as const).map(([k, label]) => (
+        {([['overview', 'סקירה'], ['matches', 'שוכרים מתאימים'], ['related', 'קשור'], ['docs', 'מסמכים'], ['activity', 'פעילות']] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setTab(k)} className={tab === k ? 'active' : ''}>{label}</button>
         ))}
       </div>
@@ -301,11 +303,11 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
             </div>
           )}
 
-          {/* Timeline */}
+          {/* Timeline — collapsed accordion (closed by default) */}
           {item.timeline && item.timeline.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">היסטורית עדכונים</h3>
-              <div className="space-y-4">
+            <details className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <summary className="cursor-pointer text-lg font-semibold text-gray-900">היסטורית עדכונים ({item.timeline.length})</summary>
+              <div className="mt-4 space-y-4">
                 {item.timeline.map((event, index) => (
                   <div key={index} className="flex gap-4 p-4 rounded-lg bg-gray-50">
                     <div className="flex-shrink-0 w-3 h-3 rounded-full bg-brand-primary mt-2"></div>
@@ -316,7 +318,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
                   </div>
                 ))}
               </div>
-            </div>
+            </details>
           )}
         </div>
 
