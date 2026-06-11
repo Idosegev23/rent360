@@ -3,6 +3,8 @@ import { supabaseService } from '../../../../../lib/supabase'
 import { notifyAdminsCallbackReminder, notifyAdminsPropertyRecheck } from '../../../../../lib/alerts/admin-whatsapp'
 import { notifyStaffTask, notifyStaffMeeting } from '../../../../../lib/alerts/staff-whatsapp'
 import { syncTemplateStatuses } from '../../../../../lib/whatsapp/template-sync'
+import { sendText } from '../../../../../lib/whatsapp/meta-provider'
+import { isInSessionWindow } from '../../../../../lib/whatsapp/window-guard'
 
 /**
  * Daily cron: find landlord conversations whose requested callback date has arrived
@@ -225,7 +227,53 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, followups, assigned, templateSync, errors })
+  // --- Seventh pass: gently re-engage a landlord who went quiet mid-conversation (active threads
+  // only, max 2 nudges, spaced, and only 08:00–20:00 Israel). Free text within the 24h window. ---
+  let reengaged = 0
+  const landlordHourOk = israelHour >= 8 && israelHour < 20
+  if (landlordHourOk) {
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+    const sixHoursAgo = new Date(Date.now() - 6 * 3600 * 1000).toISOString()
+    const { data: quiet } = await sb.from('threads')
+      .select('id, org_id, phone, status, tags, last_inbound_at, last_outbound_at, last_message_at')
+      .eq('status', 'active')
+      .eq('channel', 'whatsapp')
+      .is('opted_out_at', null)
+      .not('last_outbound_at', 'is', null)
+      .gt('last_inbound_at', dayAgo)         // window still open → free text allowed
+      .lt('last_message_at', sixHoursAgo)    // quiet for at least 6h
+      .limit(60)
+    for (const t of quiet || []) {
+      const tg = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
+      if (tg.audience === 'renter') continue                                   // landlords only
+      if (!t.phone || !isInSessionWindow(t.last_inbound_at)) continue
+      if (String(t.last_outbound_at || '') <= String(t.last_inbound_at || '')) continue // we're not the ones waiting
+      const count = Number(tg.reengage_count || 0)
+      if (count >= 2) continue
+      if (tg.reengaged_at && String(tg.reengaged_at) > new Date(Date.now() - 12 * 3600 * 1000).toISOString()) continue // space ≥12h
+      const msg = count === 0
+        ? 'היי, רצינו להמשיך מאיפה שעצרנו לגבי הנכס. אם זה עדיין רלוונטי, נשמח שתחזרו אלינו כאן ונמשיך משם.'
+        : 'היי, רק מזכירים שאנחנו כאן לכל שאלה לגבי הנכס. אם פספסנו את הזמן הנכון, מוזמנים לכתוב לנו מתי נוח להמשיך.'
+      try {
+        const sent = await sendText(t.phone, msg)
+        const now = new Date().toISOString()
+        await sb.from('messages').insert({
+          org_id: t.org_id, thread_id: t.id, channel: 'whatsapp', direction: 'out', body: msg,
+          status: 'sent', external_id: sent.messageId, meta_message_type: 'text',
+          metadata: { sent_by_name: 'מערכת — תזכורת חזרה' },
+        })
+        await sb.from('threads').update({
+          last_outbound_at: now, last_message_at: now,
+          tags: { ...tg, reengage_count: count + 1, reengaged_at: now },
+        }).eq('id', t.id)
+        reengaged++
+      } catch (err) {
+        errors.push({ threadId: `reengage:${t.id}`, error: err instanceof Error ? err.message : String(err) })
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, followups, assigned, reengaged, templateSync, errors })
 }
 
 export async function GET(req: NextRequest) { return run(req) }
