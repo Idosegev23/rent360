@@ -28,6 +28,11 @@ async function run(req: NextRequest) {
   // Israel-local ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"), so a lexicographic <= comparison is correct
   // for both date-only (fires that day) and time-specific (fires once the hour passes) callbacks.
   const israelNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T')
+  // Quiet hours: never WhatsApp staff overnight. Nagging reminders (callbacks / rechecks / tasks) are
+  // held until 09:00 Israel and re-fire then (we don't stamp, so nothing is lost). Meeting reminders
+  // are event-driven and always fire. Avoids the 00:00 pings.
+  const israelHour = Number(israelNow.slice(11, 13))
+  const quietHours = israelHour < 9 || israelHour >= 21
 
   const { data: threads } = await sb
     .from('threads')
@@ -47,7 +52,7 @@ async function run(req: NextRequest) {
 
   let reminded = 0
   const errors: Array<{ threadId: string; error: string }> = []
-  for (const t of due) {
+  for (const t of (quietHours ? [] : due)) {
     const tg = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
     let landlordName = 'בעל דירה'
     let propertyTitle = 'נכס'
@@ -88,7 +93,7 @@ async function run(req: NextRequest) {
     .is('recheck_reminded_at', null)
     .lte('recheck_at', todayDate)
     .limit(100)
-  for (const ap of dueRechecks || []) {
+  for (const ap of (quietHours ? [] : (dueRechecks || []))) {
     let propertyTitle = 'נכס'
     const { data: p } = await sb.from('properties').select('title, street, city').eq('id', ap.property_id).maybeSingle()
     if (p) propertyTitle = [(p as any).street, (p as any).city].filter(Boolean).join(', ') || (p as any).title || propertyTitle
@@ -120,7 +125,7 @@ async function run(req: NextRequest) {
     .in('status', ['open', 'in_progress'])
     .lte('remind_at', nowIso)
     .limit(200)
-  for (const t of dueTasks || []) {
+  for (const t of (quietHours ? [] : (dueTasks || []))) {
     try {
       const dueLabel = t.due_at
         ? new Date(t.due_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })

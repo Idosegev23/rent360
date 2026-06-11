@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ListChecks, CalendarDays, Check } from 'lucide-react'
 
 type Me = { id: string; name?: string | null }
-type Task = { id: string; title: string; due_at: string | null }
+type Task = { id: string; title: string; due_at: string | null; status?: string; priority?: string; recurrence?: string | null }
 type Meeting = { id: string; title: string; starts_at: string }
 
 function fmt(iso: string): string {
@@ -20,7 +20,12 @@ export default function MyDayPanel() {
 
   useEffect(() => {
     fetch('/api/me').then(r => r.ok ? r.json() : null).then(d => d && setMe(d)).catch(() => {})
-    fetch('/api/v1/tasks?scope=mine&due=today').then(r => r.json()).then(d => setTasks(d.tasks || [])).catch(() => {})
+    // All my open tasks — including ones with no due date (so nothing hides) — overdue/today first.
+    fetch('/api/v1/tasks?scope=mine').then(r => r.json()).then(d => {
+      const open: Task[] = (d.tasks || []).filter((t: Task) => t.status === 'open' || t.status === 'in_progress')
+      open.sort((a, b) => (!a.due_at && !b.due_at) ? 0 : !a.due_at ? 1 : !b.due_at ? -1 : (a.due_at < b.due_at ? -1 : 1))
+      setTasks(open)
+    }).catch(() => {})
   }, [])
   useEffect(() => {
     if (!me?.id) return
@@ -44,11 +49,11 @@ export default function MyDayPanel() {
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
         <div className="surface-card" style={{ padding: 16 }}>
           <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold inline-flex items-center gap-1.5"><ListChecks size={16} /> המשימות שלי להיום</span>
+            <span className="font-semibold inline-flex items-center gap-1.5"><ListChecks size={16} /> המשימות שלי</span>
             <Link href="/tasks" className="text-xs" style={{ color: 'var(--brand)' }}>כל המשימות →</Link>
           </div>
           {tasks.length === 0
-            ? <div className="text-sm faint py-3">אין משימות להיום ✦</div>
+            ? <div className="text-sm faint py-3">אין משימות פתוחות ✦</div>
             : tasks.slice(0, 6).map(t => (
               <div key={t.id} className="flex items-center gap-2 py-1.5" style={{ borderTop: '1px solid var(--line)' }}>
                 <button onClick={() => markDone(t.id)} title="בוצע" className="h-5 w-5 rounded flex items-center justify-center shrink-0" style={{ border: '1px solid var(--line-2)' }}><Check size={12} /></button>
