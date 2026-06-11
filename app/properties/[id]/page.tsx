@@ -145,12 +145,12 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         <div className="space-y-8 animate-pulse">
           <div className="h-8 bg-gray-200 rounded w-3/4"></div>
           <div className="aspect-[16/10] bg-gray-200 rounded-xl"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="lg:col-span-2 space-y-6">
               <div className="h-32 bg-gray-200 rounded-xl"></div>
               <div className="h-24 bg-gray-200 rounded-xl"></div>
             </div>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className="h-24 bg-gray-200 rounded-xl"></div>
               <div className="h-16 bg-gray-200 rounded-xl"></div>
             </div>
@@ -170,7 +170,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
   }
 
   return (
-    <main className="pb-20 space-y-8 max-w-4xl mx-auto px-4">
+    <main className="pb-20 space-y-5 max-w-4xl mx-auto px-4">
       {/* Back Button */}
       <div className="flex items-center gap-4">
         <button
@@ -185,7 +185,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
       {/* Header Section */}
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
-          <h1 className="text-3xl font-bold leading-tight text-gray-900">{item.title}</h1>
+          <h1 className="text-2xl font-bold leading-tight text-gray-900">{item.title}</h1>
           <div className="flex items-start gap-2">
             <ApproveBrokerage propertyId={item.id} />
             <button
@@ -240,14 +240,14 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
       )}
 
       {/* Property Details Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Main Details */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="lg:col-span-2 space-y-5">
           {/* Location & Basic Info */}
-          <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-            <h3 className="text-xl font-semibold mb-6 text-gray-900">פרטי הנכס</h3>
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">פרטי הנכס</h3>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <div className="text-sm font-medium text-gray-500 flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
@@ -275,7 +275,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
 
             {/* Amenities */}
             {item.amenities && Object.entries(item.amenities).filter(([_, v]) => v).length > 0 && (
-              <div className="mt-8 space-y-4">
+              <div className="mt-5 space-y-3">
                 <h4 className="text-lg font-medium text-gray-900">מאפיינים</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Object.entries(item.amenities).filter(([_, v]) => v).map(([key]) => (
@@ -289,7 +289,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
             )}
 
             {/* Quick flags — editable, affect renter matching */}
-            <div className="mt-8 space-y-3 border-t border-gray-100 pt-6">
+            <div className="mt-5 space-y-3 border-t border-gray-100 pt-6">
               <h4 className="text-lg font-medium text-gray-900">סימון מהיר</h4>
               <div className="flex flex-wrap gap-2">
                 <FlagToggle propertyId={item.id} amenity="divided" label="דירה מחולקת" initial={!!(item.amenities as any)?.divided} />
@@ -302,9 +302,9 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
 
           {/* Description */}
           {(item.description || item.full_text) && (
-            <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-              <h3 className="text-xl font-semibold mb-6 text-gray-900">תיאור הנכס</h3>
-              <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed">
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">תיאור הנכס</h3>
+              <div className="prose max-w-none text-gray-700 leading-relaxed">
                 {item.description || item.full_text}
               </div>
             </div>
@@ -315,8 +315,8 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
 
           {/* Timeline */}
           {item.timeline && item.timeline.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-              <h3 className="text-xl font-semibold mb-6 text-gray-900">היסטורית עדכונים</h3>
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">היסטורית עדכונים</h3>
               <div className="space-y-4">
                 {item.timeline.map((event, index) => (
                   <div key={index} className="flex gap-4 p-4 rounded-lg bg-gray-50">
@@ -333,10 +333,10 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Contact Info */}
           {(item.contact_name || item.contact_phone) && (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="text-lg font-semibold mb-4 text-gray-900 flex items-center gap-2">
                 <Phone className="h-5 w-5 text-brand-primary" />
                 פרטי קשר
@@ -362,7 +362,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
           )}
 
           {/* Meta Information */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h3 className="text-lg font-semibold mb-4 text-gray-900">מידע נוסף</h3>
             <div className="space-y-3">
               {item.source && (
@@ -465,8 +465,8 @@ function MatchingRentersSection({ propertyId }: { propertyId: string }) {
   const dq = matches.filter(m => m.is_disqualified)
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-      <div className="flex items-center justify-between mb-6">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
           <Target className="h-5 w-5 text-emerald-600" />
           שוכרים מתאימים ({nonDq.length}{dq.length ? ` + ${dq.length} פסולים` : ''})
