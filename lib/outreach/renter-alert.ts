@@ -21,6 +21,7 @@ import { nanoid } from 'nanoid'
 import { supabaseService } from '../supabase'
 import { sendTemplate, normalizePhone } from '../whatsapp/meta-provider'
 import { isSuppressed } from './suppression'
+import { canSendNow } from '../time/send-window'
 
 // Prefer the clean (no-emoji) v2 once Meta approves it; fall back to v1 until then.
 const PREFERRED_TEMPLATE = process.env.RENTER_MATCH_TEMPLATE || 'renter_match_alert_v2'
@@ -46,6 +47,13 @@ export async function dispatchRenterMatchAlert(opts: {
 }): Promise<RenterAlertResult> {
   const { orgId, renterId, propertyId, matchId, force } = opts
   const sb = supabaseService()
+
+  // ---- Hard time guard: NEVER send overnight or from Shabbat/Yom-Tov candle-lighting to havdalah ----
+  // Applies even to `force` (which only bypasses the already-notified dedup, not the time rule).
+  const win = await canSendNow()
+  if (!win.ok) {
+    return { ok: false, code: 'OUTSIDE_SEND_WINDOW', message: win.reason === 'shabbat_or_holiday' ? 'לא שולחים בשבת או בחג' : 'מחוץ לשעות השליחה (בוקר עד ערב)' }
+  }
 
   // ---- Renter ----
   const { data: renter, error: rErr } = await sb

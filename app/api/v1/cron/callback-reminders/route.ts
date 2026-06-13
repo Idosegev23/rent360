@@ -5,6 +5,7 @@ import { notifyStaffTask, notifyStaffMeeting } from '../../../../../lib/alerts/s
 import { syncTemplateStatuses } from '../../../../../lib/whatsapp/template-sync'
 import { sendText } from '../../../../../lib/whatsapp/meta-provider'
 import { isInSessionWindow } from '../../../../../lib/whatsapp/window-guard'
+import { canSendNow } from '../../../../../lib/time/send-window'
 
 /**
  * Daily cron: find landlord conversations whose requested callback date has arrived
@@ -30,11 +31,10 @@ async function run(req: NextRequest) {
   // Israel-local ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"), so a lexicographic <= comparison is correct
   // for both date-only (fires that day) and time-specific (fires once the hour passes) callbacks.
   const israelNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T')
-  // Quiet hours: never WhatsApp staff overnight. Nagging reminders (callbacks / rechecks / tasks) are
-  // held until 09:00 Israel and re-fire then (we don't stamp, so nothing is lost). Meeting reminders
-  // are event-driven and always fire. Avoids the 00:00 pings.
-  const israelHour = Number(israelNow.slice(11, 13))
-  const quietHours = israelHour < 9 || israelHour >= 21
+  // Send window: never WhatsApp outside morning–evening hours, and NEVER from Shabbat/Yom-Tov
+  // candle-lighting until havdalah (real times, Haifa). Reminders are held (not stamped) and re-fire
+  // once the window reopens, so nothing is lost. See lib/time/send-window.ts.
+  const send = await canSendNow()
 
   const { data: threads } = await sb
     .from('threads')
@@ -54,7 +54,7 @@ async function run(req: NextRequest) {
 
   let reminded = 0
   const errors: Array<{ threadId: string; error: string }> = []
-  for (const t of (quietHours ? [] : due)) {
+  for (const t of (send.ok ? due : [])) {
     const tg = (t.tags && typeof t.tags === 'object' ? t.tags : {}) as Record<string, any>
     let landlordName = 'בעל דירה'
     let propertyTitle = 'נכס'
@@ -95,7 +95,7 @@ async function run(req: NextRequest) {
     .is('recheck_reminded_at', null)
     .lte('recheck_at', todayDate)
     .limit(100)
-  for (const ap of (quietHours ? [] : (dueRechecks || []))) {
+  for (const ap of (send.ok ? (dueRechecks || []) : [])) {
     let propertyTitle = 'נכס'
     const { data: p } = await sb.from('properties').select('title, street, city').eq('id', ap.property_id).maybeSingle()
     if (p) propertyTitle = [(p as any).street, (p as any).city].filter(Boolean).join(', ') || (p as any).title || propertyTitle
@@ -127,7 +127,7 @@ async function run(req: NextRequest) {
     .in('status', ['open', 'in_progress'])
     .lte('remind_at', nowIso)
     .limit(200)
-  for (const t of (quietHours ? [] : (dueTasks || []))) {
+  for (const t of (send.ok ? (dueTasks || []) : [])) {
     try {
       const dueLabel = t.due_at
         ? new Date(t.due_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -155,7 +155,7 @@ async function run(req: NextRequest) {
     .gte('starts_at', nowIso)
     .lte('starts_at', in60)
     .limit(200)
-  for (const m of dueMeetings || []) {
+  for (const m of (send.ok ? (dueMeetings || []) : [])) {
     try {
       const timeLabel = new Date(m.starts_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })
       const res = await notifyStaffMeeting({ orgId: m.org_id, userId: m.owner_user_id as string, meetingId: m.id, title: m.title, timeLabel })
@@ -230,8 +230,7 @@ async function run(req: NextRequest) {
   // --- Seventh pass: gently re-engage a landlord who went quiet mid-conversation (active threads
   // only, max 2 nudges, spaced, and only 08:00–20:00 Israel). Free text within the 24h window. ---
   let reengaged = 0
-  const landlordHourOk = israelHour >= 8 && israelHour < 20
-  if (landlordHourOk) {
+  if (send.ok) {
     const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
     const sixHoursAgo = new Date(Date.now() - 6 * 3600 * 1000).toISOString()
     const { data: quiet } = await sb.from('threads')
@@ -273,7 +272,7 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, followups, assigned, reengaged, templateSync, errors })
+  return NextResponse.json({ ok: true, sendWindow: send, due: due.length, reminded, rechecksDue: (dueRechecks || []).length, rechecks, taskReminders, meetingReminders, followups, assigned, reengaged, templateSync, errors })
 }
 
 export async function GET(req: NextRequest) { return run(req) }
