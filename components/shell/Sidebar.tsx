@@ -19,6 +19,7 @@ import {
   GitBranch,
   Coins,
   BarChart3,
+  ClipboardList,
 } from 'lucide-react'
 
 type Me = { name: string | null; email: string | null; google: { connected: boolean; email: string | null } }
@@ -42,6 +43,7 @@ const main: NavLink[] = [
   { href: '/renters',              label: 'שוכרים',          Icon: Users },
   { href: '/team',                 label: 'צוות',            Icon: UserCog },
   { href: '/outreach',             label: 'שליחה',           Icon: Send },
+  { href: '/outreach/renter-sends', label: 'יומן שליחות',    Icon: ClipboardList },
   { href: '/inbox',                label: 'שיחות',           Icon: Inbox },
 ]
 

@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
     propertyId,
     matchId,
     force: body.force === true,
+    sentByUserId: userId,
   })
 
   if (!result.ok) {

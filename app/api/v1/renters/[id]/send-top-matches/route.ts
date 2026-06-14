@@ -59,7 +59,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const details: Array<{ propertyId: string; status: 'sent' | 'skipped'; reason?: string }> = []
   let sent = 0, skipped = 0
   for (const c of eligible) {
-    const r = await dispatchRenterMatchAlert({ orgId, renterId, propertyId: c.property_id as string, matchId: c.id as string })
+    const r = await dispatchRenterMatchAlert({ orgId, renterId, propertyId: c.property_id as string, matchId: c.id as string, sentByUserId: userId })
     if (r.ok) { sent++; details.push({ propertyId: c.property_id as string, status: 'sent' }) }
     else { skipped++; details.push({ propertyId: c.property_id as string, status: 'skipped', reason: r.code }) }
   }

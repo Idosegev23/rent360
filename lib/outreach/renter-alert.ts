@@ -44,8 +44,10 @@ export async function dispatchRenterMatchAlert(opts: {
   matchId?: string | undefined
   /** Bypass the already-notified guard. */
   force?: boolean
+  /** Staff user who triggered the send (null for cron/system). Recorded for the sends log. */
+  sentByUserId?: string | null
 }): Promise<RenterAlertResult> {
-  const { orgId, renterId, propertyId, matchId, force } = opts
+  const { orgId, renterId, propertyId, matchId, force, sentByUserId } = opts
   const sb = supabaseService()
 
   // ---- Hard time guard: NEVER send overnight or from Shabbat/Yom-Tov candle-lighting to havdalah ----
@@ -171,6 +173,7 @@ export async function dispatchRenterMatchAlert(opts: {
       share_token: token,
       cover_image_url: coverImage,
     },
+    metadata: { kind: 'renter_match', sent_by: sentByUserId ?? null },
   })
 
   const now = new Date().toISOString()

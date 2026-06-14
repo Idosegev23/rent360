@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       results.push({ matchId: m.id, status: 'skipped', reason: 'renter_daily_cap: כבר נשלחה לו המלצה היום' })
       continue
     }
-    const r = await dispatchRenterMatchAlert({ orgId, renterId: m.renter_id, propertyId: m.property_id, matchId: m.id })
+    const r = await dispatchRenterMatchAlert({ orgId, renterId: m.renter_id, propertyId: m.property_id, matchId: m.id, sentByUserId: ctx.userId })
     if (r.ok) {
       sent++
       notifiedTodayCount.set(m.renter_id, already + 1)
