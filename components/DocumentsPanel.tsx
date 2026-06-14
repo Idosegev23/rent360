@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { FileText, Plus, ExternalLink, X, Upload, Loader2 } from 'lucide-react'
+import { supabaseBrowser } from '../lib/supabase'
 
 type Doc = { id: string; name: string; url: string; kind: string | null; storage_path?: string | null; created_at: string }
 type EntityType = 'property' | 'renter' | 'tenancy' | 'thread'
@@ -27,11 +28,25 @@ export default function DocumentsPanel({ entityType, entityId }: { entityType: E
   async function uploadFile(file: File) {
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file); fd.append('entity_type', entityType); fd.append('entity_id', entityId); fd.append('kind', f.kind)
-      const r = await fetch('/api/v1/documents/upload', { method: 'POST', body: fd })
-      const d = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(d?.error?.message || d?.error?.code || 'failed')
+      // 1) get a signed upload URL from the server (service role)
+      const u = await fetch('/api/v1/documents/upload-url', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_type: entityType, entity_id: entityId, filename: file.name }),
+      })
+      const ud = await u.json().catch(() => ({}))
+      if (!u.ok) throw new Error(ud?.error?.message || ud?.error?.code || 'signing failed')
+      // 2) upload the file DIRECTLY to Supabase Storage — bypasses Vercel's ~4.5MB request limit
+      const { error: upErr } = await supabaseBrowser().storage
+        .from('deal-docs')
+        .uploadToSignedUrl(ud.path, ud.token, file, { contentType: file.type || 'application/octet-stream' })
+      if (upErr) throw new Error(upErr.message)
+      // 3) record the document row (so it appears in the list + is served via signed URL)
+      const c = await fetch('/api/v1/documents', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_type: entityType, entity_id: entityId, name: file.name, kind: f.kind, storage_path: ud.path }),
+      })
+      const cd = await c.json().catch(() => ({}))
+      if (!c.ok) throw new Error(cd?.error?.message || cd?.error?.code || 'save failed')
       load()
     } catch (e) { window.alert('העלאת הקובץ נכשלה: ' + (e instanceof Error ? e.message : '')) } finally { setUploading(false) }
   }

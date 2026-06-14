@@ -19,14 +19,21 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await requireOrg()
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
-  let b: { entity_type?: string; entity_id?: string; name?: string; url?: string; kind?: string } = {}
+  let b: { entity_type?: string; entity_id?: string; name?: string; url?: string; kind?: string; storage_path?: string } = {}
   try { b = await req.json() } catch {/* empty */}
   const entityType = String(b.entity_type || ''); const entityId = String(b.entity_id || '')
-  const name = String(b.name || '').trim(); let url = String(b.url || '').trim()
-  if (!entityType || !entityId || !name || !url) return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'entity + name + url required' } }, { status: 400 })
-  if (!/^https?:\/\//i.test(url)) url = `https://${url}`
+  const name = String(b.name || '').trim()
+  const storagePath = String(b.storage_path || '').trim()
+  let url = String(b.url || '').trim()
+  // Two modes: an uploaded file (storage_path → served via signed URL) OR an external link (url).
+  if (!entityType || !entityId || !name || (!url && !storagePath)) {
+    return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'entity + name + (url or storage_path) required' } }, { status: 400 })
+  }
+  if (storagePath) url = `storage://deal-docs/${storagePath}`
+  else if (!/^https?:\/\//i.test(url)) url = `https://${url}`
   const { data, error } = await ctx.sb.from('documents').insert({
-    org_id: ctx.orgId, entity_type: entityType, entity_id: entityId, name, url, kind: b.kind || null, created_by: ctx.uid,
+    org_id: ctx.orgId, entity_type: entityType, entity_id: entityId, name, url,
+    storage_path: storagePath || null, kind: b.kind || null, created_by: ctx.uid,
   }).select('id').single()
   if (error) return NextResponse.json({ error: { code: 'INSERT_FAILED', message: error.message } }, { status: 500 })
   return NextResponse.json({ ok: true, id: data.id })
