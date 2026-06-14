@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/v1/cron/callback-reminders", "schedule": "*/30 * * * *" }
+    { "path": "/api/v1/cron/callback-reminders", "schedule": "*/30 * * * *" },
+    { "path": "/api/v1/matches/backfill", "schedule": "0 2 * * *" }
   ]
 }

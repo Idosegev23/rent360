@@ -43,3 +43,9 @@ export async function POST(req: NextRequest) {
     errors: errors.length ? errors : undefined,
   })
 }
+
+// Vercel Cron invokes the path with GET — delegate to the same CRON_SECRET-guarded logic so the
+// nightly recompute self-heals any matches missed by the fire-and-forget compute on property approval.
+export async function GET(req: NextRequest) {
+  return POST(req)
+}

@@ -16,6 +16,8 @@
  * Goal numbers are illustrative — tune after real data flows.
  */
 
+import { comparePlaces, type ComparePlacesResult } from '../data/location-normalize'
+
 export type RenterRow = {
   id: string
   preferred_cities: unknown            // jsonb — array of strings
@@ -119,14 +121,16 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
   // Only TRUE blockers (pet/smoker conflicts where the property explicitly forbids).
   // City mismatch is intentionally NOT a DQ — it shows up as a low city score
   // so admins can still see "close but wrong area" candidates with a low %.
-  const propertyCities = toLowerSet([property.city, property.neighborhood])
-  // Strip the "- מגורים" suffix that some renters still have in their
-  // preferred_cities (legacy data — newer rows are cleaned at submit time).
-  // Without this strip, "חיפה - מגורים" never matches "חיפה" and falls to fuzzy.
-  const preferredCities = toStringArray(renter.preferred_cities)
-    .map(s => s.replace(/\s*-\s*מגורים\s*$/, '').trim().toLowerCase())
-    .filter(Boolean)
-  const hasCityList = preferredCities.length > 0
+  // Location: one comparePlaces call drives BOTH city + neighborhood dimensions.
+  // It canonicalizes internally (strips "- מגורים", unifies the קרית/קריית yod
+  // variants) and resolves the city→sub-area→sibling/group hierarchy. Location is
+  // NEVER a disqualifier — worst case is raw 0 (city) / applies:false (neighborhood).
+  const wantedPlaces = [
+    ...toStringArray(renter.preferred_cities),
+    ...toStringArray(renter.preferred_neighborhoods),
+  ]
+  const place = comparePlaces(wantedPlaces, property.city, property.neighborhood)
+  const hasCityList = toStringArray(renter.preferred_cities).map(s => s.trim()).filter(Boolean).length > 0
 
   if (renter.has_pets === true && property.pets_allowed === false) {
     disqualifyingReasons.push('השוכר עם חיות מחמד אבל הנכס לא מאפשר חיות')
@@ -151,8 +155,8 @@ export function scoreMatch(renter: RenterRow, property: PropertyRow): MatchResul
 
   // ----- Soft dimensions -----------------------------------------------------
   breakdown.budget = scoreBudget(renter, property, weights.budget)
-  breakdown.city = scoreCity(renter, property, weights.city, hasCityList, preferredCities, propertyCities)
-  breakdown.neighborhood = scoreNeighborhood(renter, property, weights.neighborhood)
+  breakdown.city = scoreCity(renter, property, weights.city, hasCityList, place)
+  breakdown.neighborhood = scoreNeighborhood(renter, property, weights.neighborhood, place)
   breakdown.rooms = scoreRooms(renter, property, weights.rooms)
   const amenityPair = scoreAmenitiesSplit(renter, property, weights.amenities_must, weights.amenities_nice)
   breakdown.amenities_must = amenityPair.must
@@ -307,20 +311,29 @@ function scoreBudget(renter: RenterRow, property: PropertyRow, weight: number): 
   return { weight, raw: 1, weighted: weight, note: `מחיר ₪${price.toLocaleString('he-IL')} בתוך התקציב` }
 }
 
-function scoreCity(_r: RenterRow, property: PropertyRow, weight: number, hasList: boolean, preferred: string[], propertyCities: Set<string>): DimensionResult {
+// City + neighborhood are scored from ONE comparePlaces result (computed in scoreMatch),
+// each mapped to its own dimension. Location NEVER disqualifies — the worst outcome is
+// raw 0 (city) / applies:false (neighborhood); nothing is pushed into disqualifyingReasons.
+function scoreCity(_r: RenterRow, property: PropertyRow, weight: number, hasList: boolean, place: ComparePlacesResult): DimensionResult {
   if (!hasList) {
     return { weight, raw: 0, weighted: 0, note: 'לא ביקש ערים מועדפות', applies: false }
   }
-  const exact = preferred.some(c => propertyCities.has(c))
-  if (exact) return { weight, raw: 1, weighted: weight, note: `${property.city} ברשימה המועדפת` }
-  const fuzzy = hasFuzzyCityMatch(propertyCities, preferred)
-  if (fuzzy) return { weight, raw: 0.55, weighted: 0.55 * weight, note: `התאמה חלקית לעיר (${property.city})` }
+  const raw = place.cityScore
+  let note: string
+  switch (place.cityTier) {
+    case 'exact':   note = `${property.city} ברשימה המועדפת`; break
+    case 'subarea': note = `${property.city} — אזור משנה של עיר מבוקשת`; break
+    case 'sibling': note = `${property.city} — סמוך לאזור מבוקש`; break
+    case 'fuzzy':   note = `התאמה חלקית לעיר (${property.city})`; break
+    case 'group':   note = `${property.city} — בקריות (אזור מבוקש)`; break
+    default:        note = `${property.city ?? 'עיר לא ידועה'} לא ברשימת הערים המבוקשת`
+  }
   // Soft penalty rather than DQ — the property surfaces with a clearly lower
   // score so the admin still sees "close but wrong area" candidates.
-  return { weight, raw: 0, weighted: 0, note: `${property.city} לא ברשימת הערים המבוקשת` }
+  return { weight, raw, weighted: raw * weight, note }
 }
 
-function scoreNeighborhood(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
+function scoreNeighborhood(renter: RenterRow, property: PropertyRow, weight: number, place: ComparePlacesResult): DimensionResult {
   const preferred = toStringArray(renter.preferred_neighborhoods).map(s => s.trim()).filter(Boolean)
   // Renter didn't pick any neighborhoods → excluded entirely from the score.
   if (preferred.length === 0) {
@@ -329,18 +342,22 @@ function scoreNeighborhood(renter: RenterRow, property: PropertyRow, weight: num
   if (!property.neighborhood) {
     return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'אין שכונה ידועה לנכס' }
   }
-  const propNbh = property.neighborhood.trim().toLowerCase()
-  const wanted = preferred.map(p => p.toLowerCase())
-  if (wanted.includes(propNbh)) {
-    return { weight, raw: 1, weighted: weight, note: `${property.neighborhood} ברשימת השכונות` }
+  const raw = place.neighborhoodScore
+  // No neighborhood-level signal (e.g. only a city-level match) → drop from the
+  // score (applies:false) rather than penalise. Prevents fabricating a neighborhood
+  // match from a city-only win.
+  if (place.neighborhoodTier === 'none') {
+    return { weight, raw: 0, weighted: 0, note: `${property.neighborhood} לא ברשימת השכונות`, applies: false }
   }
-  // Substring match for noisy data like "מרכז" matching "מרכז העיר".
-  for (const w of wanted) {
-    if (w.length >= 3 && (propNbh.includes(w) || w.includes(propNbh))) {
-      return { weight, raw: 0.55, weighted: 0.55 * weight, note: `התאמה חלקית לשכונה (${property.neighborhood})` }
-    }
+  let note: string
+  switch (place.neighborhoodTier) {
+    case 'neighborhood': note = `${property.neighborhood} ברשימת השכונות`; break
+    case 'subarea':      note = `${property.neighborhood} — אזור משנה של עיר מבוקשת`; break
+    case 'sibling':      note = `${property.neighborhood} — שכונה סמוכה לאזור מבוקש`; break
+    case 'fuzzy':        note = `התאמה חלקית לשכונה (${property.neighborhood})`; break
+    default:             note = `${property.neighborhood} ברשימת השכונות`
   }
-  return { weight, raw: 0, weighted: 0, note: `${property.neighborhood} לא ברשימת השכונות` }
+  return { weight, raw, weighted: raw * weight, note }
 }
 
 function scoreRooms(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
@@ -597,33 +614,4 @@ function cosineSimilarity(a: number[], b: number[]): number {
 function toStringArray(v: unknown): string[] {
   if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string')
   return []
-}
-
-function toLowerSet(arr: Array<string | null | undefined>): Set<string> {
-  const out = new Set<string>()
-  for (const s of arr) if (typeof s === 'string' && s.trim()) out.add(s.trim().toLowerCase())
-  return out
-}
-
-// Soft match for Hebrew city variants ("קרית" vs "קריית" vs "ק\"ית", trailing punctuation, neighborhood vs city).
-function hasFuzzyCityMatch(propertyCities: Set<string>, preferred: string[]): boolean {
-  // Collapse the "קרית" prefix in all its written forms:
-  //   "קריית"  (ק-ר-י-י-ת, two yods)
-  //   "קרית"   (ק-ר-י-ת)
-  //   "ק\"ית" / "ק'ית" / "ק.ית" (apostrophe/quote/dot between ק and י)
-  // Everything maps to canonical "קרית" before the rest of the city name.
-  const normalize = (s: string) => s
-    .replace(/^ק[\s"'.]*ר?\s*י{1,3}\s*ת\s*/, 'קרית ')
-    .replace(/[\s"',.()-]/g, '')
-    .trim()
-  const propSet = new Set(Array.from(propertyCities).map(normalize))
-  return preferred.some(p => {
-    const np = normalize(p)
-    if (propSet.has(np)) return true
-    // Substring match — e.g. "חיפה" matches "חיפה - מגורים"
-    for (const c of propSet) {
-      if (c.length >= 3 && (c.includes(np) || np.includes(c))) return true
-    }
-    return false
-  })
 }
