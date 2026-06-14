@@ -20,6 +20,7 @@ import {
   Coins,
   BarChart3,
   ClipboardList,
+  KeyRound,
 } from 'lucide-react'
 
 type Me = { name: string | null; email: string | null; google: { connected: boolean; email: string | null } }
@@ -40,6 +41,7 @@ const main: NavLink[] = [
   { href: '/properties',           label: 'נכסים',           Icon: Building2 },
   { href: '/approved-properties',  label: 'מאושרים',        Icon: CheckCircle2 },
   { href: '/approved-properties/irrelevant', label: 'לא רלוונטיים', Icon: Archive },
+  { href: '/rented',               label: 'הושכרו על ידינו',  Icon: KeyRound },
   { href: '/renters',              label: 'שוכרים',          Icon: Users },
   { href: '/team',                 label: 'צוות',            Icon: UserCog },
   { href: '/outreach',             label: 'שליחה',           Icon: Send },

@@ -70,9 +70,33 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ properties })
   }
 
-  // list active tenancies
+  // list active tenancies (enriched with renter + property labels for the "rented by us" page)
   const { data: tenancies } = await sb.from('tenancies').select('*').eq('org_id', orgId).eq('status', 'active').order('created_at', { ascending: false }).limit(200)
-  return NextResponse.json({ tenancies: tenancies || [] })
+  const tlist = tenancies || []
+  const rIds = Array.from(new Set(tlist.map((t: any) => t.renter_id).filter(Boolean)))
+  const pIds = Array.from(new Set(tlist.map((t: any) => t.property_id).filter(Boolean)))
+  const rMap = new Map<string, any>()
+  const pMap = new Map<string, any>()
+  if (rIds.length) {
+    const { data } = await sb.from('renters').select('id, first_name, last_name, phone').in('id', rIds)
+    for (const r of data || []) rMap.set(r.id, r)
+  }
+  if (pIds.length) {
+    const { data } = await sb.from('properties').select('id, title, city, street, address, rooms, price').in('id', pIds).eq('org_id', orgId)
+    for (const p of data || []) pMap.set(p.id, p)
+  }
+  const enriched = tlist.map((t: any) => {
+    const r = rMap.get(t.renter_id)
+    const p = pMap.get(t.property_id)
+    return {
+      ...t,
+      renter_name: renterName(r),
+      renter_phone: r?.phone || null,
+      property_label: propLabel(p),
+      property_rooms: p?.rooms ?? null,
+    }
+  })
+  return NextResponse.json({ tenancies: enriched })
 }
 
 export async function POST(req: NextRequest) {

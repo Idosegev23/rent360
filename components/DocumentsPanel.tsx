@@ -30,9 +30,10 @@ export default function DocumentsPanel({ entityType, entityId }: { entityType: E
       const fd = new FormData()
       fd.append('file', file); fd.append('entity_type', entityType); fd.append('entity_id', entityId); fd.append('kind', f.kind)
       const r = await fetch('/api/v1/documents/upload', { method: 'POST', body: fd })
-      if (!r.ok) throw new Error('failed')
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d?.error?.message || d?.error?.code || 'failed')
       load()
-    } catch { window.alert('העלאת הקובץ נכשלה') } finally { setUploading(false) }
+    } catch (e) { window.alert('העלאת הקובץ נכשלה: ' + (e instanceof Error ? e.message : '')) } finally { setUploading(false) }
   }
 
   async function load() {
@@ -61,7 +62,14 @@ export default function DocumentsPanel({ entityType, entityId }: { entityType: E
     <div className="surface-card" style={{ padding: 14 }}>
       <div className="flex items-center justify-between mb-2">
         <span className="faint inline-flex items-center gap-1.5" style={{ fontSize: 12, fontWeight: 700 }}><FileText size={13} /> מסמכים</span>
-        <button onClick={() => setOpen(o => !o)} className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--brand)' }}><Plus size={13} /> הוסף קישור</button>
+        <div className="flex items-center gap-3">
+          <label className="text-xs inline-flex items-center gap-1 cursor-pointer" style={{ color: 'var(--brand)' }} title="העלאת קובץ/צילום פרטי (חוזה, ת״ז, תלוש)">
+            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload size={13} />}
+            {uploading ? 'מעלה…' : 'העלה קובץ'}
+            <input type="file" className="hidden" disabled={uploading} onChange={e => { const file = e.target.files?.[0]; if (file) uploadFile(file); e.target.value = '' }} />
+          </label>
+          <button onClick={() => setOpen(o => !o)} className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--brand)' }}><Plus size={13} /> הוסף קישור</button>
+        </div>
       </div>
       {open && (
         <div className="space-y-2 mb-2 rounded-md bg-gray-50 p-2">
