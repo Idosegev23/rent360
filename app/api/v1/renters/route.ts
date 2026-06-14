@@ -47,6 +47,21 @@ export async function GET(req: NextRequest) {
   if (vetted === 'true') q = q.gt('submissions_count', 0)
   else if (vetted === 'false') q = q.eq('submissions_count', 0)
 
+  // Renters who already rented through us (have an ACTIVE tenancy) are "placed" — by default they
+  // drop out of the active seekers list. ?placed=1 → only placed; ?placed=include → everyone.
+  const placedParam = url.searchParams.get('placed') || ''
+  const { data: activeTen } = await sb.from('tenancies').select('renter_id').eq('org_id', orgId).eq('status', 'active')
+  const placedIds = Array.from(new Set((activeTen || []).map((t: any) => t.renter_id).filter(Boolean))) as string[]
+  const placedSet = new Set(placedIds)
+  if (placedParam === '1') {
+    if (placedIds.length === 0) {
+      return NextResponse.json({ renters: [], pagination: { page, limit, total: 0, totalPages: 0, hasNext: false, hasPrev: false } })
+    }
+    q = q.in('id', placedIds)
+  } else if (placedParam !== 'include' && placedIds.length > 0) {
+    q = q.not('id', 'in', `(${placedIds.join(',')})`)
+  }
+
   // Allow sort by created_at / updated_at / submissions_count
   const allowedSort = new Set(['created_at', 'updated_at', 'submissions_count', 'budget_max'])
   const sortCol = allowedSort.has(sort) ? sort : 'created_at'
@@ -79,6 +94,7 @@ export async function GET(req: NextRequest) {
   const enriched = (renters || []).map(r => ({
     ...r,
     matches: matchCounts[r.id] || { total: 0, topScore: null },
+    placed: placedSet.has(r.id),
   }))
 
   const totalPages = Math.ceil((count || 0) / limit)

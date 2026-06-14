@@ -32,6 +32,7 @@ type Renter = {
   has_security_checks: boolean | null
   has_guarantors: boolean | null
   matches: { total: number; topScore: number | null }
+  placed?: boolean
 }
 
 type Invite = {
@@ -143,6 +144,8 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
   // Default to vetted ("our renters list" = renters who completed intake). Imported leads
   // live under "לא מטוייבים" until the intake bot finalizes them (submissions_count>0).
   const [vetted, setVetted] = useState<'' | 'true' | 'false'>('true')
+  // '' = active seekers (placed renters excluded); '1' = only those who already rented via us.
+  const [placed, setPlaced] = useState<'' | '1'>('')
   const [sendingQ, setSendingQ] = useState(false)
   const [sendQMsg, setSendQMsg] = useState<string | null>(null)
 
@@ -151,7 +154,7 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
     setLoading(true)
     setError(null)
     const apiSort = sort === 'matches' ? 'updated_at' : sort
-    fetch(`/api/v1/renters?sort=${apiSort}&dir=${dir}&search=${encodeURIComponent(search)}${vetted ? `&vetted=${vetted}` : ''}&limit=200`)
+    fetch(`/api/v1/renters?sort=${apiSort}&dir=${dir}&search=${encodeURIComponent(search)}${vetted ? `&vetted=${vetted}` : ''}${placed ? '&placed=1' : ''}&limit=200`)
       .then(r => r.json())
       .then(data => {
         if (cancel) return
@@ -170,7 +173,7 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
       .catch(err => { if (!cancel) setError(err.message) })
       .finally(() => { if (!cancel) setLoading(false) })
     return () => { cancel = true }
-  }, [search, sort, dir, refreshKey, vetted])
+  }, [search, sort, dir, refreshKey, vetted, placed])
 
   function toggleSort(col: typeof sort) {
     if (sort === col) setDir(d => (d === 'desc' ? 'asc' : 'desc'))
@@ -244,6 +247,18 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
             </button>
           ))}
         </div>
+        <div className="flex gap-1.5 text-xs">
+          {([{ id: '' as const, label: 'מחפשים' }, { id: '1' as const, label: 'כבר שכרו דרכנו' }]).map(v => (
+            <button
+              key={v.id || 'seeking'}
+              type="button"
+              onClick={() => setPlaced(v.id)}
+              className={`px-3 py-1 rounded-full border transition ${placed === v.id ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-brand-border hover:bg-gray-50'}`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
         {vetted === 'false' && (
           <div className="flex items-center gap-2">
             {sendQMsg && <span className="text-xs text-gray-500">{sendQMsg}</span>}
@@ -298,6 +313,7 @@ function RenterCard({ renter }: { renter: Renter }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="font-semibold text-gray-900 truncate">{fullName || 'ללא שם'}</span>
+            {renter.placed && <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">הושכר דרכנו</span>}
             <span className="text-xs text-gray-500 inline-flex items-center gap-1"><Phone className="h-3 w-3" />{renter.phone}</span>
           </div>
           <div className="text-xs text-gray-500">
