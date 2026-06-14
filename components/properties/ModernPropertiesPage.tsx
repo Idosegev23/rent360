@@ -45,6 +45,8 @@ interface ModernPropertiesPageProps {
   showApproveButton?: boolean;
   showDeleteButton?: boolean;
   showOutreachButton?: boolean;
+  showIrrelevantButton?: boolean;
+  showRestoreButton?: boolean;
   extraParams?: Record<string, string>;
 }
 
@@ -67,6 +69,8 @@ export default function ModernPropertiesPage({
   showApproveButton = false,
   showDeleteButton = false,
   showOutreachButton = false,
+  showIrrelevantButton = false,
+  showRestoreButton = false,
   extraParams,
 }: ModernPropertiesPageProps) {
   const [properties, setProperties] = useState<ExtendedProperty[]>([]);
@@ -488,6 +492,8 @@ export default function ModernPropertiesPage({
                     showApproveButton={showApproveButton}
                     showDeleteButton={showDeleteButton}
                     showOutreachButton={showOutreachButton}
+                    showIrrelevantButton={showIrrelevantButton}
+                    showRestoreButton={showRestoreButton}
                     onApproved={(id) => {
                       setProperties(prev => prev.map(p => p.id === id ? { ...p, is_approved: true } : p));
                     }}
@@ -497,6 +503,14 @@ export default function ModernPropertiesPage({
                     }}
                     onOutreachSent={(id) => {
                       setProperties(prev => prev.map(p => p.id === id ? { ...p, initial_message_sent: true } : p));
+                    }}
+                    onIrrelevant={(id) => {
+                      setProperties(prev => prev.filter(p => p.id !== id));
+                      setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
+                    }}
+                    onRestored={(id) => {
+                      setProperties(prev => prev.filter(p => p.id !== id));
+                      setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
                     }}
                   />
                 </Link>

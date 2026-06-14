@@ -8,6 +8,7 @@ export default function IrrelevantApprovedPropertiesPage() {
       apiEndpoint="/api/v1/approved-properties"
       extraParams={{ irrelevant: '1' }}
       pageTitle="נכסים מאושרים — לא רלוונטיים"
+      showRestoreButton
     />
   );
 }

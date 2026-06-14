@@ -6,6 +6,7 @@ export default function ApprovedPropertiesPage() {
       apiEndpoint="/api/v1/approved-properties"
       pageTitle="נכסים מאושרים לתיווך"
       showDeleteButton
+      showIrrelevantButton
     />
   );
 }

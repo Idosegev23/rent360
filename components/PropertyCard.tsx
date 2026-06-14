@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { type ExtendedProperty } from '../types/property';
-import { Calendar, MapPin, Phone, Clock, Info, Building2, Check, Loader2, Trash2, MessageCircle, Target } from 'lucide-react';
+import { Calendar, MapPin, Phone, Clock, Info, Building2, Check, Loader2, Trash2, MessageCircle, Target, Archive, RotateCcw } from 'lucide-react';
 import { amenityLabelsFrom } from '../lib/data/amenity-labels';
 
 interface PropertyCardProps {
@@ -10,12 +10,16 @@ interface PropertyCardProps {
   showApproveButton?: boolean;
   showDeleteButton?: boolean;
   showOutreachButton?: boolean;
+  showIrrelevantButton?: boolean;
+  showRestoreButton?: boolean;
   onApproved?: (propertyId: string) => void;
   onDeleted?: (propertyId: string) => void;
   onOutreachSent?: (propertyId: string) => void;
+  onIrrelevant?: (propertyId: string) => void;
+  onRestored?: (propertyId: string) => void;
 }
 
-export default function PropertyCard({ item, showApproveButton = false, showDeleteButton = false, showOutreachButton = false, onApproved, onDeleted, onOutreachSent }: PropertyCardProps) {
+export default function PropertyCard({ item, showApproveButton = false, showDeleteButton = false, showOutreachButton = false, showIrrelevantButton = false, showRestoreButton = false, onApproved, onDeleted, onOutreachSent, onIrrelevant, onRestored }: PropertyCardProps) {
   const image = Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : null;
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -27,6 +31,48 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
   const [outreachError, setOutreachError] = useState<string | null>(null);
   const [justSentOutreach, setJustSentOutreach] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [markingIrrelevant, setMarkingIrrelevant] = useState(false);
+  const [irrelevantError, setIrrelevantError] = useState<string | null>(null);
+  const [confirmingIrrelevant, setConfirmingIrrelevant] = useState(false);
+  const [irrelevantReason, setIrrelevantReason] = useState('');
+  const [restoring, setRestoring] = useState(false);
+
+  const handleMarkIrrelevant = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (markingIrrelevant) return;
+    setMarkingIrrelevant(true);
+    setIrrelevantError(null);
+    try {
+      const res = await fetch(`/api/v1/properties/${item.id}/approve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ irrelevant: true, reason: irrelevantReason.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || 'הסימון נכשל');
+      onIrrelevant?.(item.id);
+    } catch (err) {
+      setIrrelevantError(err instanceof Error ? err.message : 'הסימון נכשל');
+      setMarkingIrrelevant(false);
+    }
+  };
+
+  const handleRestore = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (restoring) return;
+    setRestoring(true);
+    try {
+      const res = await fetch(`/api/v1/properties/${item.id}/approve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ irrelevant: false }),
+      });
+      if (!res.ok) { setRestoring(false); return; }
+      onRestored?.(item.id);
+    } catch { setRestoring(false); }
+  };
 
   const handleConfirmDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -344,6 +390,48 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
                 <span>מחק נכס</span>
               </button>
             )}
+          </div>
+        )}
+
+        {/* Mark irrelevant (e.g. rented not via us) */}
+        {showIrrelevantButton && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+            {confirmingIrrelevant ? (
+              <div style={{ borderRadius: 'var(--r-sm)', border: '1px solid var(--line)', background: 'var(--paper-2, #f7f7f5)', padding: 12 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: '0 0 6px' }}>לסמן את הנכס כלא רלוונטי?</p>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-3)', margin: '0 0 8px' }}>יעבור לרשימת ה&quot;לא רלוונטיים&quot; עם תזכורת בדיקה חוזרת בעוד שנה.</p>
+                <input
+                  value={irrelevantReason}
+                  onChange={(e) => setIrrelevantReason(e.target.value)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  placeholder="סיבה (לא חובה) — למשל: הושכר שלא דרכנו"
+                  style={{ width: '100%', marginBottom: 10, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 12 }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={handleMarkIrrelevant} disabled={markingIrrelevant} className="btn" style={{ flex: 1, background: '#475569', color: 'white', justifyContent: 'center' }}>
+                    {markingIrrelevant ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
+                    <span>{markingIrrelevant ? 'מסמן...' : 'כן, לא רלוונטי'}</span>
+                  </button>
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmingIrrelevant(false); }} disabled={markingIrrelevant} className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>ביטול</button>
+                </div>
+                {irrelevantError && <p style={{ marginTop: 8, fontSize: 11, color: 'var(--red)' }}>{irrelevantError}</p>}
+              </div>
+            ) : (
+              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmingIrrelevant(true); }} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center', color: 'var(--ink-3)' }}>
+                <Archive size={14} />
+                <span>סמן לא רלוונטי</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Restore from irrelevant back to approved */}
+        {showRestoreButton && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+            <button type="button" onClick={handleRestore} disabled={restoring} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center', color: 'var(--brand)' }}>
+              {restoring ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+              <span>{restoring ? 'מחזיר...' : 'החזר למאושרים'}</span>
+            </button>
           </div>
         )}
       </div>
