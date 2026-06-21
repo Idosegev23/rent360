@@ -6,6 +6,7 @@ import { ArrowRight, Send, Loader2, AlertCircle, ChevronDown, Check } from 'luci
 import { ThreadGoogleActions } from '@/components/google/ThreadGoogleActions'
 import { RelatedItems } from '@/components/RelatedItems'
 import { AddTaskButton } from '@/components/tasks/AddTaskButton'
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 
 type Message = {
   id: string
@@ -292,6 +293,8 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
           <div className="rounded-lg border border-brand-border bg-white p-3">
             <AddTaskButton entityType="thread" entityId={thread.id} label="הוסף משימה מהשיחה" />
           </div>
+          {/* Free-text notes/log on the conversation — auto-attributed to the logged-in account. */}
+          <ActivityTimeline entityType="thread" entityId={thread.id} />
           <RelatedItems entityType="thread" entityId={thread.id} />
 
           <div className="rounded-lg border border-brand-border bg-white p-3 text-xs space-y-2">
