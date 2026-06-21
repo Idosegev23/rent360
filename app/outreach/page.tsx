@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import {
   Send, Building2, Users, ShieldOff, Loader2, AlertCircle, RefreshCw,
-  CheckCircle2, Trash2, Upload, Gauge,
+  CheckCircle2, Trash2, Upload, Gauge, SlidersHorizontal,
 } from 'lucide-react'
 import Topbar from '../../components/shell/Topbar'
 
@@ -21,6 +21,7 @@ type QueueRow = {
   coverImage: string | null
   received: Received
   createdAt?: string | null   // when the property was added to the system ("מתי עלה")
+  entryDate?: string | null   // available_from / evacuation_date — when the apartment frees up
 }
 
 type SendResult = { id: string; status: 'sent' | 'skipped'; reason?: string }
@@ -89,10 +90,21 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   const [genProgress, setGenProgress] = useState<string | null>(null)
   // landlord filters
   const [city, setCity] = useState('')
+  const [availFrom, setAvailFrom] = useState('')   // entry-date range (available_from / evacuation_date)
+  const [availTo, setAvailTo] = useState('')
+  const [roomsMin, setRoomsMin] = useState('')
+  const [roomsMax, setRoomsMax] = useState('')
+  const [priceMin, setPriceMin] = useState('')
+  const [priceMax, setPriceMax] = useState('')
+  const [limit, setLimit] = useState(50)           // grows via "הצג עוד" (server caps at 200)
+  const [hasMore, setHasMore] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [applyTick, setApplyTick] = useState(0)    // bumped by "סנן"/"נקה" to fetch with fresh state
   // landlord: which row's template preview is open + batch template preference
   const [previewRow, setPreviewRow] = useState<string | null>(null)
   const [prefer, setPrefer] = useState<'personalized' | 'basic'>('personalized')
-  const [viewFilter, setViewFilter] = useState<'all' | 'unsent' | 'sent'>('all')
+  // Default to owners we've never contacted — opening on "כבר נשלח" was the main confusion.
+  const [viewFilter, setViewFilter] = useState<'all' | 'unsent' | 'sent'>('unsent')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,12 +112,22 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     setResults(null)
     try {
       const params = new URLSearchParams()
-      if (mode === 'landlord' && city.trim()) params.set('city', city.trim())
-      // "שטרם נשלח" pulls uncontacted owners from the WHOLE queue (server-side), not just this page.
-      if (mode === 'landlord' && viewFilter === 'unsent') params.set('freshOnly', '1')
+      if (mode === 'landlord') {
+        if (city.trim()) params.set('city', city.trim())
+        // "שטרם נשלח" pulls uncontacted owners from the WHOLE queue (server-side), not just this page.
+        if (viewFilter === 'unsent') params.set('freshOnly', '1')
+        if (availFrom) params.set('availFrom', availFrom)
+        if (availTo) params.set('availTo', availTo)
+        if (roomsMin.trim()) params.set('roomsMin', roomsMin.trim())
+        if (roomsMax.trim()) params.set('roomsMax', roomsMax.trim())
+        if (priceMin.trim()) params.set('priceMin', priceMin.trim())
+        if (priceMax.trim()) params.set('priceMax', priceMax.trim())
+        params.set('limit', String(limit))
+      }
       const res = await fetch(`${ep.queue}?${params.toString()}`)
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data?.error?.message || data?.error?.code || 'load failed')
+      setHasMore(data.hasMore === true)
       const mapped: QueueRow[] = (data.rows || []).map((r: any) => mode === 'landlord'
         ? {
             id: r.propertyId,
@@ -115,6 +137,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             coverImage: r.coverImage,
             received: r.received || { today: 0, week: 0 },
             createdAt: r.createdAt ?? null,
+            entryDate: r.entryDate ?? null,
           }
         : {
             id: r.matchId,
@@ -134,9 +157,21 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     } finally {
       setLoading(false)
     }
-  }, [ep.queue, mode, city, viewFilter])
+  }, [ep.queue, mode, city, viewFilter, availFrom, availTo, roomsMin, roomsMax, priceMin, priceMax, limit])
 
-  useEffect(() => { load() }, [load, refreshKey])
+  // Auto-fetch on mount + when a PRIMARY control changes (tab, view, refresh, page size). The
+  // text/date filters apply explicitly via "סנן" / Enter, so typing doesn't refetch per keystroke.
+  useEffect(() => { load() }, [mode, ep.queue, refreshKey, viewFilter, limit, applyTick]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "סנן" — fetch with the current filter values from page 1. applyTick guarantees the fetch
+  // sees the freshly-set state (avoids the stale-closure trap of calling load() inline).
+  function applyFilters() { setLimit(50); setApplyTick(t => t + 1) }
+  function clearFilters() {
+    setCity(''); setAvailFrom(''); setAvailTo(''); setRoomsMin(''); setRoomsMax(''); setPriceMin(''); setPriceMax('')
+    setLimit(50); setApplyTick(t => t + 1)
+  }
+  const activeFilterCount = [city, availFrom, availTo, roomsMin, roomsMax, priceMin, priceMax]
+    .filter(v => v && String(v).trim()).length
 
   function toggle(id: string) {
     setSelected(prev => {
@@ -168,11 +203,20 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     if (sending) return
     let ids: string[] = []
     try {
-      const res = await fetch(`${ep.queue}?freshOnly=1&limit=50`)
+      // Honour the active filters so "send to 50 fresh" targets e.g. only August-entry owners.
+      const params = new URLSearchParams({ freshOnly: '1', limit: '50' })
+      if (city.trim()) params.set('city', city.trim())
+      if (availFrom) params.set('availFrom', availFrom)
+      if (availTo) params.set('availTo', availTo)
+      if (roomsMin.trim()) params.set('roomsMin', roomsMin.trim())
+      if (roomsMax.trim()) params.set('roomsMax', roomsMax.trim())
+      if (priceMin.trim()) params.set('priceMin', priceMin.trim())
+      if (priceMax.trim()) params.set('priceMax', priceMax.trim())
+      const res = await fetch(`${ep.queue}?${params.toString()}`)
       const data = await res.json()
       ids = (data.rows || []).map((r: any) => r.propertyId).filter(Boolean)
     } catch { setError('טעינת הנמענים הטריים נכשלה'); return }
-    if (ids.length === 0) { window.alert('אין כרגע בעלי דירות שטרם נוצר איתם קשר.'); return }
+    if (ids.length === 0) { window.alert('אין כרגע בעלי דירות שטרם נוצר איתם קשר התואמים לסינון.'); return }
     await sendBatch(ids)
     load()
   }
@@ -266,9 +310,19 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             placeholder="סינון לפי עיר…"
             value={city}
             onChange={e => setCity(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') load() }}
-            className="rounded-md border border-brand-border bg-white px-3 py-1.5 text-sm w-48"
+            onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
+            className="rounded-md border border-brand-border bg-white px-3 py-1.5 text-sm w-44"
           />
+        )}
+        {mode === 'landlord' && (
+          <button
+            type="button"
+            onClick={() => setShowFilters(s => !s)}
+            className={`btn ${activeFilterCount > 0 ? 'border-brand-primary text-brand-primary' : 'border-brand-border text-gray-600'} border bg-white hover:bg-gray-50`}
+            title="סינון לפי תאריך כניסה, חדרים ומחיר"
+          >
+            <SlidersHorizontal size={14} /> סינונים{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+          </button>
         )}
         {/* Filter — narrows the list. Then select within the filtered view. */}
         {mode === 'landlord' && (
@@ -301,7 +355,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             type="button"
             onClick={sendFreshBatch}
             disabled={sending}
-            title="מביא מהתור 50 בעלי דירות שטרם נוצר איתם קשר (מכל התור, לא רק העמוד) ושולח אליהם"
+            title="מביא מהתור 50 בעלי דירות שטרם נוצר איתם קשר (לפי הסינון הפעיל, מכל התור — לא רק העמוד) ושולח אליהם"
             className="btn disabled:opacity-50 border border-brand-primary text-brand-primary hover:bg-brand-primary/5"
           >
             <Send size={14} />
@@ -318,6 +372,44 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
           {sending ? (genProgress || 'שולח…') : `שלח אצווה (${selected.size})`}
         </button>
       </div>
+
+      {mode === 'landlord' && showFilters && (
+        <div className="rounded-lg border border-brand-border bg-gray-50 p-3 mb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <label className="text-xs text-gray-600">
+              תאריך כניסה — מ־
+              <input type="date" value={availFrom} onChange={e => setAvailFrom(e.target.value)} className="mt-1 w-full rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm" />
+            </label>
+            <label className="text-xs text-gray-600">
+              תאריך כניסה — עד
+              <input type="date" value={availTo} onChange={e => setAvailTo(e.target.value)} className="mt-1 w-full rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm" />
+            </label>
+            <div />
+            <label className="text-xs text-gray-600">
+              חדרים — מ־
+              <input type="number" inputMode="decimal" step="0.5" min="0" value={roomsMin} onChange={e => setRoomsMin(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') applyFilters() }} placeholder="לדוגמה 2.5" className="mt-1 w-full rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm" />
+            </label>
+            <label className="text-xs text-gray-600">
+              חדרים — עד
+              <input type="number" inputMode="decimal" step="0.5" min="0" value={roomsMax} onChange={e => setRoomsMax(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') applyFilters() }} placeholder="לדוגמה 4" className="mt-1 w-full rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm" />
+            </label>
+            <div />
+            <label className="text-xs text-gray-600">
+              מחיר — מ־ (₪)
+              <input type="number" inputMode="numeric" min="0" value={priceMin} onChange={e => setPriceMin(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') applyFilters() }} placeholder="3500" className="mt-1 w-full rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm" />
+            </label>
+            <label className="text-xs text-gray-600">
+              מחיר — עד (₪)
+              <input type="number" inputMode="numeric" min="0" value={priceMax} onChange={e => setPriceMax(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') applyFilters() }} placeholder="6000" className="mt-1 w-full rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm" />
+            </label>
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <button type="button" onClick={applyFilters} className="btn btn-brand"><SlidersHorizontal size={14} /> סנן</button>
+            <button type="button" onClick={clearFilters} className="btn border border-brand-border bg-white text-gray-600 hover:bg-gray-50">נקה סינון</button>
+            <span className="text-xs text-gray-400">הסינון חל על העיר, תאריך הכניסה, מספר החדרים והמחיר.</span>
+          </div>
+        </div>
+      )}
 
       {results && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 mb-3">
@@ -355,7 +447,10 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
                   {r.score != null && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">{Math.round(r.score)}% התאמה</span>}
                 </div>
                 <div className="text-xs text-gray-500 truncate">{r.subtitle || r.phone}</div>
-                {r.createdAt && <div className="text-[11px] text-gray-400">עלה למערכת {addedAgo(r.createdAt)}</div>}
+                <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-gray-400">
+                  {r.createdAt && <span>עלה למערכת {addedAgo(r.createdAt)}</span>}
+                  {r.entryDate && <span className="text-amber-600 font-medium">כניסה {fmtDate(r.entryDate)}</span>}
+                </div>
               </div>
               <ReceivedBadge received={r.received} />
               {mode === 'landlord' && (
@@ -384,8 +479,28 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
           </div>
         ))}
       </div>
+
+      {mode === 'landlord' && !loading && hasMore && visibleRows.length > 0 && (
+        <div className="flex justify-center mt-3">
+          <button
+            type="button"
+            onClick={() => setLimit(l => Math.min(l + 50, 200))}
+            disabled={limit >= 200}
+            className="btn border border-brand-border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            title={limit >= 200 ? 'הגעת לתקרת התצוגה — צמצמו עם סינון' : 'טען עוד נמענים מהתור'}
+          >
+            {limit >= 200 ? 'תקרת תצוגה (200) — צמצמו עם סינון' : 'הצג עוד 50'}
+          </button>
+        </div>
+      )}
     </>
   )
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 type PropertyDetails = {

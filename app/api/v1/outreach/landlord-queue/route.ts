@@ -18,7 +18,9 @@ import {
  * and suppressed phones. SQL filters are a coarse upper bound — the dispatcher still
  * skips rows with an unusable name/street/rooms at send time and reports the reason.
  *
- * Query params (all optional): city, hasImages=1, createdAfter, createdBefore, limit, offset.
+ * Query params (all optional): city, hasImages=1, createdAfter, createdBefore,
+ *   availFrom, availTo (entry-date range, matched against available_from OR evacuation_date),
+ *   roomsMin, roomsMax, priceMin, priceMax, limit, offset, freshOnly=1.
  */
 export async function GET(req: NextRequest) {
   const ctx = await requireAdminOrg()
@@ -31,7 +33,13 @@ export async function GET(req: NextRequest) {
   const hasImages = url.searchParams.get('hasImages') === '1'
   const createdAfter = url.searchParams.get('createdAfter')
   const createdBefore = url.searchParams.get('createdBefore')
-  const limit = Math.max(1, Math.min(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 100))
+  const availFrom = url.searchParams.get('availFrom')   // entry/availability date range (available_from)
+  const availTo = url.searchParams.get('availTo')
+  const roomsMin = url.searchParams.get('roomsMin')
+  const roomsMax = url.searchParams.get('roomsMax')
+  const priceMin = url.searchParams.get('priceMin')
+  const priceMax = url.searchParams.get('priceMax')
+  const limit = Math.max(1, Math.min(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 200))
   const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0)
   // freshOnly → return only owners we haven't messaged at all (received.week === 0), deduped by
   // phone. The recently-contacted batch tends to sit at the top (newest imports), so scan deeper.
@@ -45,7 +53,7 @@ export async function GET(req: NextRequest) {
 
   let q = sb
     .from('properties')
-    .select('id, contact_name, contact_phone, city, neighborhood, street, address, rooms, price, images, created_at')
+    .select('id, contact_name, contact_phone, city, neighborhood, street, address, rooms, price, images, created_at, available_from, evacuation_date')
     .eq('org_id', orgId)
     .eq('initial_message_sent', false)
     .eq('outreach_blocked', false)
@@ -59,6 +67,22 @@ export async function GET(req: NextRequest) {
   if (city) q = q.eq('city', city)
   if (createdAfter) q = q.gte('created_at', createdAfter)
   if (createdBefore) q = q.lte('created_at', createdBefore)
+  if (roomsMin) q = q.gte('rooms', Number(roomsMin))
+  if (roomsMax) q = q.lte('rooms', Number(roomsMax))
+  if (priceMin) q = q.gte('price', Number(priceMin))
+  if (priceMax) q = q.lte('price', Number(priceMax))
+  // Entry-date filter spans BOTH date columns (the matcher reads evacuation_date || available_from),
+  // so a property qualifies if EITHER date falls in the range — else owners with only one populated
+  // would be silently dropped.
+  if (availFrom || availTo) {
+    const clause = (col: string) => {
+      const parts: string[] = []
+      if (availFrom) parts.push(`${col}.gte.${availFrom}`)
+      if (availTo) parts.push(`${col}.lte.${availTo}`)
+      return parts.length === 1 ? parts[0] : `and(${parts.join(',')})`
+    }
+    q = q.or(`${clause('available_from')},${clause('evacuation_date')}`)
+  }
 
   const { data: candidates, error } = await q
   if (error) return NextResponse.json({ error: { code: 'DB_ERROR', message: error.message } }, { status: 500 })
@@ -73,6 +97,7 @@ export async function GET(req: NextRequest) {
     price: number | null
     coverImage: string | null
     createdAt: string
+    entryDate: string | null
   }> = []
 
   // Collect candidates deduped by owner-phone (one outreach per owner, not per listing). For
@@ -102,6 +127,7 @@ export async function GET(req: NextRequest) {
       price: p.price ?? null,
       coverImage: images[0] || null,
       createdAt: p.created_at,
+      entryDate: p.evacuation_date || p.available_from || null,
     })
   }
 
