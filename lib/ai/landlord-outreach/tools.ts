@@ -123,7 +123,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     name: 'update_property_field',
-    description: 'Save a property detail the landlord shared during the conversation (we collect details in chat — there is no form). Call it each time the landlord gives or corrects a fact. Whitelist only.',
+    description: 'Save a property detail the landlord shared during the conversation (we collect details in chat — there is no form). Call it each time the landlord gives or corrects a fact. Whitelist only. CRITICAL: interpret the value by the QUESTION you just asked — a bare number right after asking about the entry/availability date is a DATE (Israeli day.month, e.g. "2.8" → available_from = Aug 2), NOT rooms. Never overwrite a value already known from the listing (especially rooms) with a contradictory or implausible value (e.g. "2.8" rooms for a 5-room listing) — clarify with the landlord first instead of saving.',
     parameters: {
       type: 'object',
       properties: {
