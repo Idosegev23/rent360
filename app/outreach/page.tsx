@@ -181,7 +181,9 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
     })
   }
   // Real filter: narrow the visible list so selection + sending operate on a focused set.
-  const visibleRows = rows.filter(r =>
+  // The view segments are landlord-only — renter mode always shows the full match list
+  // (no segment exists there to switch back off the 'unsent' default).
+  const visibleRows = mode === 'renter' ? rows : rows.filter(r =>
     viewFilter === 'unsent' ? (r.received?.week || 0) === 0
     : viewFilter === 'sent' ? (r.received?.week || 0) > 0
     : true)
@@ -303,18 +305,17 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
 
       <CountersBar counters={counters} />
 
-      <div className="flex flex-wrap items-center gap-2 my-3">
-        {mode === 'landlord' && (
+      {/* Discovery — what to look at: search + filters + view */}
+      {mode === 'landlord' && (
+        <div className="flex flex-wrap items-center gap-2 my-3">
           <input
             type="text"
-            placeholder="סינון לפי עיר…"
+            placeholder="חיפוש לפי עיר…"
             value={city}
             onChange={e => setCity(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
-            className="rounded-md border border-brand-border bg-white px-3 py-1.5 text-sm w-44"
+            className="rounded-md border border-brand-border bg-white px-3 py-1.5 text-sm w-48"
           />
-        )}
-        {mode === 'landlord' && (
           <button
             type="button"
             onClick={() => setShowFilters(s => !s)}
@@ -323,55 +324,14 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
           >
             <SlidersHorizontal size={14} /> סינונים{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
           </button>
-        )}
-        {/* Filter — narrows the list. Then select within the filtered view. */}
-        {mode === 'landlord' && (
-          <div className="seg">
-            {([['all', `הכל · ${rows.length}`], ['unsent', `שטרם נשלח · ${unsentCount}`], ['sent', `נשלח בעבר · ${rows.length - unsentCount}`]] as const).map(([k, label]) => (
+          <div className="flex-1" />
+          <div className="seg-tabs">
+            {([['unsent', `טרם נשלח · ${unsentCount}`], ['all', `הכל · ${rows.length}`], ['sent', `נשלח בעבר · ${rows.length - unsentCount}`]] as const).map(([k, label]) => (
               <button key={k} type="button" onClick={() => setViewFilter(k)} className={viewFilter === k ? 'active' : ''}>{label}</button>
             ))}
           </div>
-        )}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <button type="button" onClick={() => setSelected(prev => { const n = new Set(prev); if (allVisibleSelected) visibleRows.forEach(r => n.delete(r.id)); else visibleRows.forEach(r => n.add(r.id)); return n })} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">{allVisibleSelected ? 'נקה מוצגים' : 'בחר הכל'}</button>
-          <button type="button" onClick={() => setSelected(new Set())} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700">נקה</button>
-          <button type="button" onClick={() => selectNextN(50)} className="px-2 py-1 rounded bg-brand-primary/10 text-brand-primary font-medium hover:bg-brand-primary/20" title="בחר 50 נוספים מהרשימה המוצגת שטרם נבחרו">+50 הבאים</button>
-          <span className="text-gray-500" title={`${selected.size} מסומנים`}>· נבחרו: <strong>{selected.size}</strong></span>
         </div>
-        <div className="flex-1" />
-        {mode === 'landlord' && (
-          <select
-            value={prefer}
-            onChange={e => setPrefer(e.target.value === 'basic' ? 'basic' : 'personalized')}
-            className="rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm"
-            title="איזו תבנית לשלוח באצווה"
-          >
-            <option value="personalized">פרסונלי (נפילה לבסיסי)</option>
-            <option value="basic">בסיסי בלבד</option>
-          </select>
-        )}
-        {mode === 'landlord' && (
-          <button
-            type="button"
-            onClick={sendFreshBatch}
-            disabled={sending}
-            title="מביא מהתור 50 בעלי דירות שטרם נוצר איתם קשר (לפי הסינון הפעיל, מכל התור — לא רק העמוד) ושולח אליהם"
-            className="btn disabled:opacity-50 border border-brand-primary text-brand-primary hover:bg-brand-primary/5"
-          >
-            <Send size={14} />
-            שלח ל-50 שטרם נשלח
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => sendBatch()}
-          disabled={sending || selected.size === 0 || (mode === 'renter' && !templateApproved)}
-          className="btn btn-brand disabled:opacity-50"
-        >
-          {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          {sending ? (genProgress || 'שולח…') : `שלח אצווה (${selected.size})`}
-        </button>
-      </div>
+      )}
 
       {mode === 'landlord' && showFilters && (
         <div className="rounded-lg border border-brand-border bg-gray-50 p-3 mb-3">
@@ -408,6 +368,52 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             <button type="button" onClick={clearFilters} className="btn border border-brand-border bg-white text-gray-600 hover:bg-gray-50">נקה סינון</button>
             <span className="text-xs text-gray-400">הסינון חל על העיר, תאריך הכניסה, מספר החדרים והמחיר.</span>
           </div>
+        </div>
+      )}
+
+      {/* Action bar — select on one side, send on the other */}
+      {!loading && !error && visibleRows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-border bg-gray-50 p-2 mb-3">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <button type="button" onClick={() => setSelected(prev => { const n = new Set(prev); if (allVisibleSelected) visibleRows.forEach(r => n.delete(r.id)); else visibleRows.forEach(r => n.add(r.id)); return n })} className="rounded-md border border-brand-border bg-white px-2.5 py-1 text-gray-700 hover:bg-gray-50">{allVisibleSelected ? 'נקה מוצגים' : 'בחר הכל'}</button>
+            <button type="button" onClick={() => selectNextN(50)} className="rounded-md bg-brand-primary/10 px-2.5 py-1 font-medium text-brand-primary hover:bg-brand-primary/20" title="בחר 50 נוספים מהרשימה המוצגת שטרם נבחרו">+50 הבאים</button>
+            {selected.size > 0 && (
+              <button type="button" onClick={() => setSelected(new Set())} className="rounded-md border border-brand-border bg-white px-2.5 py-1 text-gray-600 hover:bg-gray-50">נקה בחירה</button>
+            )}
+            <span className="text-gray-500">נבחרו <strong className="text-gray-800">{selected.size}</strong></span>
+          </div>
+          <div className="flex-1" />
+          {mode === 'landlord' && (
+            <select
+              value={prefer}
+              onChange={e => setPrefer(e.target.value === 'basic' ? 'basic' : 'personalized')}
+              className="rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm"
+              title="איזו תבנית לשלוח באצווה"
+            >
+              <option value="personalized">תבנית פרסונלית</option>
+              <option value="basic">תבנית בסיסית</option>
+            </select>
+          )}
+          {mode === 'landlord' && (
+            <button
+              type="button"
+              onClick={sendFreshBatch}
+              disabled={sending}
+              title="מביא מהתור 50 בעלי דירות שטרם נוצר איתם קשר (לפי הסינון הפעיל, מכל התור — לא רק העמוד) ושולח אליהם"
+              className="btn disabled:opacity-50 border border-brand-primary text-brand-primary hover:bg-brand-primary/5"
+            >
+              <Send size={14} /> שלח ל-50 הבאים
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => sendBatch()}
+            disabled={sending || selected.size === 0 || (mode === 'renter' && !templateApproved)}
+            className="btn btn-brand disabled:opacity-50"
+          >
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {sending ? (genProgress || 'שולח…') : `שלח לנבחרים (${selected.size})`}
+          </button>
         </div>
       )}
 
