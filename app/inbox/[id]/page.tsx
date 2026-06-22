@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Send, Loader2, AlertCircle, ChevronDown, Check } from 'lucide-react'
+import { ArrowRight, Send, Loader2, AlertCircle, ChevronDown, Check, Info, StickyNote, ListChecks, Bot, UserRound } from 'lucide-react'
 import { ThreadGoogleActions } from '@/components/google/ThreadGoogleActions'
 import { RelatedItems } from '@/components/RelatedItems'
 import { AddTaskButton } from '@/components/tasks/AddTaskButton'
@@ -65,6 +65,35 @@ function fmtTime(iso: string): string {
   return d.toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+// Deterministic colored avatar from a name/phone.
+function initials(s: string | null | undefined): string {
+  const p = (s || '?').trim().split(/\s+/)
+  return ((p[0]?.[0] || '?') + (p[1]?.[0] || '')).toUpperCase()
+}
+function hueFor(s: string | null | undefined): string {
+  let h = 0
+  for (const c of String(s || '')) h = (h * 31 + c.charCodeAt(0)) % 360
+  return `hsl(${h} 52% 46%)`
+}
+
+type Tone = 'gray' | 'amber' | 'green' | 'red' | 'blue' | 'outline'
+const STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
+  active: { label: 'פעיל', tone: 'green' },
+  awaiting_reply: { label: 'ממתין לתגובה', tone: 'amber' },
+  human_takeover: { label: 'בטיפול אדם', tone: 'red' },
+  closed_won: { label: 'נסגרה — כן', tone: 'green' },
+  closed_lost: { label: 'נסגרה — לא', tone: 'outline' },
+  opted_out: { label: 'הוסר', tone: 'outline' },
+  cooldown: { label: 'בהמתנה', tone: 'outline' },
+}
+const INTENT_LABELS: Record<string, string> = {
+  interested: 'מתעניין',
+  price_objection: 'מו״מ מחיר',
+  callback_later: 'לחזור אליו',
+  not_interested: 'לא מעוניין',
+  already_rented: 'כבר הושכר',
+}
+
 export default function ThreadDetailPage({ params }: { params: { id: string } }) {
   const [thread, setThread] = useState<Thread | null>(null)
   const [property, setProperty] = useState<Property | null>(null)
@@ -75,6 +104,7 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [statusUpdating, setStatusUpdating] = useState(false)
+  const [sideTab, setSideTab] = useState<'info' | 'activity' | 'tasks'>('info')
   const [team, setTeam] = useState<Array<{ id: string; name: string | null }>>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -174,148 +204,156 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
   if (!thread) return null
 
   const intent = (thread.tags && typeof thread.tags === 'object' ? (thread.tags as any).intent : null) as string | null
+  const statusInfo = STATUS_LABELS[thread.status] || { label: thread.status, tone: 'gray' as Tone }
+  const contactName = property?.contact_name || thread.phone || 'ללא שם'
+  const composerDisabled = !windowOpen || thread.status === 'opted_out' || !inHumanMode || sending
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-4">
+    <div className="mx-auto max-w-6xl px-4 py-4">
       <Link href="/inbox" className="inline-flex items-center gap-1 text-sm text-brand-primary hover:underline mb-3">
         <ArrowRight className="h-4 w-4" /> חזרה לתיבה
       </Link>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_280px]">
-        {/* Chat column */}
-        <div className="flex flex-col rounded-lg border border-brand-border bg-white min-h-[70vh]">
-          <div className="border-b border-brand-border p-3 flex items-center justify-between">
-            <div>
-              <div className="font-semibold">{property?.contact_name || thread.phone || 'ללא שם'}</div>
-              <div className="text-xs text-gray-500">{thread.phone}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              {inHumanMode ? (
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange('active')}
-                  disabled={statusUpdating}
-                  className="rounded-md border border-brand-primary px-3 py-1 text-xs font-medium text-brand-primary hover:bg-brand-primary/5 disabled:opacity-60"
-                >
-                  חזור לבוט
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange('human_takeover')}
-                  disabled={statusUpdating}
-                  className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60"
-                >
-                  השתלט על השיחה
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="wa-thread scroll-y flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-            {messages.map(m => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
-            <div ref={bottomRef} />
-          </div>
-
-          <form onSubmit={handleSend} className="border-t border-brand-border p-3">
-            {!windowOpen && (
-              <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                ⏰ חלון 24 שעות נסגר. רק תבנית מאושרת אפשרית כרגע.
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
+        {/* ===== Chat column ===== */}
+        <div className="surface-card flex flex-col overflow-hidden" style={{ padding: 0, height: 'calc(100vh - 130px)', minHeight: 460 }}>
+          {/* header */}
+          <div className="flex items-center gap-3 border-b p-3" style={{ borderColor: 'var(--line)' }}>
+            <span className="avatar-hue" style={{ width: 40, height: 40, fontSize: 14, background: hueFor(contactName) }}>{initials(contactName)}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="truncate font-semibold" style={{ color: 'var(--ink)' }}>{contactName}</span>
+                <span className={`pill pill-${statusInfo.tone}`} style={{ fontSize: 10 }}>{statusInfo.label}</span>
+                {intent && <span className="pill pill-blue" style={{ fontSize: 10 }}>{INTENT_LABELS[intent] || intent}</span>}
               </div>
-            )}
-            {thread.status === 'opted_out' && (
-              <div className="mb-2 rounded-md border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700">
-                בעל הנכס ביקש שלא לקבל הודעות. שליחה חסומה.
-              </div>
-            )}
-            {thread.status !== 'opted_out' && (
-              <TemplateSender threadId={params.id} onSent={() => load({ silent: true })} />
-            )}
-            <div className="flex gap-2">
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={inHumanMode ? 'כתוב הודעה...' : 'בוט במצב פעיל. השתלט כדי להגיב ידנית.'}
-                disabled={!windowOpen || thread.status === 'opted_out' || !inHumanMode || sending}
-                rows={2}
-                className="flex-1 resize-none rounded-md border border-brand-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              />
-              <button
-                type="submit"
-                disabled={!draft.trim() || sending || !windowOpen || thread.status === 'opted_out' || !inHumanMode}
-                className="shrink-0 self-end rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {thread.phone && <div className="num text-xs" dir="ltr" style={{ color: 'var(--ink-4)' }}>{thread.phone}</div>}
+            </div>
+            {inHumanMode ? (
+              <button type="button" onClick={() => handleStatusChange('active')} disabled={statusUpdating}
+                className="shrink-0 inline-flex items-center gap-1 rounded-md border border-brand-primary px-3 py-1.5 text-xs font-medium text-brand-primary hover:bg-brand-primary/5 disabled:opacity-60">
+                <Bot className="h-3.5 w-3.5" /> חזרה לבוט
               </button>
-            </div>
-            {sendError && <p className="mt-1 text-xs text-red-600">{sendError}</p>}
-          </form>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-3">
-          <div className="rounded-lg border border-brand-border bg-white p-3">
-            <div className="text-xs text-gray-500 mb-2">שיוך ופעולות Google</div>
-            <ThreadGoogleActions
-              threadId={thread.id}
-              assignedUserId={thread.assigned_to}
-              team={team}
-              contactEmail={null}
-            />
+            ) : (
+              <button type="button" onClick={() => handleStatusChange('human_takeover')} disabled={statusUpdating}
+                className="shrink-0 inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60">
+                <UserRound className="h-3.5 w-3.5" /> השתלטות
+              </button>
+            )}
           </div>
 
-          {property ? (
-            <div className="rounded-lg border border-brand-border bg-white p-3">
-              <div className="text-xs text-gray-500 mb-1">נכס מקושר</div>
-              <Link href={`/properties/${property.id}`} className="font-semibold text-sm text-brand-primary hover:underline">
-                {property.title}
-              </Link>
-              <div className="mt-1 text-xs text-gray-600">
-                {[property.street || property.address, property.city].filter(Boolean).join(', ')}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1 text-xs">
-                {property.price && <span className="rounded bg-brand-primary/10 px-2 py-0.5 text-brand-primary">₪{property.price.toLocaleString('he-IL')}</span>}
-                {property.rooms && <span className="rounded bg-gray-100 px-2 py-0.5">{property.rooms} חד&apos;</span>}
-                {property.sqm && <span className="rounded bg-gray-100 px-2 py-0.5">{property.sqm} מ&quot;ר</span>}
-              </div>
-              {Array.isArray(property.images) && property.images.length > 0 && (
-                <img src={property.images[0]} alt="" className="mt-3 w-full rounded object-cover aspect-[4/3]" />
-              )}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-gray-300 bg-white p-3 text-xs text-gray-500 text-center">
-              לא משויך נכס לשיחה זו עדיין.
+          {/* mode banner */}
+          {!inHumanMode && thread.status !== 'opted_out' && (
+            <div className="flex items-center gap-1.5 border-b bg-emerald-50 px-3 py-1.5 text-[11px] text-emerald-700" style={{ borderColor: 'var(--line)' }}>
+              <Bot className="h-3.5 w-3.5 shrink-0" /> הבוט מנהל את השיחה — לחצו “השתלטות” כדי להגיב ידנית.
             </div>
           )}
 
-          <div className="rounded-lg border border-brand-border bg-white p-3">
-            <AddTaskButton entityType="thread" entityId={thread.id} label="הוסף משימה מהשיחה" />
+          {/* messages */}
+          <div className="wa-thread scroll-y flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+            {messages.length === 0 && <div className="py-8 text-center text-sm" style={{ color: 'var(--ink-4)' }}>אין הודעות עדיין.</div>}
+            {messages.map(m => <MessageBubble key={m.id} message={m} />)}
+            <div ref={bottomRef} />
           </div>
-          {/* Free-text notes/log on the conversation — auto-attributed to the logged-in account. */}
-          <ActivityTimeline entityType="thread" entityId={thread.id} />
-          <RelatedItems entityType="thread" entityId={thread.id} />
 
-          <div className="rounded-lg border border-brand-border bg-white p-3 text-xs space-y-2">
-            <div className="flex justify-between"><span className="text-gray-500">סטטוס</span><span>{thread.status}</span></div>
-            {intent && <div className="flex justify-between"><span className="text-gray-500">כוונה</span><span>{intent}</span></div>}
-            {thread.last_inbound_at && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">הודעה אחרונה מהלקוח</span>
-                <span>{fmtTime(thread.last_inbound_at)}</span>
+          {/* composer */}
+          <div className="border-t p-3" style={{ borderColor: 'var(--line)' }}>
+            {thread.status === 'opted_out' ? (
+              <div className="rounded-md p-2 text-center text-xs" style={{ background: 'var(--surface-2)', color: 'var(--ink-3)' }}>
+                בעל הנכס ביקש שלא לקבל הודעות — שליחה חסומה.
               </div>
-            )}
-            {thread.last_outbound_at && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">הודעה אחרונה אלינו</span>
-                <span>{fmtTime(thread.last_outbound_at)}</span>
-              </div>
-            )}
-            {thread.opted_out_at && (
-              <div className="flex justify-between text-red-700"><span>הוסר ב</span><span>{fmtTime(thread.opted_out_at)}</span></div>
+            ) : (
+              <>
+                {!windowOpen && (
+                  <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+                    ⏰ חלון 24 השעות נסגר — אפשר לשלוח רק תבנית מאושרת.
+                  </div>
+                )}
+                <TemplateSender threadId={params.id} onSent={() => load({ silent: true })} />
+                <form onSubmit={handleSend} className="flex gap-2">
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder={inHumanMode ? 'כתבו הודעה…' : 'במצב בוט — לחצו “השתלטות” כדי להגיב ידנית'}
+                    disabled={composerDisabled}
+                    rows={2}
+                    className="flex-1 resize-none rounded-md border border-brand-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() || composerDisabled}
+                    className="shrink-0 self-end rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
+                </form>
+                {sendError && <p className="mt-1 text-xs text-red-600">{sendError}</p>}
+              </>
             )}
           </div>
+        </div>
+
+        {/* ===== Sidebar (tabbed) ===== */}
+        <div className="space-y-3 lg:sticky lg:top-2">
+          <div className="seg-tabs" style={{ display: 'flex', width: '100%' }}>
+            {([['info', 'פרטים', Info], ['activity', 'הערות', StickyNote], ['tasks', 'משימות', ListChecks]] as const).map(([k, label, Icon]) => (
+              <button key={k} type="button" onClick={() => setSideTab(k)} className={sideTab === k ? 'active' : ''}
+                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                <Icon size={14} /> {label}
+              </button>
+            ))}
+          </div>
+
+          {sideTab === 'info' && (
+            <>
+              {property ? (
+                <div className="surface-card p-3">
+                  <div className="mb-1 text-xs" style={{ color: 'var(--ink-4)' }}>נכס מקושר</div>
+                  <Link href={`/properties/${property.id}`} className="text-sm font-semibold text-brand-primary hover:underline">
+                    {property.title}
+                  </Link>
+                  <div className="mt-1 text-xs" style={{ color: 'var(--ink-3)' }}>
+                    {[property.street || property.address, property.city].filter(Boolean).join(', ')}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {property.price && <span className="pill pill-brand" style={{ fontSize: 10 }}>₪{property.price.toLocaleString('he-IL')}</span>}
+                    {property.rooms && <span className="pill pill-gray" style={{ fontSize: 10 }}>{property.rooms} חד&apos;</span>}
+                    {property.sqm && <span className="pill pill-gray" style={{ fontSize: 10 }}>{property.sqm} מ&quot;ר</span>}
+                  </div>
+                  {Array.isArray(property.images) && property.images.length > 0 && (
+                    <img src={property.images[0]} alt="" className="mt-3 w-full rounded-lg object-cover aspect-[4/3]" />
+                  )}
+                </div>
+              ) : (
+                <div className="surface-card p-3 text-center text-xs" style={{ borderStyle: 'dashed', color: 'var(--ink-4)' }}>
+                  לא משויך נכס לשיחה זו עדיין.
+                </div>
+              )}
+
+              <div className="surface-card p-3">
+                <div className="mb-2 text-xs" style={{ color: 'var(--ink-4)' }}>שיוך ופעולות Google</div>
+                <ThreadGoogleActions threadId={thread.id} assignedUserId={thread.assigned_to} team={team} contactEmail={null} />
+              </div>
+
+              <div className="surface-card p-3 text-xs space-y-2">
+                <div className="flex items-center justify-between"><span style={{ color: 'var(--ink-4)' }}>סטטוס</span><span className={`pill pill-${statusInfo.tone}`} style={{ fontSize: 10 }}>{statusInfo.label}</span></div>
+                {intent && <div className="flex items-center justify-between"><span style={{ color: 'var(--ink-4)' }}>כוונה</span><span>{INTENT_LABELS[intent] || intent}</span></div>}
+                {thread.last_inbound_at && <div className="flex justify-between"><span style={{ color: 'var(--ink-4)' }}>הודעה אחרונה מהלקוח</span><span className="num">{fmtTime(thread.last_inbound_at)}</span></div>}
+                {thread.last_outbound_at && <div className="flex justify-between"><span style={{ color: 'var(--ink-4)' }}>הודעה אחרונה אלינו</span><span className="num">{fmtTime(thread.last_outbound_at)}</span></div>}
+                {thread.opted_out_at && <div className="flex justify-between text-red-700"><span>הוסר ב</span><span className="num">{fmtTime(thread.opted_out_at)}</span></div>}
+              </div>
+            </>
+          )}
+
+          {sideTab === 'activity' && <ActivityTimeline entityType="thread" entityId={thread.id} />}
+
+          {sideTab === 'tasks' && (
+            <>
+              <div className="surface-card p-3">
+                <AddTaskButton entityType="thread" entityId={thread.id} label="הוסף משימה מהשיחה" />
+              </div>
+              <RelatedItems entityType="thread" entityId={thread.id} />
+            </>
+          )}
         </div>
       </div>
     </div>
