@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import {
   Send, Building2, Users, ShieldOff, Loader2, AlertCircle, RefreshCw,
-  CheckCircle2, Trash2, Upload, Gauge, SlidersHorizontal,
+  CheckCircle2, Trash2, Upload, Gauge, SlidersHorizontal, ArrowDownUp,
 } from 'lucide-react'
 import Topbar from '../../components/shell/Topbar'
 
@@ -22,6 +22,40 @@ type QueueRow = {
   received: Received
   createdAt?: string | null   // when the property was added to the system ("מתי עלה")
   entryDate?: string | null   // available_from / evacuation_date — when the apartment frees up
+  price?: number | null       // for client-side sorting
+  rooms?: number | null       // for client-side sorting
+}
+
+type SortKey = 'created_desc' | 'created_asc' | 'entry_asc' | 'entry_desc' | 'price_asc' | 'price_desc' | 'rooms_asc' | 'rooms_desc'
+
+// Client-side sort of the visible rows. Nulls always sort last. Dates are ISO 'YYYY-MM-DD'
+// (entryDate is the coalesced evacuation_date || available_from returned by the queue API).
+function sortRows(list: QueueRow[], key: SortKey): QueueRow[] {
+  const byNum = (sel: (r: QueueRow) => number | null | undefined, dir: number) => (a: QueueRow, b: QueueRow) => {
+    const x = sel(a), y = sel(b)
+    if (x == null && y == null) return 0
+    if (x == null) return 1
+    if (y == null) return -1
+    return dir * (x - y)
+  }
+  const byDate = (sel: (r: QueueRow) => string | null | undefined, dir: number) => (a: QueueRow, b: QueueRow) => {
+    const x = sel(a) || '', y = sel(b) || ''
+    if (!x && !y) return 0
+    if (!x) return 1
+    if (!y) return -1
+    return dir * (x < y ? -1 : x > y ? 1 : 0)
+  }
+  const sorted = [...list]
+  switch (key) {
+    case 'entry_asc': return sorted.sort(byDate(r => r.entryDate, 1))
+    case 'entry_desc': return sorted.sort(byDate(r => r.entryDate, -1))
+    case 'price_asc': return sorted.sort(byNum(r => r.price, 1))
+    case 'price_desc': return sorted.sort(byNum(r => r.price, -1))
+    case 'rooms_asc': return sorted.sort(byNum(r => r.rooms, 1))
+    case 'rooms_desc': return sorted.sort(byNum(r => r.rooms, -1))
+    case 'created_asc': return sorted.sort(byDate(r => r.createdAt, 1))
+    case 'created_desc': default: return sorted.sort(byDate(r => r.createdAt, -1))
+  }
 }
 
 type SendResult = { id: string; status: 'sent' | 'skipped'; reason?: string }
@@ -105,6 +139,7 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   const [prefer, setPrefer] = useState<'personalized' | 'basic'>('personalized')
   // Default to owners we've never contacted — opening on "כבר נשלח" was the main confusion.
   const [viewFilter, setViewFilter] = useState<'all' | 'unsent' | 'sent'>('unsent')
+  const [sortBy, setSortBy] = useState<SortKey>('created_desc')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -138,6 +173,8 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
             received: r.received || { today: 0, week: 0 },
             createdAt: r.createdAt ?? null,
             entryDate: r.entryDate ?? null,
+            price: r.price ?? null,
+            rooms: r.rooms ?? null,
           }
         : {
             id: r.matchId,
@@ -183,10 +220,12 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
   // Real filter: narrow the visible list so selection + sending operate on a focused set.
   // The view segments are landlord-only — renter mode always shows the full match list
   // (no segment exists there to switch back off the 'unsent' default).
-  const visibleRows = mode === 'renter' ? rows : rows.filter(r =>
+  const filteredRows = mode === 'renter' ? rows : rows.filter(r =>
     viewFilter === 'unsent' ? (r.received?.week || 0) === 0
     : viewFilter === 'sent' ? (r.received?.week || 0) > 0
     : true)
+  // Sort the visible set (client-side) — selection tools + the list both follow this order.
+  const visibleRows = mode === 'landlord' ? sortRows(filteredRows, sortBy) : filteredRows
   const unsentCount = rows.filter(r => (r.received?.week || 0) === 0).length
   const allVisibleSelected = visibleRows.length > 0 && visibleRows.every(r => selected.has(r.id))
   // Select the next N unselected rows from the VISIBLE set (send in waves of 50, not all at once).
@@ -324,6 +363,24 @@ function OutreachQueue({ mode, refreshKey }: { mode: Mode; refreshKey: number })
           >
             <SlidersHorizontal size={14} /> סינונים{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
           </button>
+          <div className="inline-flex items-center gap-1.5">
+            <ArrowDownUp size={14} className="text-gray-400" />
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as SortKey)}
+              className="rounded-md border border-brand-border bg-white px-2 py-1.5 text-sm"
+              title="מיון הרשימה המוצגת"
+            >
+              <option value="created_desc">חדש במערכת ← ישן</option>
+              <option value="created_asc">ישן במערכת ← חדש</option>
+              <option value="entry_asc">תאריך כניסה — קרוב ← רחוק</option>
+              <option value="entry_desc">תאריך כניסה — רחוק ← קרוב</option>
+              <option value="price_asc">מחיר — נמוך ← גבוה</option>
+              <option value="price_desc">מחיר — גבוה ← נמוך</option>
+              <option value="rooms_asc">חדרים — מעט ← הרבה</option>
+              <option value="rooms_desc">חדרים — הרבה ← מעט</option>
+            </select>
+          </div>
           <div className="flex-1" />
           <div className="seg-tabs">
             {([['unsent', `טרם נשלח · ${unsentCount}`], ['all', `הכל · ${rows.length}`], ['sent', `נשלח בעבר · ${rows.length - unsentCount}`]] as const).map(([k, label]) => (
