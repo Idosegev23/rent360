@@ -62,6 +62,20 @@ export async function GET(
 // Body: { amenity: 'divided' | 'garden', value: boolean }
 const TOGGLEABLE_AMENITIES = new Set(['divided', 'garden'])
 
+// Editable scalar columns for the "ערוך פרטים" form. Body: { fields: { ...subset } }.
+// Each value is coerced to the column's type; '' / null clears the column (except required ones).
+const EDITABLE_FIELDS: Record<string, 'text' | 'int' | 'num' | 'date' | 'bool'> = {
+  title: 'text', city: 'text', neighborhood: 'text', street: 'text', address: 'text',
+  price: 'int', rooms: 'num', sqm: 'int', floor: 'int',
+  type: 'text', condition: 'text', status: 'text',
+  available_from: 'date', evacuation_date: 'date',
+  description: 'text', full_text: 'text',
+  contact_name: 'text', contact_phone: 'text',
+  pets_allowed: 'bool', smokers_allowed: 'bool', long_term: 'bool',
+}
+// NOT NULL columns — refuse to blank them.
+const REQUIRED_FIELDS = new Set(['title', 'city', 'price'])
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -72,17 +86,61 @@ export async function PATCH(
     const uid = getUserIdFromSupabaseCookie(token)
     if (!uid) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
 
-    let body: { amenity?: unknown; value?: unknown } = {}
+    let body: { amenity?: unknown; value?: unknown; fields?: unknown } = {}
     try { body = await req.json() } catch {/* empty */}
+
+    const sb = supabaseService()
+    const { data: user } = await sb.from('users').select('org_id').eq('id', uid).maybeSingle()
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+    // --- General field edit: { fields: { ...subset } } ---
+    if (body.fields && typeof body.fields === 'object') {
+      const fields = body.fields as Record<string, unknown>
+      const update: Record<string, unknown> = {}
+      for (const [key, kind] of Object.entries(EDITABLE_FIELDS)) {
+        if (!(key in fields)) continue
+        const raw = fields[key]
+        let val: unknown
+        if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) {
+          val = null
+        } else if (kind === 'int') {
+          const n = parseInt(String(raw), 10); val = Number.isFinite(n) ? n : null
+        } else if (kind === 'num') {
+          const n = parseFloat(String(raw)); val = Number.isFinite(n) ? n : null
+        } else if (kind === 'bool') {
+          val = (raw === true || raw === 'true') ? true : ((raw === false || raw === 'false') ? false : null)
+        } else if (kind === 'date') {
+          val = String(raw).slice(0, 10)
+        } else {
+          val = String(raw).trim()
+        }
+        if (REQUIRED_FIELDS.has(key) && (val === null || val === '')) {
+          return NextResponse.json({ error: `שדה חובה חסר: ${key}` }, { status: 400 })
+        }
+        update[key] = val
+      }
+      if (Object.keys(update).length === 0) {
+        return NextResponse.json({ error: 'אין שדות לעדכון' }, { status: 400 })
+      }
+      update.updated_at = new Date().toISOString()
+      const { data: updated, error } = await sb
+        .from('properties')
+        .update(update)
+        .eq('org_id', user.org_id)
+        .eq('id', params.id)
+        .select('id')
+        .maybeSingle()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      if (!updated) return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+      return NextResponse.json({ ok: true, updated: Object.keys(update) })
+    }
+
+    // --- Amenity toggle: { amenity, value } ---
     const amenity = String(body.amenity || '')
     if (!TOGGLEABLE_AMENITIES.has(amenity)) {
       return NextResponse.json({ error: 'amenity must be one of: divided, garden' }, { status: 400 })
     }
     const value = body.value === true
-
-    const sb = supabaseService()
-    const { data: user } = await sb.from('users').select('org_id').eq('id', uid).maybeSingle()
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
     const { data: property } = await sb
       .from('properties')

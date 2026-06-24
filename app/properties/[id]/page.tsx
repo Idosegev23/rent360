@@ -19,6 +19,7 @@ import AssignAgent from '../../../components/AssignAgent'
 import PropertyConversationLink from '../../../components/PropertyConversationLink'
 import DocumentsPanel from '../../../components/DocumentsPanel'
 import ScheduleMeetingButton from '../../../components/ScheduleMeetingButton'
+import EditPropertyDialog from '../../../components/properties/EditPropertyDialog'
 import { amenityLabel } from '../../../lib/data/amenity-labels'
 
 type MatchRenter = {
@@ -141,6 +142,12 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
     loadProperty()
   }, [params.id])
 
+  // Re-fetch after an inline edit so the page reflects the saved values.
+  async function reload() {
+    const property = await fetchProperty(params.id)
+    if (property) setItem(property)
+  }
+
   if (loading) {
     return (
       <main className="pb-20 max-w-4xl mx-auto px-4">
@@ -202,6 +209,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <EditPropertyDialog property={item} onSaved={reload} />
               <ApproveBrokerage propertyId={item.id} />
               <button onClick={() => setShareDialogOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600">
                 <Share2 className="h-4 w-4" /> שתף
