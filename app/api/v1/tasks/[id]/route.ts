@@ -13,12 +13,21 @@ const PatchBody = z.object({
   recurrence: z.enum(['daily', 'weekdays', 'weekly', 'monthly']).nullable().optional(),
 })
 
-function nextOccurrence(base: Date, rec: string): Date {
+/**
+ * Next occurrence STRICTLY after `after` (i.e. in the future), keeping the original time-of-day /
+ * day-of-month anchor from `base`. Advancing from `base` in a loop (rather than just +1 step) is what
+ * prevents the "stale cascade": completing a recurring task that's days overdue must jump to the next
+ * FUTURE slot, not spawn yet another already-overdue copy that immediately reappears.
+ */
+function nextOccurrence(base: Date, rec: string, after: Date): Date {
   const d = new Date(base)
-  if (rec === 'monthly') { d.setMonth(d.getMonth() + 1); return d }
-  if (rec === 'weekly') { d.setDate(d.getDate() + 7); return d }
-  d.setDate(d.getDate() + 1)
-  if (rec === 'weekdays') while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1) // skip Fri/Sat
+  const step = () => {
+    if (rec === 'monthly') { d.setMonth(d.getMonth() + 1); return }
+    if (rec === 'weekly') { d.setDate(d.getDate() + 7); return }
+    d.setDate(d.getDate() + 1)
+    if (rec === 'weekdays') while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1) // skip Fri/Sat
+  }
+  do { step() } while (d <= after) // at least one step; keep going until it lands in the future
   return d
 }
 
@@ -65,7 +74,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .select('recurrence, due_at, title, notes, assignee_user_id, priority, entity_type, entity_id')
       .eq('id', params.id).eq('org_id', ctx.orgId).maybeSingle()
     if (tk?.recurrence) {
-      const next = nextOccurrence(tk.due_at ? new Date(tk.due_at) : new Date(), tk.recurrence)
+      const now = new Date()
+      const next = nextOccurrence(tk.due_at ? new Date(tk.due_at) : now, tk.recurrence, now)
       await ctx.sb.from('tasks').insert({
         org_id: ctx.orgId, title: tk.title, notes: tk.notes, assignee_user_id: tk.assignee_user_id,
         created_by: ctx.uid, priority: tk.priority, due_at: next.toISOString(), remind_at: next.toISOString(),

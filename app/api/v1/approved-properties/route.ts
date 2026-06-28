@@ -29,7 +29,17 @@ export async function GET(req: NextRequest){
   
   const orgId = user.org_id
   const offset = (page - 1) * limit
-  
+
+  // A property that's been rented (has an ACTIVE tenancy) is off-market — it must drop out of the
+  // "approved" list, same way a placed renter drops out of the seekers list. Tenancies are the
+  // source of truth for "rented" (set alongside properties.is_active=false at close-deal time).
+  const { data: activeTen } = await sb
+    .from('tenancies')
+    .select('property_id')
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+  const rentedIds = Array.from(new Set((activeTen || []).map(t => t.property_id).filter(Boolean))) as string[]
+
   // Step 1: Get approved property IDs with pagination and count.
   // Default list excludes "irrelevant" approvals; ?irrelevant=1 returns only those.
   const wantIrrelevant = url.searchParams.get('irrelevant') === '1'
@@ -40,6 +50,7 @@ export async function GET(req: NextRequest){
   approvedQuery = wantIrrelevant
     ? approvedQuery.not('irrelevant_at', 'is', null)
     : approvedQuery.is('irrelevant_at', null)
+  if (rentedIds.length) approvedQuery = approvedQuery.not('property_id', 'in', `(${rentedIds.join(',')})`)
   approvedQuery = approvedQuery
     .order('approved_at', { ascending: false })
     .range(offset, offset + limit - 1)

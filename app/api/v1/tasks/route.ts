@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   let query = ctx.sb
     .from('tasks')
-    .select('id, title, notes, assignee_user_id, created_by, status, priority, due_at, entity_type, entity_id, remind_at, reminded_at, done_at, created_at')
+    .select('id, title, notes, assignee_user_id, created_by, status, priority, due_at, entity_type, entity_id, remind_at, reminded_at, done_at, created_at, recurrence')
     .eq('org_id', ctx.orgId)
 
   if (scope === 'mine') query = query.eq('assignee_user_id', ctx.uid)
