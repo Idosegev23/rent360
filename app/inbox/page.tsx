@@ -1,8 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { MessageCircle, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import { MessageCircle, Clock, AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+
+// Auto-refresh cadence for the conversations list (ms).
+const POLL_MS = 15_000
 
 // Deterministic colored avatar from a name/phone.
 function initials(s: string | null | undefined): string {
@@ -76,29 +79,112 @@ function timeAgo(iso: string | null): string {
 export default function InboxPage() {
   const [filter, setFilter] = useState('all')
   const [threads, setThreads] = useState<ThreadRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true)        // full-page spinner (initial / filter change only)
+  const [refreshing, setRefreshing] = useState(false) // silent background poll / manual refresh
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null)
+  const [newIds, setNewIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    fetch(`/api/v1/inbox/threads?filter=${filter}`)
-      .then(res => res.json())
-      .then(data => {
-        if (cancelled) return
-        if (data.error) setError(data.error.message || data.error.code)
-        else setThreads(data.threads || [])
-      })
-      .catch(err => { if (!cancelled) setError(err.message) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+  // Baselines for detecting freshly-arrived incoming messages between polls.
+  const prevMapRef = useRef<Map<string, string | null>>(new Map())
+  const isFirstLoadRef = useRef(true)
+
+  const loadThreads = useCallback(async (silent: boolean) => {
+    if (silent) setRefreshing(true); else setLoading(true)
+    try {
+      const res = await fetch(`/api/v1/inbox/threads?filter=${filter}`)
+      const data = await res.json()
+      if (data.error) {
+        if (!silent) setError(data.error.message || data.error.code)
+        return
+      }
+      const next: ThreadRow[] = data.threads || []
+      // Flag genuinely-new incoming activity (skip the very first load so nothing flashes on entry):
+      // a brand-new thread, or an existing one whose last message changed and is INBOUND.
+      if (!isFirstLoadRef.current) {
+        const fresh = new Set<string>()
+        for (const t of next) {
+          const prev = prevMapRef.current.get(t.id)
+          const isNewThread = prev === undefined
+          const changed = prev !== t.last_message_at
+          if (isNewThread || (changed && t.preview?.direction === 'in')) fresh.add(t.id)
+        }
+        if (fresh.size) setNewIds(cur => new Set([...cur, ...fresh]))
+      }
+      prevMapRef.current = new Map(next.map(t => [t.id, t.last_message_at]))
+      isFirstLoadRef.current = false
+      setThreads(next)
+      setError(null)
+      setLastUpdated(Date.now())
+    } catch (err) {
+      if (!silent) setError(err instanceof Error ? err.message : 'load failed')
+    } finally {
+      if (silent) setRefreshing(false); else setLoading(false)
+    }
   }, [filter])
+
+  // Initial load + reset baselines whenever the filter (tab) changes.
+  useEffect(() => {
+    isFirstLoadRef.current = true
+    prevMapRef.current = new Map()
+    setNewIds(new Set())
+    loadThreads(false)
+  }, [loadThreads])
+
+  // Auto-refresh on an interval — but skip while the tab is hidden (saves work, avoids drift).
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      loadThreads(true)
+    }, POLL_MS)
+    return () => clearInterval(id)
+  }, [loadThreads])
+
+  // Refresh immediately when the user returns to the tab.
+  useEffect(() => {
+    const onVis = () => { if (!document.hidden) loadThreads(true) }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [loadThreads])
+
+  const lastUpdatedLabel = lastUpdated
+    ? (() => { const a = timeAgo(new Date(lastUpdated).toISOString()); return a === 'עכשיו' ? 'עודכן עכשיו' : `עודכן לפני ${a}` })()
+    : ''
 
   return (
     <>
       <Topbar crumb="בית · שיחות" title="תיבת השיחות" />
       <div className="page-wrap">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => loadThreads(true)}
+              disabled={refreshing}
+              className="chip"
+              title="רענון"
+            >
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} style={{ marginInlineEnd: 6 }} />
+              רענון
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>{lastUpdatedLabel}</span>
+            <span className="flex items-center gap-1" style={{ fontSize: 11, color: 'var(--ink-5)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--brand)', display: 'inline-block' }} />
+              מתעדכן אוטומטית
+            </span>
+          </div>
+          {newIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => { setNewIds(new Set()); if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              className="pill pill-pink"
+              style={{ cursor: 'pointer' }}
+              title="הצג חדשות"
+            >
+              {newIds.size} חדש
+            </button>
+          )}
+        </div>
         <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
           {TABS.map(t => (
             <button
@@ -135,12 +221,14 @@ export default function InboxPage() {
         <div className="grid grid-cols-1 gap-2">
           {threads.map(t => {
             const statusInfo = STATUS_LABELS[t.status] || { label: t.status, tone: 'outline' as const }
+            const isNew = newIds.has(t.id)
             return (
               <Link
                 key={t.id}
                 href={`/inbox/${t.id}`}
+                onClick={() => { if (isNew) setNewIds(cur => { const n = new Set(cur); n.delete(t.id); return n }) }}
                 className="surface-card surface-card-interactive block no-underline"
-                style={{ padding: '14px 18px' }}
+                style={{ padding: '14px 18px', ...(isNew ? { boxShadow: '0 0 0 1.5px var(--brand)', background: 'var(--brand-soft, var(--bg-2))' } : {}) }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -149,6 +237,7 @@ export default function InboxPage() {
                       <span className="truncate" style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 14 }}>
                         {t.landlord_name || t.phone || 'ללא שם'}
                       </span>
+                      {isNew && <span className="pill pill-pink">חדש</span>}
                       {t.audience === 'renter'
                         ? <span className="pill pill-pink">שוכר</span>
                         : <span className="pill pill-gray">בעל דירה</span>}
