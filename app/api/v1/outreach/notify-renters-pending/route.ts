@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { dispatchRenterMatchAlert } from '../../../../../lib/outreach/renter-alert'
-import { RENTER_MIN_SCORE, RENTER_PER_DAY_CAP } from '../../../../../lib/outreach/governance'
+import { RENTER_MIN_SCORE, RENTER_PER_DAY_CAP, DAILY_CAP, templatesSentToday } from '../../../../../lib/outreach/governance'
 
 const BATCH_SIZE_DEFAULT = 20
-const DAILY_CAP_DEFAULT = 50
 
 /**
  * Cron-triggered batch of renter match alerts (hourly).
@@ -39,30 +38,27 @@ async function run(req: NextRequest) {
 
   const sb = supabaseService()
   const batchSize = Math.max(1, Math.min(parseInt(process.env.RENTER_ALERT_BATCH_SIZE || String(BATCH_SIZE_DEFAULT), 10), 50))
-  const dailyCap = Math.max(1, parseInt(process.env.RENTER_ALERT_DAILY_CAP || String(DAILY_CAP_DEFAULT), 10))
+  // Shared global Meta daily template ceiling (landlord + renter), default 250 — the account's
+  // real daily limit. Using a lower number here starves renters on a busy outreach day. A
+  // RENTER_ALERT_DAILY_CAP env override still wins, but should reflect the true Meta limit.
+  const dailyCap = Math.max(1, parseInt(process.env.RENTER_ALERT_DAILY_CAP || String(DAILY_CAP), 10))
   const minScore = RENTER_MIN_SCORE
 
   const { data: org } = await sb.from('organizations').select('id').limit(1).single()
   if (!org) return NextResponse.json({ ok: true, sent: 0, skipped: 0, reason: 'no_org' })
   const orgId = org.id
 
-  // Today's outbound template count (shared cap across landlord + renter sends).
   const dayStart = new Date()
   dayStart.setUTCHours(0, 0, 0, 0)
   const dayStartIso = dayStart.toISOString()
-  const { count: sentToday } = await sb
-    .from('messages')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', orgId)
-    .eq('direction', 'out')
-    .eq('meta_message_type', 'template')
-    .gte('created_at', dayStartIso)
 
-  if ((sentToday || 0) >= dailyCap) {
+  // Global Meta daily limit guard: total templates (landlord + renter) sent today vs the 250/day cap.
+  const sentToday = await templatesSentToday(orgId)
+  if (sentToday >= dailyCap) {
     return NextResponse.json({ ok: true, sent: 0, skipped: 0, reason: 'daily_cap_hit', sent_today: sentToday })
   }
 
-  const limit = Math.min(batchSize, dailyCap - (sentToday || 0))
+  const limit = Math.min(batchSize, dailyCap - sentToday)
 
   const { data: candidates, error } = await sb
     .from('matches')
