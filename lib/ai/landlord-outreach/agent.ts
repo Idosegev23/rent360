@@ -48,10 +48,19 @@ export async function runAgentTurn(input: AgentInput): Promise<AgentResult> {
   const sb = supabaseService()
   const { data: thread } = await sb
     .from('threads')
-    .select('id, org_id, property_id, phone, status, openai_response_id, last_inbound_at')
+    .select('id, org_id, property_id, phone, status, openai_response_id, last_inbound_at, tags')
     .eq('id', input.threadId)
     .maybeSingle()
   if (!thread) throw new Error(`thread_not_found:${input.threadId}`)
+
+  // Defensive guard: the landlord agent must NEVER answer a renter thread (the orchestrator routes
+  // renters elsewhere, but a future routing change must not be able to make the landlord bot reply
+  // to a renter). No-op instead of guessing.
+  const tTags = (thread.tags && typeof thread.tags === 'object') ? thread.tags as Record<string, any> : {}
+  if (tTags.audience === 'renter') {
+    console.warn(`[landlord-agent] refused to run on a renter thread ${thread.id}`)
+    return { text: '', responseId: thread.openai_response_id || '', toolCalls: [] }
+  }
 
   // Anchor property (may be null if the thread isn't pinned to one yet)
   let property: ExtendedProperty | null = null

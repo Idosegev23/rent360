@@ -22,6 +22,8 @@ import { sendText } from '../whatsapp/meta-provider'
 import { isInSessionWindow } from '../whatsapp/window-guard'
 import { runAgentTurn } from './landlord-outreach/agent'
 import { runRenterAgentTurn } from './renter-interview/agent'
+import { runRenterReplyTurn } from './renter-reply-bot/agent'
+import { renterReplyBotEnabled } from '../outreach/renter-alert'
 import { embedInBackground, embedMessage } from './embeddings'
 
 const COALESCE_MS = parseInt(process.env.WEBHOOK_COALESCE_MS || '2000', 10)
@@ -98,12 +100,27 @@ export async function processThreadIfNotLocked(threadId: string): Promise<Orches
       return { status: 'window_closed' }
     }
 
-    // Route by audience: a renter thread gets the intake bot, otherwise the landlord bot.
+    // Route by audience + stage:
+    //  - renter who replied to a match alert (renter_stage='match_reply') → reply-bot (Phase 2),
+    //    but only when the master switch is on; otherwise park for a human (never let the intake
+    //    or landlord bot answer a match-reply).
+    //  - any other renter thread → intake bot.
+    //  - everything else → landlord bot.
     const tags = (thread.tags && typeof thread.tags === 'object') ? thread.tags as Record<string, any> : {}
     const isRenter = tags.audience === 'renter'
-    const turn = isRenter
-      ? await runRenterAgentTurn({ threadId, userText, imageUrls })
-      : await runAgentTurn({ threadId, userText, imageUrls })
+    const isMatchReply = isRenter && tags.renter_stage === 'match_reply'
+
+    if (isMatchReply && !renterReplyBotEnabled()) {
+      await sb.from('threads').update({ status: 'human_takeover' }).eq('id', threadId)
+      await sb.from('messages').update({ processed_at: new Date().toISOString() }).in('id', pending.map(p => p.id))
+      return { status: 'human_takeover' }
+    }
+
+    const turn = isMatchReply
+      ? await runRenterReplyTurn({ threadId, userText, imageUrls })
+      : isRenter
+        ? await runRenterAgentTurn({ threadId, userText, imageUrls })
+        : await runAgentTurn({ threadId, userText, imageUrls })
 
     if (turn.text && turn.text.trim()) {
       try {

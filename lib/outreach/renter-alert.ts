@@ -28,6 +28,16 @@ const PREFERRED_TEMPLATE = process.env.RENTER_MATCH_TEMPLATE || 'renter_match_al
 const FALLBACK_TEMPLATE = 'renter_match_alert_v1'
 const TEMPLATE_LANG = 'he'
 
+/**
+ * Phase 2 master switch. When ON, a renter's match-alert thread is opened in `active` (so the
+ * webhook + orchestrator route the renter's reply to the reply-bot). When OFF, it stays
+ * `human_takeover` exactly as before — replies park for a human. Default OFF for a safe rollout.
+ */
+export function renterReplyBotEnabled(): boolean {
+  const v = process.env.RENTER_REPLY_BOT_ENABLED
+  return v === 'true' || v === '1'
+}
+
 function appBaseUrl(): string {
   return (process.env.APP_BASE_URL || 'https://rent360-vert.vercel.app').replace(/\/+$/, '')
 }
@@ -228,9 +238,14 @@ async function ensureRenterShareToken(
 }
 
 /**
- * Upsert the renter's thread. Parked in `human_takeover` + tagged
- * `audience: 'renter'` so the landlord-outreach orchestrator skips it
- * (it only auto-replies to threads in active/awaiting_reply states).
+ * Upsert the renter's thread, tagged `audience:'renter'` + `renter_stage:'match_reply'` and anchored
+ * to the alerted property.
+ *
+ * Status depends on the Phase 2 switch (`renterReplyBotEnabled()`):
+ *  - ON  → `active`, so the webhook + orchestrator route the renter's reply to the reply-bot.
+ *  - OFF → `human_takeover` for a NEW thread (today's behavior); an EXISTING thread keeps its current
+ *          status untouched (we never silently park an in-flight conversation when the bot is off).
+ * An `opted_out` / `admin_alerts` thread is never resurrected, regardless of the switch.
  */
 async function upsertRenterThread(
   sb: ReturnType<typeof supabaseService>,
@@ -240,13 +255,30 @@ async function upsertRenterThread(
   renterId: string,
   renterName: string | null,
 ): Promise<{ id: string }> {
+  const enabled = renterReplyBotEnabled()
   const { data: existing } = await sb
     .from('threads')
-    .select('id')
+    .select('id, status, tags')
     .eq('org_id', orgId)
     .eq('phone', normalizedPhone)
     .maybeSingle()
-  if (existing) return existing
+
+  if (existing) {
+    const prevTags = (existing.tags && typeof existing.tags === 'object') ? existing.tags as Record<string, unknown> : {}
+    const tags = {
+      ...prevTags,
+      audience: 'renter',
+      renter_id: renterId,
+      renter_stage: 'match_reply',
+      ...(renterName ? { renter_name: renterName } : {}),
+    }
+    const update: Record<string, unknown> = { tags, property_id: propertyId }
+    if (enabled && existing.status !== 'opted_out' && existing.status !== 'admin_alerts') {
+      update.status = 'active'
+    }
+    await sb.from('threads').update(update).eq('id', existing.id)
+    return { id: existing.id }
+  }
 
   const { data: created } = await sb
     .from('threads')
@@ -254,10 +286,9 @@ async function upsertRenterThread(
       org_id: orgId,
       phone: normalizedPhone,
       channel: 'whatsapp',
-      status: 'human_takeover',
+      status: enabled ? 'active' : 'human_takeover',
       property_id: propertyId,
-      // Tag the audience + renter so the (landlord-oriented) inbox can label it correctly.
-      tags: { audience: 'renter', renter_id: renterId, ...(renterName ? { renter_name: renterName } : {}) },
+      tags: { audience: 'renter', renter_id: renterId, renter_stage: 'match_reply', ...(renterName ? { renter_name: renterName } : {}) },
     })
     .select('id')
     .single()
