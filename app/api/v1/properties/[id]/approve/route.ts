@@ -60,12 +60,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       irrelevant_at: now.toISOString(), irrelevant_reason: reason, recheck_at: recheckDate, recheck_reminded_at: null,
     }).eq('id', ap.id)
     if (error) return NextResponse.json({ error: { code: 'UPDATE_FAILED', message: error.message } }, { status: 500 })
+    // Purge this property's renter matches so it disappears from the send lists + auto-dispatch
+    // immediately. (property_shares.match_id FK is ON DELETE SET NULL; matches regenerate if the
+    // property is later un-marked relevant — see below.)
+    await sb.from('matches').delete().eq('org_id', user.org_id).eq('property_id', params.id)
     return NextResponse.json({ ok: true, status: 'irrelevant', recheck_at: recheckDate })
   }
   const { error } = await sb.from('approved_properties').update({
     irrelevant_at: null, irrelevant_reason: null, recheck_at: null, recheck_reminded_at: null,
   }).eq('id', ap.id)
   if (error) return NextResponse.json({ error: { code: 'UPDATE_FAILED', message: error.message } }, { status: 500 })
+  // Relevant again → rebuild its matches in the background.
+  computeMatchesInBackground({ propertyId: params.id })
   return NextResponse.json({ ok: true, status: 'relevant' })
 }
 

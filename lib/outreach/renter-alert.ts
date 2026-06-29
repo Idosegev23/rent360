@@ -80,12 +80,28 @@ export async function dispatchRenterMatchAlert(opts: {
   // ---- Property ----
   const { data: property, error: pErr } = await sb
     .from('properties')
-    .select('id, org_id, city, neighborhood, rooms, price, images')
+    .select('id, org_id, city, neighborhood, rooms, price, images, is_active')
     .eq('id', propertyId)
     .eq('org_id', orgId)
     .maybeSingle()
   if (pErr) return { ok: false, code: 'DB_ERROR', message: pErr.message }
   if (!property) return { ok: false, code: 'PROPERTY_NOT_FOUND', message: 'נכס לא נמצא בארגון' }
+
+  // ---- Sendability guard (defense-in-depth for every send path, incl. manual) ----
+  // Never alert a renter about an inactive or "irrelevant"-marked property (e.g. rented elsewhere).
+  if (property.is_active === false) {
+    return { ok: false, code: 'PROPERTY_INACTIVE', message: 'הנכס אינו פעיל' }
+  }
+  const { data: irrAp } = await sb
+    .from('approved_properties')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('property_id', propertyId)
+    .not('irrelevant_at', 'is', null)
+    .maybeSingle()
+  if (irrAp) {
+    return { ok: false, code: 'PROPERTY_IRRELEVANT', message: 'הנכס סומן כלא רלוונטי' }
+  }
 
   const images: string[] = Array.isArray(property.images)
     ? property.images.filter((u): u is string => typeof u === 'string' && u.startsWith('http'))

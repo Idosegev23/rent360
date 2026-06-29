@@ -53,6 +53,15 @@ export async function computeMatchesForProperty(propertyId: string): Promise<{ i
   }
   const prop = property as unknown as PropertyRowWithOrg
 
+  // Never score an approved property that's been marked "irrelevant" — it must not produce matches.
+  const { data: irrAp } = await sb
+    .from('approved_properties')
+    .select('id')
+    .eq('property_id', propertyId)
+    .not('irrelevant_at', 'is', null)
+    .maybeSingle()
+  if (irrAp) return { inserted: 0, total: 0 }
+
   const { data: renters, error: renterErr } = await sb
     .from('renters')
     .select(RENTER_COLUMNS)
@@ -91,10 +100,13 @@ export async function computeMatchesForRenter(renterId: string): Promise<{ inser
     return { inserted: 0, total: 0 }
   }
 
-  // Approved properties across all orgs
+  // Approved, still-RELEVANT properties across all orgs. A property marked "irrelevant"
+  // (e.g. rented not through us) must never produce matches — exclude it here so it can't
+  // surface in the renter match lists or be auto-dispatched.
   const { data: approvedRows } = await sb
     .from('approved_properties')
     .select('property_id, org_id')
+    .is('irrelevant_at', null)
   const approvedPropertyIds = Array.from(new Set((approvedRows || []).map(r => r.property_id))).filter(Boolean) as string[]
   if (approvedPropertyIds.length === 0) return { inserted: 0, total: 0 }
 
