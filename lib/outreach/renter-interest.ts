@@ -41,7 +41,7 @@ export async function recordRenterInterest(opts: {
   // Property label (specific address — office-facing only, never shown to the renter).
   const { data: prop } = await sb
     .from('properties')
-    .select('city, neighborhood, street, price, rooms, assigned_agent_user_id')
+    .select('city, neighborhood, street, price, rooms, assigned_agent_user_id, owner_viewing_availability')
     .eq('id', propertyId)
     .maybeSingle()
   const cityClean = (prop?.city || '').replace(/\s*-\s*(מגורים|משרדים|rent).*$/i, '').trim()
@@ -144,6 +144,7 @@ export async function recordRenterInterest(opts: {
           `שוכר/ת מעוניין/ת לראות את הנכס: ${location || '—'}`,
           prop.price != null ? `מחיר: ₪${Number(prop.price).toLocaleString('he-IL')}` : '',
           score ? `התאמה: ${score}%` : '',
+          prop.owner_viewing_availability ? `זמינות בעל/ת הדירה לצפייה: ${prop.owner_viewing_availability}` : '',
           '',
           'פרטי השוכר/ת:',
           `שם: ${fullName}`,

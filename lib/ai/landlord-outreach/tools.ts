@@ -127,8 +127,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
-        field: { type: 'string', enum: ['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description', 'divided', 'garden'] },
-        value: { description: 'string for text/date/description; number for price/rooms/sqm/floor; boolean for pets_allowed, smokers_allowed, divided (דירה מחולקת), and garden (חצר/גינה).' },
+        field: { type: 'string', enum: ['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description', 'divided', 'garden', 'owner_viewing_availability'] },
+        value: { description: 'string for text/date/description; number for price/rooms/sqm/floor; boolean for pets_allowed, smokers_allowed, divided (דירה מחולקת), and garden (חצר/גינה). owner_viewing_availability is free text — WHEN it suits the owner to show the apartment (e.g. "ימים א\'-ה\' אחה\'\'צ, שישי בבוקר"); save it ONLY if the owner brings it up — do not ask about viewing times during the pitch.' },
       },
       required: ['field', 'value'],
       additionalProperties: false,
@@ -346,7 +346,7 @@ async function updatePropertyField(args: { field: string; value: unknown }, ctx:
     return { ok: true, field: args.field, value: !!args.value }
   }
 
-  const allowed = new Set(['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description'])
+  const allowed = new Set(['contact_name', 'evacuation_date', 'available_from', 'pets_allowed', 'smokers_allowed', 'price', 'rooms', 'sqm', 'floor', 'description', 'owner_viewing_availability'])
   if (!allowed.has(args.field)) return { error: 'field_not_allowed' }
   const update: Record<string, unknown> = { [args.field]: args.value }
   const { error } = await sb.from('properties').update(update).eq('id', ctx.propertyId).eq('org_id', ctx.orgId)
