@@ -60,6 +60,21 @@ async function run(req: NextRequest) {
 
   const limit = Math.min(batchSize, dailyCap - sentToday)
 
+  // Scope candidates to renters who can actually receive an alert — VETTED (filled the
+  // questionnaire) and NOT placed (no active tenancy). This MUST happen at the DB level: the
+  // matches table holds many high-scoring matches on UNVETTED renters, so a plain score-ordered
+  // fetch fills its whole window with renters we can never send to and starves the vetted ones
+  // (observed: a run skipping 84/84 as "unvetted"). The per-row JS checks below stay as defense.
+  const { data: vettedRows0 } = await sb.from('renters').select('id').gt('submissions_count', 0)
+  const vettedIds0 = (vettedRows0 || []).map(r => r.id as string)
+  const { data: placedRows0 } = await sb
+    .from('tenancies').select('renter_id').eq('org_id', orgId).eq('status', 'active')
+  const placedSet0 = new Set((placedRows0 || []).map(t => t.renter_id as string))
+  const eligibleRenterIds = vettedIds0.filter(id => !placedSet0.has(id))
+  if (eligibleRenterIds.length === 0) {
+    return NextResponse.json({ ok: true, sent: 0, skipped: 0, reason: 'no_eligible_renters' })
+  }
+
   const { data: candidates, error } = await sb
     .from('matches')
     .select('id, renter_id, property_id, score')
@@ -67,8 +82,9 @@ async function run(req: NextRequest) {
     .is('renter_notified_at', null)
     .eq('is_disqualified', false)
     .gte('score', minScore)
+    .in('renter_id', eligibleRenterIds) // only vetted, not-placed renters enter the score window
     .order('score', { ascending: false })
-    .limit(limit * 5) // over-fetch — some fail the safety filters or dispatcher validation
+    .limit(limit * 5) // over-fetch — some still fail per-row dispatcher validation / property checks
 
   if (error) return NextResponse.json({ error: { code: 'DB_ERROR', message: error.message } }, { status: 500 })
 
