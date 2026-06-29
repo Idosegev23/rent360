@@ -105,6 +105,9 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
   const [renter, setRenter] = useState<Renter | null>(null)
   const [matches, setMatches] = useState<Match[]>([])
   const [lastSubmission, setLastSubmission] = useState<any | null>(null)
+  const [sendCounts, setSendCounts] = useState<{ today: number; total: number }>({ today: 0, total: 0 })
+  // Real per-day cap (env-overridable on the server) — drives the send-counter badge.
+  const [perDayCap, setPerDayCap] = useState(3)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recomputing, setRecomputing] = useState(false)
@@ -121,6 +124,8 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       setRenter(data.renter)
       setMatches(data.matches || [])
       setLastSubmission(data.last_submission || null)
+      setSendCounts(data.send_counts || { today: 0, total: 0 })
+      if (typeof data.per_day_cap === 'number') setPerDayCap(data.per_day_cap)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'load failed')
@@ -227,6 +232,13 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
             <div className="text-xs text-gray-500 mt-1">
               הצטרף {fmtDate(renter.created_at)} · {renter.submissions_count} שאלונים
             </div>
+            <div className="mt-1.5">
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                sendCounts.today >= perDayCap ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
+              }`}>
+                נשלחו {sendCounts.today}/{perDayCap} היום · {sendCounts.total} סה״כ
+              </span>
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <button
@@ -316,7 +328,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       )}
 
       <div className="grid grid-cols-1 gap-2">
-        {strongMatches.map(m => <MatchRow key={m.id} match={m} renterId={params.id} />)}
+        {strongMatches.map(m => <MatchRow key={m.id} match={m} renterId={params.id} onSent={load} />)}
       </div>
 
       {hiddenCount > 0 && (
@@ -332,7 +344,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           </button>
           {showLowMatches && (
             <div className="grid grid-cols-1 gap-2 mt-2">
-              {[...lowMatches, ...dqMatches].map(m => <MatchRow key={m.id} match={m} renterId={params.id} />)}
+              {[...lowMatches, ...dqMatches].map(m => <MatchRow key={m.id} match={m} renterId={params.id} onSent={load} />)}
             </div>
           )}
         </div>
@@ -359,7 +371,7 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
   )
 }
 
-function MatchRow({ match, renterId }: { match: Match; renterId: string }) {
+function MatchRow({ match, renterId, onSent }: { match: Match; renterId: string; onSent?: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -388,21 +400,33 @@ function MatchRow({ match, renterId }: { match: Match; renterId: string }) {
     } catch (e) { window.alert(e instanceof Error ? e.message : 'תיאום הצפייה נכשל') } finally { setVBusy(false) }
   }
 
-  // Send THIS apartment to the renter (manual, one-click). Bypasses rate caps but the
-  // server still enforces opt-out, dedup (renter_notified_at) and template approval.
+  // Send THIS apartment to the renter (manual, one-click). The server enforces opt-out,
+  // dedup (renter_notified_at), template approval, and warns (409 CAP_WARNING) when the
+  // renter is already at the per-day cap — we then confirm and re-send with confirmOverCap.
   async function sendApartment() {
     if (sending || sent) return
     if (!window.confirm('לשלוח לשוכר את הדירה הזו בוואטסאפ?')) return
     setSending(true)
     try {
-      const res = await fetch('/api/v1/outreach/notify-renter', {
+      const post = (confirmOverCap: boolean) => fetch('/api/v1/outreach/notify-renter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId: match.id }),
+        body: JSON.stringify({ matchId: match.id, ...(confirmOverCap ? { confirmOverCap: true } : {}) }),
       })
-      const data = await res.json()
+      let res = await post(false)
+      let data = await res.json()
+      if (res.status === 409 && data?.error?.code === 'CAP_WARNING') {
+        const sentToday = data.error.sentToday ?? 0
+        if (!window.confirm(`כבר נשלחו ${sentToday} התאמות לשוכר היום — לשלוח בכל זאת?`)) {
+          setSending(false)
+          return
+        }
+        res = await post(true)
+        data = await res.json()
+      }
       if (!res.ok) throw new Error(data?.error?.message || 'שליחה נכשלה')
       setSent(true)
+      onSent?.()
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'שליחה נכשלה')
     } finally {

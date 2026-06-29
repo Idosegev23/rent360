@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
 import { dispatchRenterMatchAlert } from '../../../../../lib/outreach/renter-alert'
+import { RENTER_PER_DAY_CAP, renterSendCounts } from '../../../../../lib/outreach/governance'
 
 const STATUS_FOR_CODE: Record<string, number> = {
   RENTER_NOT_FOUND: 404,
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: { code: 'NO_USER' } }, { status: 401 })
   const orgId = user.org_id
 
-  let body: { matchId?: string; renterId?: string; propertyId?: string; force?: boolean } = {}
+  let body: { matchId?: string; renterId?: string; propertyId?: string; force?: boolean; confirmOverCap?: boolean } = {}
   try {
     body = await req.json()
   } catch {/* allow empty body */}
@@ -59,6 +60,22 @@ export async function POST(req: NextRequest) {
 
   if (!renterId || !propertyId) {
     return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'matchId or (renterId & propertyId) required' } }, { status: 400 })
+  }
+
+  // Over-cap warn-and-confirm: manual sends self-govern, but we surface the day's
+  // count so the operator must explicitly confirm sending past the per-day cap.
+  if (body.confirmOverCap !== true) {
+    const counts = await renterSendCounts(orgId, [renterId])
+    const sentToday = counts[renterId]?.today ?? 0
+    if (sentToday >= RENTER_PER_DAY_CAP) {
+      return NextResponse.json({
+        error: {
+          code: 'CAP_WARNING',
+          message: `כבר נשלחו ${sentToday} התאמות לשוכר היום (תקרה ${RENTER_PER_DAY_CAP}). לשלוח בכל זאת?`,
+          sentToday,
+        },
+      }, { status: 409 })
+    }
   }
 
   const result = await dispatchRenterMatchAlert({

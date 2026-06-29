@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
+import { renterSendCounts, RENTER_PER_DAY_CAP } from '../../../../../lib/outreach/governance'
 
 /** Admin: full renter profile + their org-scoped matches (with property details). */
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -25,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // Matches scoped to this org. Sorted: non-DQ by score desc, then DQ.
   const { data: matches } = await sb
     .from('matches')
-    .select('id, property_id, score, is_disqualified, disqualifying_reasons, breakdown, reasons, status, updated_at')
+    .select('id, property_id, score, is_disqualified, disqualifying_reasons, breakdown, reasons, status, updated_at, renter_notified_at')
     .eq('org_id', orgId)
     .eq('renter_id', params.id)
     .order('is_disqualified', { ascending: true })
@@ -67,9 +68,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .limit(1)
     .maybeSingle()
 
+  // Unified send counts for this renter (auto + manual), from matches.renter_notified_at.
+  const counts = await renterSendCounts(orgId, [params.id])
+  const sendCounts = counts[params.id] || { today: 0, total: 0 }
+
   return NextResponse.json({
     renter,
     matches: enrichedMatches,
     last_submission: lastSubmission,
+    send_counts: sendCounts,
+    // The real per-day cap (env-overridable) so the UI badge stays truthful if it changes.
+    per_day_cap: RENTER_PER_DAY_CAP,
   })
 }

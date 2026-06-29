@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../lib/auth'
+import { renterSendCounts, RENTER_PER_DAY_CAP } from '../../../../lib/outreach/governance'
 
 /**
  * Admin: list the global renter pool with a per-renter match count
@@ -91,15 +92,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Per-renter unified send counts (auto + manual), sourced from matches.renter_notified_at.
+  const sendCounts = renterIds.length > 0 ? await renterSendCounts(orgId, renterIds) : {}
+
   const enriched = (renters || []).map(r => ({
     ...r,
     matches: matchCounts[r.id] || { total: 0, topScore: null },
+    send_counts: sendCounts[r.id] || { today: 0, total: 0 },
     placed: placedSet.has(r.id),
   }))
 
   const totalPages = Math.ceil((count || 0) / limit)
   return NextResponse.json({
     renters: enriched,
+    // The real per-day cap (env-overridable) so the UI badge stays truthful if it changes.
+    per_day_cap: RENTER_PER_DAY_CAP,
     pagination: {
       page,
       limit,

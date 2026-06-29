@@ -35,6 +35,7 @@ export function middleware(req: NextRequest) {
     pathname === '/api/v1/embeddings/backfill-renters' ||
     pathname === '/api/v1/properties/audit-amenities' ||
     pathname === '/api/v1/outreach/batch-pending' ||
+    pathname === '/api/v1/outreach/notify-renters-pending' ||
     pathname === '/api/v1/cron/callback-reminders' ||
     pathname === '/api/v1/auth/seed-team'
 

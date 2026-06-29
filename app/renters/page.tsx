@@ -32,6 +32,7 @@ type Renter = {
   has_security_checks: boolean | null
   has_guarantors: boolean | null
   matches: { total: number; topScore: number | null }
+  send_counts?: { today: number; total: number }
   placed?: boolean
 }
 
@@ -146,6 +147,8 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
   const [vetted, setVetted] = useState<'' | 'true' | 'false'>('true')
   // '' = active seekers (placed renters excluded); '1' = only those who already rented via us.
   const [placed, setPlaced] = useState<'' | '1'>('')
+  // Real per-day cap (env-overridable on the server) — drives the send-counter badge.
+  const [perDayCap, setPerDayCap] = useState(3)
   const [sendingQ, setSendingQ] = useState(false)
   const [sendQMsg, setSendQMsg] = useState<string | null>(null)
 
@@ -160,6 +163,7 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
         if (cancel) return
         if (data.error) setError(data.error.message || data.error.code)
         else {
+          if (typeof data.per_day_cap === 'number') setPerDayCap(data.per_day_cap)
           let rows: Renter[] = data.renters || []
           if (sort === 'matches') {
             rows = [...rows].sort((a, b) => {
@@ -288,13 +292,13 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
       )}
 
       <div className="grid grid-cols-1 gap-2">
-        {renters.map(r => <RenterCard key={r.id} renter={r} />)}
+        {renters.map(r => <RenterCard key={r.id} renter={r} perDayCap={perDayCap} />)}
       </div>
     </>
   )
 }
 
-function RenterCard({ renter }: { renter: Renter }) {
+function RenterCard({ renter, perDayCap = 3 }: { renter: Renter; perDayCap?: number }) {
   const fullName = [renter.first_name, renter.last_name].filter(Boolean).join(' ')
   const cities = Array.isArray(renter.preferred_cities) ? renter.preferred_cities : []
   const vetting: string[] = []
@@ -303,6 +307,9 @@ function RenterCard({ renter }: { renter: Renter }) {
   if (renter.has_guarantors) vetting.push('ערבים')
   const matches = renter.matches?.total ?? 0
   const topScore = renter.matches?.topScore ?? null
+  const sentToday = renter.send_counts?.today ?? 0
+  const sentTotal = renter.send_counts?.total ?? 0
+  const atCap = sentToday >= perDayCap
 
   return (
     <Link
@@ -318,6 +325,13 @@ function RenterCard({ renter }: { renter: Renter }) {
           </div>
           <div className="text-xs text-gray-500">
             הצטרף {fmtTimeAgo(renter.created_at)} · {renter.submissions_count} שאלונים
+          </div>
+          <div className="mt-1">
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              atCap ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
+            }`}>
+              נשלחו {sentToday}/{perDayCap} היום · {sentTotal} סה״כ
+            </span>
           </div>
         </div>
         <div className="text-left">
