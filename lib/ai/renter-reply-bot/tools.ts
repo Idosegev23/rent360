@@ -12,6 +12,7 @@ import { supabaseService } from '../../supabase'
 import { recordRenterInterest } from '../../outreach/renter-interest'
 import { recordOptOut } from '../../outreach/suppression'
 import { notifyAdminsHandoff } from '../../alerts/admin-whatsapp'
+import { viewingSchedulerEnabled, startViewingScheduling } from '../../scheduling/viewing-scheduler'
 
 export type ReplyToolContext = {
   orgId: string
@@ -81,7 +82,28 @@ async function expressInterest(args: { note?: string }, ctx: ReplyToolContext) {
     flipToHumanTakeover: false, // keep the bot available for follow-up questions; the office is alerted
     source: 'reply_bot',
   })
-  return { ok: res.ok, recorded: res.recorded, next: 'tell the renter the office will reach out shortly to coordinate a viewing' }
+
+  // Smart scheduler (Phase 3, gated): try to propose viewing times right away. When it succeeds it
+  // sends the renter interactive time-buttons itself, so the bot should NOT also offer a time.
+  let scheduled = false
+  if (viewingSchedulerEnabled()) {
+    try {
+      const r = await startViewingScheduling({
+        orgId: ctx.orgId, renterId: ctx.renterId, propertyId: ctx.propertyId,
+        renterThreadId: ctx.threadId, renterPhone: ctx.phone,
+      })
+      scheduled = r.ok
+    } catch {/* fall back to the office path */}
+  }
+
+  return {
+    ok: res.ok,
+    recorded: res.recorded,
+    scheduled,
+    next: scheduled
+      ? 'שלחתי לשוכר/ת מועדים אפשריים בכפתורים — בקש/י לבחור אחד מהם, ואל תציע/י מועד משלך'
+      : 'tell the renter the office will reach out shortly to coordinate a viewing',
+  }
 }
 
 async function notInterested(args: { reason?: string }, ctx: ReplyToolContext) {
