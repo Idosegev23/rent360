@@ -26,7 +26,23 @@ function joinItems(items: string[]): string {
   return ensureDot(`${head} ו${lastNoVav}`)
 }
 
-export function humanizeReply(raw: string): string {
+/**
+ * The OpenAI Responses SDK occasionally emits a single model turn as two identical message parts,
+ * which `response.output_text` glues into a doubled reply (seen in production: a renter received the
+ * same sentence twice, no separator). Collapse an exact full duplication back to one copy. Safe: a
+ * natural Hebrew reply that equals its own first half repeated does not occur.
+ */
+function collapseExactDouble(raw: string): string {
+  const t = raw.trim()
+  if (t.length >= 24 && t.length % 2 === 0) {
+    const half = t.length / 2
+    if (t.slice(0, half) === t.slice(half)) return t.slice(0, half).trim()
+  }
+  return raw
+}
+
+export function humanizeReply(rawInput: string): string {
+  const raw = collapseExactDouble(rawInput)
   if (!raw || !raw.includes('\n')) {
     // Single line could still be "- only one item"; strip a stray leading marker.
     return raw ? raw.replace(ITEM_RE, '') : raw

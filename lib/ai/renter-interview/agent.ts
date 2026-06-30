@@ -115,12 +115,24 @@ function extractFunctionCalls(response: any): Array<{ name: string; arguments: s
 }
 
 function extractOutputText(response: any): string {
-  if (typeof response?.output_text === 'string' && response.output_text) return response.output_text
+  // Read the LAST assistant message from the output array (the final reply), de-duping identical
+  // content blocks. Do NOT trust `response.output_text`: that SDK getter concatenates ALL message
+  // parts, and the model occasionally emits its reply twice — which would glue into a doubled message.
   const output = response?.output
   if (Array.isArray(output)) {
-    const parts: string[] = []
-    for (const item of output) if (item?.type === 'message' && Array.isArray(item.content)) for (const c of item.content) if (c?.type === 'output_text' && typeof c.text === 'string') parts.push(c.text)
-    if (parts.length) return parts.join('\n')
+    const messages = output.filter((it: any) => it?.type === 'message' && Array.isArray(it.content))
+    const last = messages[messages.length - 1]
+    if (last) {
+      const seen = new Set<string>()
+      const parts: string[] = []
+      for (const c of last.content) {
+        if (c?.type === 'output_text' && typeof c.text === 'string' && c.text && !seen.has(c.text)) {
+          seen.add(c.text); parts.push(c.text)
+        }
+      }
+      if (parts.length) return parts.join('\n')
+    }
   }
+  if (typeof response?.output_text === 'string' && response.output_text) return response.output_text
   return ''
 }
