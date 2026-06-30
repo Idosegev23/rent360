@@ -37,17 +37,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'template_not_approved', templateStatus: tpl?.status || 'missing', sent: 0, skipped: 0, results: [] })
   }
 
+  // ---- Idempotency: drop renters who already received the intake invite ----
+  // This makes the send a clean batch-of-50 — the operator can click repeatedly and each click
+  // sends to the NEXT uninvited 50, never re-messaging the same people (marketing template, so a
+  // duplicate annoys the renter, wastes the daily cap, and hurts the Meta quality rating).
+  const { data: renterRows } = await sb.from('renters').select('id, phone').in('id', renterIds)
+  const phoneByRenter = new Map<string, string>()
+  for (const r of renterRows || []) if (r.phone) phoneByRenter.set(r.id as string, normalizePhone(r.phone))
+  const phones = Array.from(new Set(Array.from(phoneByRenter.values())))
+  const threadIdByPhone = new Map<string, string>()
+  if (phones.length) {
+    const { data: threadRows } = await sb.from('threads').select('id, phone').eq('org_id', orgId).in('phone', phones)
+    for (const t of threadRows || []) if (t.phone) threadIdByPhone.set(t.phone as string, t.id as string)
+  }
+  const invitedThreadIds = new Set<string>()
+  const threadIds = Array.from(new Set(Array.from(threadIdByPhone.values())))
+  if (threadIds.length) {
+    const { data: invMsgs } = await sb.from('messages').select('thread_id').eq('template_name', TEMPLATE).in('thread_id', threadIds)
+    for (const m of invMsgs || []) if (m.thread_id) invitedThreadIds.add(m.thread_id as string)
+  }
+  const alreadyInvited = renterIds.filter(rid => {
+    const ph = phoneByRenter.get(rid); const tid = ph ? threadIdByPhone.get(ph) : undefined
+    return tid && invitedThreadIds.has(tid)
+  })
+  const alreadyInvitedSet = new Set(alreadyInvited)
+  const pending = renterIds.filter(rid => !alreadyInvitedSet.has(rid))
+
   const sentToday = await templatesSentToday(orgId)
   const remaining = DAILY_CAP - sentToday
   if (remaining <= 0) {
-    return NextResponse.json({ ok: true, sent: 0, skipped: 0, reason: 'daily_cap_hit', dailyCap: DAILY_CAP, sentTodayBefore: sentToday, results: [] })
+    return NextResponse.json({ ok: true, sent: 0, skipped: 0, alreadyInvited: alreadyInvited.length, remainingToInvite: pending.length, reason: 'daily_cap_hit', dailyCap: DAILY_CAP, sentTodayBefore: sentToday, results: [] })
   }
-  const limit = Math.min(renterIds.length, remaining, MANUAL_BATCH_MAX)
+  // Per-click batch ceiling = 50 (MANUAL_BATCH_MAX), also bounded by the remaining daily cap.
+  const limit = Math.min(pending.length, remaining, MANUAL_BATCH_MAX)
 
   const results: Array<{ renterId: string; status: 'sent' | 'skipped'; reason?: string }> = []
   let sent = 0, skipped = 0
 
-  for (const renterId of renterIds) {
+  for (const renterId of pending) {
     if (sent >= limit) break
     try {
       const { data: renter } = await sb.from('renters').select('id, first_name, phone').eq('id', renterId).maybeSingle()
@@ -79,7 +106,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent, skipped, sentTodayBefore: sentToday, dailyCap: DAILY_CAP, capReached: sent >= remaining, results })
+  return NextResponse.json({
+    ok: true,
+    sent,
+    skipped,
+    alreadyInvited: alreadyInvited.length,
+    remainingToInvite: Math.max(0, pending.length - sent), // uninvited renters still waiting for a future batch
+    batchMax: MANUAL_BATCH_MAX,
+    sentTodayBefore: sentToday,
+    dailyCap: DAILY_CAP,
+    capReached: sent >= remaining,
+    results,
+  })
 }
 
 async function upsertRenterThread(sb: ReturnType<typeof supabaseService>, orgId: string, phone: string, renterId: string, firstName?: string | null): Promise<{ id: string } | null> {

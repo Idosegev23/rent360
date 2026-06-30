@@ -186,7 +186,7 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
 
   async function sendQuestionnaires() {
     if (sendingQ || renters.length === 0) return
-    if (!window.confirm(`לשלוח שאלון ל-${renters.length} השוכרים המוצגים? (כפוף לתקרה היומית — ייתכן שיישלח חלק וההמשך מחר)`)) return
+    if (!window.confirm(`שליחת שאלון באצווה של עד 50 בכל לחיצה (כפוף לתקרה היומית). מי שכבר קיבל שאלון מדולג אוטומטית — אפשר ללחוץ שוב לאצווה הבאה. להמשיך?`)) return
     setSendingQ(true); setSendQMsg(null)
     try {
       const res = await fetch('/api/v1/outreach/renter-questionnaire-batch', {
@@ -195,8 +195,13 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
       })
       const d = await res.json()
       if (d.reason === 'template_not_approved') setSendQMsg(`התבנית עדיין באישור Meta (${d.templateStatus}) — נסה מאוחר יותר.`)
-      else if (d.reason === 'daily_cap_hit') setSendQMsg('התקרה היומית נוצלה. נסה מחר.')
-      else setSendQMsg(`נשלחו ${d.sent || 0}, דולגו ${d.skipped || 0}.`)
+      else if (d.reason === 'daily_cap_hit') setSendQMsg(`התקרה היומית נוצלה. נותרו ${d.remainingToInvite || 0} שלא קיבלו — נסה מחר.`)
+      else {
+        const parts = [`נשלחו ${d.sent || 0} (אצווה של עד ${d.batchMax || 50})`]
+        if (d.alreadyInvited) parts.push(`${d.alreadyInvited} כבר קיבלו בעבר`)
+        if (d.remainingToInvite) parts.push(`נותרו ${d.remainingToInvite} — לחץ שוב לאצווה הבאה`)
+        setSendQMsg(parts.join(' · '))
+      }
     } catch { setSendQMsg('שליחה נכשלה') } finally { setSendingQ(false) }
   }
 
@@ -271,10 +276,10 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
               onClick={sendQuestionnaires}
               disabled={sendingQ || renters.length === 0}
               className="btn btn-brand text-xs disabled:opacity-50"
-              title="שולח לשוכרים המוצגים קישור אישי למילוי השאלון (כפוף לתקרה היומית)"
+              title="שולח שאלון באצווה של עד 50 בכל לחיצה; מי שכבר קיבל מדולג. לחיצה חוזרת שולחת לאצווה הבאה."
             >
               {sendingQ ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              שלח שאלון למוצגים ({renters.length})
+              שלח שאלון (עד 50 באצווה)
             </button>
           </div>
         )}
