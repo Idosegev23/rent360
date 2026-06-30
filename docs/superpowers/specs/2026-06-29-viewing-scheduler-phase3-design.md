@@ -7,18 +7,20 @@ slots from the **overlap of the agent's free time + the owner's availability**, 
 it's booked on the agent's calendar (+ email invites to landlord/renter), and the agent gets a
 WhatsApp with the details.
 
-## 1. Confirmed flow (user, 2026-06-29)
+## 1. Confirmed flow (user, REVISED 2026-06-30 — landlord proposes, system filters)
 
-1. **Renter expresses interest** in a property (reply-bot `express_interest`, already built — Phase 2).
-2. **System reads the assigned agent's Google calendar free/busy** (Shai) over the next few days.
-3. **System computes 3 candidate slots** = agent-free ∩ owner availability ∩ constraints
-   (business hours, not Shabbat/חג, ≥2h out). The **system** proposes them (not the landlord).
-4. **3 options → the renter** (free-form interactive buttons — the renter is inside the 24h window
-   since they just messaged). Renter taps one.
-5. **Landlord is notified + confirms** the chosen slot (template — landlord is out of window).
-6. **Booked**: event on the agent's Google calendar (`calendar.events` write) with landlord + renter
-   as email attendees where we have an email; status tracked on a `viewings`/`meetings` row.
-7. **Agent (Shai) gets a WhatsApp** with the full meeting details (template).
+1. **Renter expresses interest** in a property (reply-bot `express_interest`, Phase 2).
+2. **System asks the LANDLORD** for possible viewing times (template `viewing_landlord_times_v1`).
+3. **Landlord replies (free text)** with a few times → system **parses** them (AI) and **filters
+   against the assigned agent's (Shai) calendar free/busy** — keeps only times the agent is free for.
+4. **Filtered options → the renter** (free-form interactive buttons — renter is in-window). Renter taps one.
+5. **Booked**: event on the agent's Google calendar (`calendar.events` write); `meetings` row (kind=viewing).
+6. **Landlord told which time was chosen** (free text — landlord is in-window after step 3).
+7. **Renter confirmation** reveals the exact address; **agent (Shai) gets a WhatsApp** with the details
+   (template `viewing_agent_scheduled_v1`).
+
+Tradeoff: depends on the landlord replying with times. If they don't, the office already has the lead
+(recordRenterInterest fired on interest) and follows up manually; a timeout cron can be added later.
 
 ## 2. Hard prerequisites (long lead — start now)
 

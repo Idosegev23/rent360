@@ -1,25 +1,27 @@
 /**
  * Smart 3-way viewing scheduler — engine (Phase 3).
  *
- * Flow (see docs/superpowers/specs/2026-06-29-viewing-scheduler-phase3-design.md):
- *   renter interested → read assigned agent's free/busy → propose 3 slots → renter picks →
- *   landlord confirms → book (agent's Google calendar + a `meetings` row) → WhatsApp the agent →
- *   confirm the renter (now WITH the exact address).
+ * Flow (landlord-proposes, system-filters; user-confirmed 2026-06-30):
+ *   renter interested → ASK THE LANDLORD for a few possible times → landlord replies (free text) →
+ *   parse the times + FILTER against the assigned agent's calendar free/busy → send the renter the
+ *   times the agent is free for → renter picks → book on the agent's calendar (+ tell the landlord
+ *   which time was chosen, reveal the exact address to the renter, WhatsApp the agent).
  *
- * Gated by `VIEWING_SCHEDULER_ENABLED`. Degrades gracefully: if the agent isn't connected with
- * read scope, no free slots, or a needed template isn't approved yet, it falls back to the existing
- * office-alert path (`recordRenterInterest`) so nothing is lost.
+ * Gated by `VIEWING_SCHEDULER_ENABLED`. Degrades gracefully: missing assigned agent / landlord phone
+ * / unapproved ask-template / unparseable reply → falls back to the office-alert path so nothing is
+ * lost. If the agent isn't read-connected, we trust the landlord's times (can't filter).
  */
 
+import OpenAI from 'openai'
 import { supabaseService } from '../supabase'
 import { getCalendarBusy } from '../google/freebusy'
-import { suggestSlots, type Slot } from './slots'
 import { recordRenterInterest } from '../outreach/renter-interest'
 import { sendInteractiveButtons, sendTemplate, sendText, normalizePhone } from '../whatsapp/meta-provider'
 import { createCalendarEvent } from '../google/calendar'
+import { israelLocalToDate } from '../google/auto-callback-event'
 
 const TZ = 'Asia/Jerusalem'
-const LANDLORD_TEMPLATE = 'viewing_landlord_confirm_v1'
+const LANDLORD_ASK_TEMPLATE = 'viewing_landlord_times_v1'
 const AGENT_TEMPLATE = 'viewing_agent_scheduled_v1'
 const VIEWING_DURATION_MIN = 30
 
@@ -30,37 +32,44 @@ export function viewingSchedulerEnabled(): boolean {
 
 type SB = ReturnType<typeof supabaseService>
 
-// ---------- Hebrew slot formatting ----------
+let _client: OpenAI | null = null
+function openai(): OpenAI {
+  if (_client) return _client
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY missing')
+  _client = new OpenAI({ apiKey })
+  return _client
+}
 
-function localParts(d: Date): { dow: number; day: number; month: number; hh: string; mm: string } {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ, weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-  })
+// ---------- Hebrew labels ----------
+
+function localParts(d: Date): { dow: number; minutes: number } {
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
   const p: Record<string, string> = {}
   for (const part of fmt.formatToParts(d)) p[part.type] = part.value
   const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  return {
-    dow: dowMap[p.weekday || 'Sun'] ?? 0,
-    day: parseInt(p.day || '1', 10),
-    month: parseInt(p.month || '1', 10),
-    hh: (p.hour || '00').padStart(2, '0'),
-    mm: (p.minute || '00').padStart(2, '0'),
-  }
+  return { dow: dowMap[p.weekday || 'Sun'] ?? 0, minutes: (parseInt(p.hour || '0', 10) % 24) * 60 + parseInt(p.minute || '0', 10) }
 }
 
 const HE_DOW = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']
 
 /** Short label for a WhatsApp button title (≤20 chars), e.g. "יום ג׳ 1.7 17:00". */
 export function shortSlotLabel(iso: string): string {
-  const p = localParts(new Date(iso))
-  return `יום ${HE_DOW[p.dow]}׳ ${p.day}.${p.month} ${p.hh}:${p.mm}`
+  const d = new Date(iso)
+  const f = new Intl.DateTimeFormat('en-US', { timeZone: TZ, day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+  const p: Record<string, string> = {}
+  for (const x of f.formatToParts(d)) p[x.type] = x.value
+  return `יום ${HE_DOW[localParts(d).dow]}׳ ${p.day}.${p.month} ${p.hour}:${p.minute}`
 }
 
 /** Fuller label for message bodies, e.g. "יום שלישי 1.7 בשעה 17:00". */
 export function fullSlotLabel(iso: string): string {
-  const full = new Intl.DateTimeFormat('he-IL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'numeric' }).format(new Date(iso))
-  const p = localParts(new Date(iso))
-  return `${full} בשעה ${p.hh}:${p.mm}`
+  const d = new Date(iso)
+  const full = new Intl.DateTimeFormat('he-IL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'numeric' }).format(d)
+  const f = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+  const p: Record<string, string> = {}
+  for (const x of f.formatToParts(d)) p[x.type] = x.value
+  return `${full} בשעה ${p.hour}:${p.minute}`
 }
 
 async function templateApproved(sb: SB, name: string): Promise<boolean> {
@@ -68,9 +77,14 @@ async function templateApproved(sb: SB, name: string): Promise<boolean> {
   return data?.status === 'approved'
 }
 
-// ---------- Step 1: start (propose + send renter the options) ----------
+function locationLabel(property: { city?: string | null; neighborhood?: string | null }): string {
+  const cityClean = (property.city || '').replace(/\s*-\s*(מגורים|משרדים|rent).*$/i, '').trim()
+  return [property.neighborhood, cityClean].filter(Boolean).join(' · ') || cityClean || 'הדירה'
+}
 
-export type StartResult = { ok: boolean; reason?: string; requestId?: string; slotCount?: number }
+// ---------- Step 1: renter interested → ask the landlord for times ----------
+
+export type StartResult = { ok: boolean; reason?: string; requestId?: string }
 
 export async function startViewingScheduling(opts: {
   orgId: string
@@ -82,70 +96,97 @@ export async function startViewingScheduling(opts: {
   if (!viewingSchedulerEnabled()) return { ok: false, reason: 'disabled' }
   const sb = supabaseService()
 
-  // Don't double-schedule: if there's already an in-flight request for this renter+property, stop.
   const { data: inflight } = await sb
     .from('viewing_requests')
     .select('id')
     .eq('org_id', opts.orgId)
     .eq('renter_id', opts.renterId)
     .eq('property_id', opts.propertyId)
-    .in('status', ['proposing', 'awaiting_renter', 'awaiting_landlord'])
+    .in('status', ['awaiting_landlord_times', 'awaiting_renter'])
     .maybeSingle()
   if (inflight) return { ok: false, reason: 'already_in_flight', requestId: inflight.id }
 
   const { data: property } = await sb
     .from('properties')
-    .select('id, assigned_agent_user_id')
+    .select('id, city, neighborhood, assigned_agent_user_id, contact_phone')
     .eq('id', opts.propertyId)
     .eq('org_id', opts.orgId)
     .maybeSingle()
-  const agentUserId = property?.assigned_agent_user_id as string | null | undefined
-  if (!agentUserId) return { ok: false, reason: 'no_assigned_agent' }
+  if (!property?.assigned_agent_user_id) return { ok: false, reason: 'no_assigned_agent' }
+  if (!property.contact_phone) return { ok: false, reason: 'no_landlord_phone' }
+  if (!(await templateApproved(sb, LANDLORD_ASK_TEMPLATE))) return { ok: false, reason: 'ask_template_pending' }
 
-  // Read the agent's free/busy for the next week (requires calendar.readonly — may fail until the
-  // agent reconnects; treat any failure as "can't auto-schedule" and fall back).
-  const from = new Date(Date.now() + 3 * 60 * 60 * 1000) // ≥3h lead
-  const to = new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000)
-  let busy
+  const lphone = normalizePhone(property.contact_phone)
+  const location = locationLabel(property)
+
+  // Ask the landlord for possible times (template — landlord likely out of the 24h window).
   try {
-    busy = await getCalendarBusy(opts.orgId, agentUserId, from, to)
+    await sendTemplate({
+      to: lphone, name: LANDLORD_ASK_TEMPLATE, language: 'he',
+      components: [{ type: 'body', parameters: [{ type: 'text', text: location }] }],
+    })
   } catch {
-    return { ok: false, reason: 'agent_calendar_unavailable' }
+    return { ok: false, reason: 'ask_send_failed' }
   }
+  const landlordThreadId = await upsertThreadId(sb, opts.orgId, lphone, opts.propertyId)
 
-  const slots: Slot[] = suggestSlots({
-    busy, from, lookaheadDays: 7, durationMin: VIEWING_DURATION_MIN,
-    dayStartHour: 10, dayEndHour: 20, count: 3, stepMin: 30,
-  })
-  if (slots.length === 0) return { ok: false, reason: 'no_free_slots' }
-
-  const proposed = slots.map(s => ({ start: s.start.toISOString(), end: s.end.toISOString() }))
-  const { data: reqRow, error } = await sb
+  const { data: reqRow } = await sb
     .from('viewing_requests')
     .insert({
       org_id: opts.orgId, renter_id: opts.renterId, property_id: opts.propertyId,
-      agent_user_id: agentUserId, renter_thread_id: opts.renterThreadId,
-      status: 'awaiting_renter', proposed_slots: proposed,
+      agent_user_id: property.assigned_agent_user_id, renter_thread_id: opts.renterThreadId,
+      landlord_thread_id: landlordThreadId, status: 'awaiting_landlord_times',
     })
     .select('id')
     .single()
-  if (error || !reqRow) return { ok: false, reason: 'db_error' }
-
-  // Renter just messaged us → inside the 24h window → free-form interactive buttons (no template).
-  try {
-    await sendInteractiveButtons({
-      to: opts.renterPhone,
-      body: 'מצאתי כמה מועדים אפשריים לצפייה בדירה. מה הכי מתאים?',
-      buttons: proposed.slice(0, 3).map((s, i) => ({ id: `vw:${reqRow.id}:${i}`, title: shortSlotLabel(s.start).slice(0, 20) })),
-    })
-  } catch {
-    await sb.from('viewing_requests').update({ status: 'failed', note: 'send_options_failed', updated_at: new Date().toISOString() }).eq('id', reqRow.id)
-    return { ok: false, reason: 'send_options_failed', requestId: reqRow.id }
-  }
-  return { ok: true, requestId: reqRow.id, slotCount: proposed.length }
+  return { ok: true, requestId: reqRow?.id }
 }
 
-// ---------- Step 2: renter picks a slot (vw:<id>:<idx> button) ----------
+// ---------- Step 2: landlord replies with times → filter vs agent calendar → send renter ----------
+
+export async function handleLandlordTimes(landlordThreadId: string, text: string): Promise<{ handled: boolean; reason?: string }> {
+  const sb = supabaseService()
+  const { data: req } = await sb
+    .from('viewing_requests')
+    .select('*')
+    .eq('landlord_thread_id', landlordThreadId)
+    .eq('status', 'awaiting_landlord_times')
+    .order('updated_at', { ascending: false })
+    .maybeSingle()
+  if (!req) return { handled: false }
+
+  const lphone = await threadPhone(sb, landlordThreadId)
+  const candidates = await parseLandlordTimes(text)
+  if (candidates.length === 0) {
+    if (lphone) { try { await sendText(lphone, 'לא הצלחתי לקלוט את המועדים. אפשר לכתוב למשל: "ראשון 17:00, שלישי 18:30, חמישי בבוקר"?') } catch {/* ignore */} }
+    return { handled: true, reason: 'unparsed' }
+  }
+
+  const free = await filterFreeAgainstAgent(req.org_id, req.agent_user_id, candidates)
+  if (free.length === 0) {
+    if (lphone) { try { await sendText(lphone, 'תודה! המועדים האלה כבר תפוסים אצל הסוכן. אפשר להציע מועדים אחרים?') } catch {/* ignore */} }
+    return { handled: true, reason: 'none_free' }
+  }
+
+  const proposed = free.map(d => ({ start: d.toISOString(), end: new Date(d.getTime() + VIEWING_DURATION_MIN * 60000).toISOString() }))
+  await sb.from('viewing_requests').update({ status: 'awaiting_renter', proposed_slots: proposed, updated_at: new Date().toISOString() }).eq('id', req.id)
+
+  // Send the renter the available times (free-form interactive — the renter is in-window).
+  const renterPhone = req.renter_thread_id ? await threadPhone(sb, req.renter_thread_id) : null
+  if (renterPhone) {
+    try {
+      await sendInteractiveButtons({
+        to: renterPhone,
+        body: 'מצאנו מועדים אפשריים לצפייה בדירה. מה הכי מתאים?',
+        buttons: proposed.slice(0, 3).map((s, i) => ({ id: `vw:${req.id}:${i}`, title: shortSlotLabel(s.start).slice(0, 20) })),
+      })
+    } catch {/* renter will be handled by the office fallback */}
+  }
+  if (lphone) { try { await sendText(lphone, 'תודה! שלחתי את המועדים הפנויים לשוכר/ת, ונעדכן ברגע שייבחר מועד.') } catch {/* ignore */} }
+  return { handled: true, reason: 'sent_to_renter' }
+}
+
+// ---------- Step 3: renter picks a slot (vw:<id>:<idx> button) → book ----------
 
 export async function handleRenterSlotChoice(buttonId: string): Promise<{ ok: boolean; reason?: string }> {
   const m = /^vw:([0-9a-f-]{36}):(\d+)$/i.exec(buttonId)
@@ -159,93 +200,13 @@ export async function handleRenterSlotChoice(buttonId: string): Promise<{ ok: bo
   const chosen = slots[idx]
   if (!chosen) return { ok: false, reason: 'bad_index' }
 
-  // Property + landlord contact for the confirm request.
-  const { data: property } = await sb
-    .from('properties')
-    .select('city, neighborhood, street, contact_phone, contact_name, owner_viewing_availability')
-    .eq('id', req.property_id)
-    .maybeSingle()
-  const cityClean = (property?.city || '').replace(/\s*-\s*(מגורים|משרדים|rent).*$/i, '').trim()
-  const location = [property?.neighborhood, cityClean].filter(Boolean).join(' · ') || cityClean || 'הדירה'
-  const { data: agent } = req.agent_user_id
-    ? await sb.from('users').select('name, phone').eq('id', req.agent_user_id).maybeSingle()
-    : { data: null as any }
-  const agentName = agent?.name || 'הסוכן שלנו'
-
-  // Ask the landlord to confirm (template — landlord is likely out of the 24h window).
-  let landlordThreadId: string | null = null
-  if (property?.contact_phone && await templateApproved(sb, LANDLORD_TEMPLATE)) {
-    const lphone = normalizePhone(property.contact_phone)
-    try {
-      await sendTemplate({
-        to: lphone, name: LANDLORD_TEMPLATE, language: 'he',
-        components: [{ type: 'body', parameters: [
-          { type: 'text', text: location },
-          { type: 'text', text: fullSlotLabel(chosen.start) },
-          { type: 'text', text: agentName },
-        ] }],
-      })
-      landlordThreadId = await upsertThreadId(sb, req.org_id, lphone)
-    } catch {/* fall through to office fallback below */}
-  }
-
-  await sb.from('viewing_requests').update({
-    status: 'awaiting_landlord', chosen_slot: chosen, landlord_thread_id: landlordThreadId, updated_at: new Date().toISOString(),
-  }).eq('id', reqId)
-
-  // Reply to the renter (in-window free text).
-  if (req.renter_thread_id) {
-    const phone = await threadPhone(sb, req.renter_thread_id)
-    if (phone) { try { await sendText(phone, `מעולה, בחרת ${fullSlotLabel(chosen.start)}. אני מתאם/ת מול בעל/ת הדירה ואחזור אליך לאישור סופי.`) } catch {/* ignore */} }
-  }
-
-  // If we couldn't reach the landlord by template, alert the office to confirm manually.
-  if (!landlordThreadId) {
-    await recordRenterInterest({ orgId: req.org_id, renterId: req.renter_id, propertyId: req.property_id, threadId: req.renter_thread_id, source: 'reply_bot' }).catch(() => {})
-  }
+  await bookViewing(sb, req, chosen)
   return { ok: true }
-}
-
-// ---------- Step 3: landlord confirms / declines ----------
-
-const AFFIRM = /(מאשר|מתאים|כן|אישור|אוקיי|אוקי|סבבה|טוב|👍|בסדר|אפשר)/
-const DECLINE = /(לא מתאים|לא|אי אפשר|נדחה|לדחות|מבטל)/
-
-export async function handleLandlordDecision(landlordThreadId: string, text: string): Promise<{ ok: boolean; handled: boolean; reason?: string }> {
-  const sb = supabaseService()
-  const { data: req } = await sb
-    .from('viewing_requests')
-    .select('*')
-    .eq('landlord_thread_id', landlordThreadId)
-    .eq('status', 'awaiting_landlord')
-    .order('updated_at', { ascending: false })
-    .maybeSingle()
-  if (!req) return { ok: true, handled: false }
-
-  const t = (text || '').trim()
-  const declined = DECLINE.test(t) && !/לא מתאים לי הזמן הזה בלבד/.test(t)
-  const affirmed = !declined && AFFIRM.test(t)
-  if (!affirmed && !declined) return { ok: true, handled: false } // let a human read ambiguous replies
-
-  if (declined) {
-    await sb.from('viewing_requests').update({ status: 'cancelled', note: 'landlord_declined', updated_at: new Date().toISOString() }).eq('id', req.id)
-    // Tell the renter we'll find another time; alert the office to re-coordinate.
-    if (req.renter_thread_id) { const ph = await threadPhone(sb, req.renter_thread_id); if (ph) { try { await sendText(ph, 'המועד הזה לא הסתדר מול בעל/ת הדירה — נתאם מועד אחר ונחזור אליך בהקדם.') } catch {/* ignore */} } }
-    await recordRenterInterest({ orgId: req.org_id, renterId: req.renter_id, propertyId: req.property_id, threadId: req.renter_thread_id, source: 'reply_bot' }).catch(() => {})
-    return { ok: true, handled: true, reason: 'declined' }
-  }
-
-  // Affirmed → book it.
-  await bookViewing(sb, req)
-  return { ok: true, handled: true, reason: 'confirmed' }
 }
 
 // ---------- Step 4: book (calendar + meeting + notifications) ----------
 
-async function bookViewing(sb: SB, req: any): Promise<void> {
-  const chosen = req.chosen_slot as { start: string; end: string } | null
-  if (!chosen) return
-
+async function bookViewing(sb: SB, req: any, chosen: { start: string; end: string }): Promise<void> {
   const { data: property } = await sb
     .from('properties')
     .select('city, neighborhood, street, contact_name')
@@ -254,9 +215,9 @@ async function bookViewing(sb: SB, req: any): Promise<void> {
   const { data: renter } = await sb.from('renters').select('first_name, last_name, phone, email').eq('id', req.renter_id).maybeSingle()
   const cityClean = (property?.city || '').replace(/\s*-\s*(מגורים|משרדים|rent).*$/i, '').trim()
   const fullAddress = [property?.street, cityClean].filter(Boolean).join(', ') || cityClean
-  const location = [property?.neighborhood, cityClean].filter(Boolean).join(' · ') || cityClean
+  const location = locationLabel(property || {})
 
-  // Create the event on the agent's calendar (write scope — agents already have calendar.events).
+  // Event on the agent's calendar (write scope — agents already have calendar.events).
   let googleEventId: string | null = null
   if (req.agent_user_id) {
     try {
@@ -268,10 +229,9 @@ async function bookViewing(sb: SB, req: any): Promise<void> {
         ...(renter?.email ? { attendees: [renter.email] } : {}),
       })
       googleEventId = ev.eventId
-    } catch {/* calendar write failed — still record the meeting + notify */}
+    } catch {/* still record the meeting + notify */}
   }
 
-  // Confirmed meeting row (plugs into the existing ~1h-before staff reminder cron).
   const { data: meeting } = await sb.from('meetings').insert({
     org_id: req.org_id, owner_user_id: req.agent_user_id, created_by: req.agent_user_id,
     title: `צפייה — ${location}`, location: fullAddress,
@@ -281,13 +241,19 @@ async function bookViewing(sb: SB, req: any): Promise<void> {
   }).select('id').single()
 
   await sb.from('viewing_requests').update({
-    status: 'confirmed', meeting_id: meeting?.id || null, google_event_id: googleEventId, updated_at: new Date().toISOString(),
+    status: 'confirmed', meeting_id: meeting?.id || null, google_event_id: googleEventId, chosen_slot: chosen, updated_at: new Date().toISOString(),
   }).eq('id', req.id)
 
-  // Confirm the renter — NOW reveal the exact address (viewing is set).
+  // Confirm the renter — reveal the exact address now (viewing is set).
   if (req.renter_thread_id) {
     const ph = await threadPhone(sb, req.renter_thread_id)
     if (ph) { try { await sendText(ph, `מצוין! נקבעה צפייה ל${fullSlotLabel(chosen.start)}.\nכתובת: ${fullAddress}\nנתראה שם!`) } catch {/* ignore */} }
+  }
+
+  // Tell the landlord which time was chosen (free text — they replied recently, so in-window).
+  if (req.landlord_thread_id) {
+    const lph = await threadPhone(sb, req.landlord_thread_id)
+    if (lph) { try { await sendText(lph, `מעולה — נקבעה צפייה ל${fullSlotLabel(chosen.start)}. תודה!`) } catch {/* ignore */} }
   }
 
   // WhatsApp the agent the details (template, if approved; otherwise the calendar event covers it).
@@ -313,6 +279,52 @@ async function bookViewing(sb: SB, req: any): Promise<void> {
   }
 }
 
+// ---------- time parsing + calendar filter ----------
+
+/** Parse a landlord's free-text reply into up to 3 future viewing times (Israel local → UTC Date). */
+async function parseLandlordTimes(text: string): Promise<Date[]> {
+  const nowLocal = new Intl.DateTimeFormat('he-IL', { timeZone: TZ, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+  let content = ''
+  try {
+    const res = await openai().chat.completions.create({
+      model: process.env.OPENAI_PARSE_MODEL || process.env.OPENAI_AGENT_MODEL || 'gpt-5.4',
+      temperature: 0,
+      messages: [
+        { role: 'system', content: `עכשיו ${nowLocal} (שעון ישראל). בעל/ת דירה כתב/ה מתי נוח להראות דירה. החזר/י אך ורק JSON בצורה {"slots":["YYYY-MM-DDTHH:MM"]} — עד 3 מועדים עתידיים בשעון ישראל מקומי, בלי אזור זמן. אם חסרה שעה — קבע/י 17:00. אם מועד לא ברור או בעבר — דלג/י עליו. בלי טקסט נוסף.` },
+        { role: 'user', content: text.slice(0, 500) },
+      ],
+    })
+    content = res.choices[0]?.message?.content || ''
+  } catch { return [] }
+
+  let parsed: any = {}
+  try {
+    const json = content.match(/\{[\s\S]*\}/)
+    parsed = json ? JSON.parse(json[0]) : {}
+  } catch { return [] }
+  const slots = Array.isArray(parsed.slots) ? parsed.slots : []
+  const out: Date[] = []
+  for (const s of slots.slice(0, 3)) {
+    if (typeof s !== 'string') continue
+    const d = israelLocalToDate(s)
+    if (!Number.isNaN(d.getTime())) out.push(d)
+  }
+  return out
+}
+
+/** Keep the candidate times that are in the future, not on Shabbat, and the agent is FREE for. */
+async function filterFreeAgainstAgent(orgId: string, agentUserId: string | null, candidates: Date[]): Promise<Date[]> {
+  const future = candidates.filter(d => d.getTime() > Date.now() + 30 * 60000 && localParts(d).dow !== 6)
+  if (future.length === 0 || !agentUserId) return future.slice(0, 3)
+  const min = new Date(Math.min(...future.map(d => d.getTime())) - 60000)
+  const max = new Date(Math.max(...future.map(d => d.getTime())) + (VIEWING_DURATION_MIN + 1) * 60000)
+  let busy
+  try { busy = await getCalendarBusy(orgId, agentUserId, min, max) } catch { return future.slice(0, 3) } // can't read → trust the landlord
+  const B = busy.map(b => ({ s: Date.parse(b.start), e: Date.parse(b.end) }))
+  const free = future.filter(d => { const s = d.getTime(), e = s + VIEWING_DURATION_MIN * 60000; return !B.some(b => s < b.e && e > b.s) })
+  return free.slice(0, 3)
+}
+
 // ---------- small helpers ----------
 
 async function threadPhone(sb: SB, threadId: string): Promise<string | null> {
@@ -320,9 +332,9 @@ async function threadPhone(sb: SB, threadId: string): Promise<string | null> {
   return data?.phone || null
 }
 
-async function upsertThreadId(sb: SB, orgId: string, phone: string): Promise<string | null> {
+async function upsertThreadId(sb: SB, orgId: string, phone: string, propertyId: string): Promise<string | null> {
   const { data: existing } = await sb.from('threads').select('id').eq('org_id', orgId).eq('phone', phone).maybeSingle()
   if (existing) return existing.id
-  const { data: created } = await sb.from('threads').insert({ org_id: orgId, phone, channel: 'whatsapp', status: 'human_takeover' }).select('id').single()
+  const { data: created } = await sb.from('threads').insert({ org_id: orgId, phone, channel: 'whatsapp', status: 'human_takeover', property_id: propertyId }).select('id').single()
   return created?.id || null
 }

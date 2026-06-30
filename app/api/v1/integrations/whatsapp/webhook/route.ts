@@ -11,7 +11,7 @@ import {
 } from '../../../../../../lib/whatsapp/meta-provider'
 import { isHardOptOut, isSuppressed, recordOptOut } from '../../../../../../lib/outreach/suppression'
 import { processThreadIfNotLocked } from '../../../../../../lib/ai/conversation-orchestrator'
-import { viewingSchedulerEnabled, handleRenterSlotChoice, handleLandlordDecision } from '../../../../../../lib/scheduling/viewing-scheduler'
+import { viewingSchedulerEnabled, handleRenterSlotChoice, handleLandlordTimes } from '../../../../../../lib/scheduling/viewing-scheduler'
 import { embedInBackground, embedMessage } from '../../../../../../lib/ai/embeddings'
 import { waitUntil } from '@vercel/functions'
 
@@ -222,16 +222,16 @@ async function processEvent(
     }
 
     // ---- Viewing scheduler intercepts (BEFORE the human_takeover skip) ----
-    // The renter's slot choice (interactive vw: button) and the landlord's confirm/decline (a reply
-    // on a thread we parked in human_takeover) must be caught here, or the skip below drops them.
+    // The renter's slot choice (interactive vw: button) and the landlord's reply with possible times
+    // (on a thread we parked in human_takeover) must be caught here, or the skip below drops them.
     if (viewingSchedulerEnabled()) {
       if (m.type === 'interactive' && m.interactive?.id?.startsWith('vw:')) {
         await handleRenterSlotChoice(m.interactive.id).catch(() => {})
         if (msgRow?.id) await sb.from('messages').update({ processed_at: new Date().toISOString() }).eq('id', msgRow.id)
         return
       }
-      if (m.type === 'button' || m.type === 'text') {
-        const res = await handleLandlordDecision(thread.id, m.text || '').catch(() => ({ handled: false }))
+      if (m.type === 'text' && m.text) {
+        const res = await handleLandlordTimes(thread.id, m.text).catch(() => ({ handled: false }))
         if (res.handled) {
           if (msgRow?.id) await sb.from('messages').update({ processed_at: new Date().toISOString() }).eq('id', msgRow.id)
           return

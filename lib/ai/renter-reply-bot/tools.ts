@@ -101,7 +101,7 @@ async function expressInterest(args: { note?: string }, ctx: ReplyToolContext) {
     recorded: res.recorded,
     scheduled,
     next: scheduled
-      ? 'שלחתי לשוכר/ת מועדים אפשריים בכפתורים — בקש/י לבחור אחד מהם, ואל תציע/י מועד משלך'
+      ? 'פניתי לבעל/ת הדירה לקבלת מועדים אפשריים — אמור/אמרי לשוכר/ת שנשלח מועדים לבחירה בקרוב, ואל תציע/י מועד בעצמך'
       : 'tell the renter the office will reach out shortly to coordinate a viewing',
   }
 }
