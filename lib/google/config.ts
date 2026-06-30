@@ -3,6 +3,9 @@ export const GOOGLE_SCOPES = [
   'email',
   'profile',
   'https://www.googleapis.com/auth/calendar.events',
+  // Read free/busy for the smart viewing scheduler (Phase 3). Adding this means each agent must
+  // reconnect Google once to grant it; existing write-only grants keep working until they do.
+  'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/gmail.send',
 ]
 
