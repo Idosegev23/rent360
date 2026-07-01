@@ -32,6 +32,11 @@ export async function dispatchInitialOutreach(opts: {
   templateChoice?: TemplateChoice
   /** Live-generate the personal sentence for this property before sending (single/interactive sends). Off for batch. */
   ensurePersonalization?: boolean
+  /** Override the rich-template personalization line ({{4}}) — e.g. a renter-aware recruitment hook.
+   *  Forces the rich template so the custom line is used. */
+  personalHookOverride?: string
+  /** Tag the outbound message as recruitment triggered from a specific renter (for tracking). */
+  recruitedForRenterId?: string
 }): Promise<DispatchResult> {
   const { orgId, propertyId, force } = opts
   const sb = supabaseService()
@@ -54,7 +59,7 @@ export async function dispatchInitialOutreach(opts: {
   // For interactive personalized sends, live-generate the personal sentence per property
   // (regenerates if missing or from an older prompt version). Batch skips this to stay
   // within the function timeout — it reuses what the preview already generated.
-  if (opts.ensurePersonalization && (opts.templateChoice || 'auto') !== 'basic') {
+  if (opts.ensurePersonalization && !opts.personalHookOverride && (opts.templateChoice || 'auto') !== 'basic') {
     try { await generateAndStorePersonalization(propertyId) } catch { /* rich falls back to basic if none */ }
   }
 
@@ -77,8 +82,14 @@ export async function dispatchInitialOutreach(opts: {
     return { ok: false, code: 'SUPPRESSED', message: 'הטלפון בעל הנכס ברשימת הסירוב' }
   }
 
+  // Renter-aware recruitment: swap in the custom hook and force the rich template.
+  if (opts.personalHookOverride) {
+    vars = { ...vars, personal_hook: opts.personalHookOverride }
+  }
+
   // Pick rich vs basic template — honoring an explicit choice / batch quality gate.
-  const { templateName, components } = pickTemplateAndComponents(vars, opts.templateChoice || 'auto')
+  const mode: TemplateChoice = opts.personalHookOverride ? 'rich' : (opts.templateChoice || 'auto')
+  const { templateName, components } = pickTemplateAndComponents(vars, mode)
 
   // Verify the chosen template is approved at Meta.
   const { data: template } = await sb
@@ -131,6 +142,7 @@ export async function dispatchInitialOutreach(opts: {
       availability: vars.availability_label,
       cover_image_url: vars.cover_image_url,
     },
+    ...(opts.recruitedForRenterId ? { metadata: { recruited_for_renter_id: opts.recruitedForRenterId } } : {}),
   })
   await sb.from('properties').update({ initial_message_sent: true, outreach_skip_reason: null }).eq('id', property.id)
   await sb.from('threads').update({

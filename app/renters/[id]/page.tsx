@@ -114,6 +114,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
   const [sendingInvite, setSendingInvite] = useState(false)
   const [sendingTop, setSendingTop] = useState(false)
   const [showLowMatches, setShowLowMatches] = useState(false)
+  const [activeTab, setActiveTab] = useState<'approved' | 'recruit'>('approved')
 
   async function load() {
     setLoading(true)
@@ -298,6 +299,21 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
       {/* Full questionnaire details */}
       <QuestionnaireDetails renter={renter} lastSubmission={lastSubmission} />
 
+      {/* Tabs: approved matches vs recruitment candidates */}
+      <div className="mb-3 flex gap-1 border-b border-gray-200">
+        <button type="button" onClick={() => setActiveTab('approved')}
+          className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 ${activeTab === 'approved' ? 'border-brand-primary text-brand-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          התאמות מאושרות
+        </button>
+        <button type="button" onClick={() => setActiveTab('recruit')}
+          className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 ${activeTab === 'recruit' ? 'border-brand-primary text-brand-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          נכסים לגיוס
+        </button>
+      </div>
+
+      {activeTab === 'recruit' && <RecruitTab renterId={params.id} />}
+
+      {activeTab === 'approved' && (<>
       {/* Matches */}
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold text-lg">התאמות מובילות ({strongMatches.length} ב-90%+{topEligible.length < strongMatches.length ? `, ${strongMatches.length - topEligible.length} כבר נשלחו` : ''})</h2>
@@ -349,6 +365,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           )}
         </div>
       )}
+      </>)}
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <ScheduleMeetingButton renterId={params.id} label="קבע פגישה עם השוכר" />
         <AddTaskButton entityType="renter" entityId={params.id} />
@@ -358,6 +375,78 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
         <DocumentsPanel entityType="renter" entityId={params.id} />
         <ActivityTimeline entityType="renter" entityId={params.id} />
       </div>
+    </div>
+  )
+}
+
+// ---------- Recruitment tab: unapproved properties ≥90% not yet recruited ----------
+function RecruitTab({ renterId }: { renterId: string }) {
+  const [items, setItems] = useState<any[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [sent, setSent] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/v1/renters/${renterId}/recruit-matches`)
+      .then(r => r.json())
+      .then(d => { if (cancelled) return; if (d.error) setError(d.error.message || d.error.code); else setItems(d.matches || []) })
+      .catch(e => { if (!cancelled) setError(e.message) })
+    return () => { cancelled = true }
+  }, [renterId])
+
+  async function send(propertyId: string) {
+    if (busy) return
+    if (!window.confirm('לשלוח הודעת גיוס לבעל הנכס? (ההודעה מזכירה שיש שוכר מתאים, בלי פרטים מזהים)')) return
+    setBusy(propertyId)
+    try {
+      const res = await fetch(`/api/v1/renters/${renterId}/recruit-send`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ propertyId }),
+      })
+      const d = await res.json()
+      if (d.ok) setSent(s => new Set(s).add(propertyId))
+      else alert(d.error?.message || 'השליחה נכשלה')
+    } catch { alert('השליחה נכשלה') } finally { setBusy(null) }
+  }
+
+  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+  if (items === null) return <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+  if (items.length === 0) return (
+    <div className="text-center py-12 text-gray-500 rounded-lg border border-dashed border-gray-300 bg-white">
+      <Home className="mx-auto h-10 w-10 mb-2 text-gray-300" />
+      <p>אין נכסים לא-מאושרים בהתאמה 90%+ שטרם גויסו.</p>
+    </div>
+  )
+  return (
+    <div className="grid grid-cols-1 gap-2">
+      <p className="text-xs text-gray-500 mb-1">נכסים שעדיין לא במערכת ומתאימים לשוכר (90%+). שלח הודעת גיוס לבעל הנכס ישירות מכאן.</p>
+      {items.map(it => {
+        const done = sent.has(it.property_id)
+        return (
+          <div key={it.property_id} className="rounded-lg border border-gray-200 bg-white p-3 flex items-center gap-3">
+            {it.image && <img src={it.image} alt="" className="h-14 w-14 rounded object-cover shrink-0" />}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">{it.percentage}%</span>
+                <span className="font-medium text-gray-900 truncate">{[it.neighborhood, it.city].filter(Boolean).join(' · ') || it.city || 'נכס'}</span>
+              </div>
+              <div className="text-sm text-gray-500 mt-0.5 truncate">
+                {[it.rooms ? `${String(it.rooms).replace(/\.0$/, '')} חד׳` : null, it.sqm ? `${it.sqm} מ״ר` : null, it.price ? `₪${Number(it.price).toLocaleString('he-IL')}` : null].filter(Boolean).join(' · ')}
+                {it.contact_name ? ` · ${it.contact_name}` : ''}
+              </div>
+            </div>
+            {done ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-500 shrink-0"><Check className="h-4 w-4" />נשלח</span>
+            ) : (
+              <button type="button" onClick={() => send(it.property_id)} disabled={busy === it.property_id}
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 shrink-0">
+                {busy === it.property_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                שלח הודעת גיוס
+              </button>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
