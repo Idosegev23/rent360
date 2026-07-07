@@ -20,7 +20,9 @@ export async function requireOrg(): Promise<OrgContext | null> {
   const uid = getUserIdFromSupabaseCookie(token)
   if (!uid) return null
   const sb = supabaseService()
-  const { data: user } = await sb.from('users').select('org_id, role').eq('id', uid).maybeSingle()
-  if (!user) return null
+  const { data: user } = await sb.from('users').select('org_id, role, is_active').eq('id', uid).maybeSingle()
+  // Deactivated staff (offboarded) are locked out here regardless of a still-valid session token —
+  // requireOrg re-reads the row per request, so is_active=false takes effect on the very next call.
+  if (!user || user.is_active === false) return null
   return { sb, orgId: user.org_id, uid, role: (user.role as string) ?? null }
 }

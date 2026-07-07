@@ -3,16 +3,19 @@ import { supabaseService } from '../../../../../lib/supabase'
 import { normalizePhone } from '../../../../../lib/whatsapp/meta-provider'
 
 /**
- * One-shot, idempotent: make the 4 office staff real `users` rows (Google login by email +
+ * One-shot, idempotent: make the office staff real `users` rows (Google login by email +
  * WhatsApp phone + identical 'admin' permissions). Existing rows (Ido/Ziv) are updated; missing
- * ones (Shai/Daria) get an auth user created so Google login links by email on first sign-in.
+ * ones get an auth user created so Google login links by email on first sign-in.
  * Auth: `Authorization: Bearer <CRON_SECRET>`. Re-runnable.
+ *
+ * NOTE: Daria (dashkin10@gmail.com) was offboarded — deliberately removed from the roster so a
+ * re-seed can't reactivate her. Her `users` row is deactivated in migration 0033.
  */
 const ROSTER: Array<{ email: string; name: string; phoneLocal: string }> = [
   { email: 'triroars@gmail.com',       name: 'עידו', phoneLocal: '0547667775' },
   { email: 'zivatia301089@gmail.com',  name: 'זיו',  phoneLocal: '0545650748' },
   { email: 'shay20036@gmail.com',      name: 'שי',   phoneLocal: '0527559049' },
-  { email: 'dashkin10@gmail.com',      name: 'דריה', phoneLocal: '0546842407' },
+  { email: 'info@rent360.co.il',       name: 'דנה',  phoneLocal: '0533018220' },
 ]
 
 export async function POST(req: NextRequest) {
