@@ -15,7 +15,7 @@ const ROSTER: Array<{ email: string; name: string; phoneLocal: string }> = [
   { email: 'triroars@gmail.com',       name: 'עידו', phoneLocal: '0547667775' },
   { email: 'zivatia301089@gmail.com',  name: 'זיו',  phoneLocal: '0545650748' },
   { email: 'shay20036@gmail.com',      name: 'שי',   phoneLocal: '0527559049' },
-  { email: 'info@rent360.co.il',       name: 'דנה',  phoneLocal: '0533018220' },
+  { email: 'rent360info@gmail.com',    name: 'דנה',  phoneLocal: '0533018220' },
 ]
 
 export async function POST(req: NextRequest) {

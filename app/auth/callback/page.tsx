@@ -8,7 +8,7 @@ const ALLOWED = [
   'triroars@gmail.com',
   'zivatia301089@gmail.com',
   'shay20036@gmail.com',
-  'info@rent360.co.il',
+  'rent360info@gmail.com',
 ]
 
 export default function AuthCallbackPage() {
