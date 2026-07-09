@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight, Share2, Target, AlertTriangle, ChevronDown, ChevronUp, Loader2, RefreshCw, User } from 'lucide-react'
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
 import NotesBanner from '../../../components/NotesBanner'
+import ManagePropertyImages from '../../../components/properties/ManagePropertyImages'
 import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
 import MarkRented from '../../../components/MarkRented'
 import ApproveBrokerage from '../../../components/ApproveBrokerage'
@@ -236,6 +237,13 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
+
+      {/* Manage photos — swap scraped/watermarked images for better ones from the landlord. */}
+      <ManagePropertyImages
+        propertyId={item.id}
+        images={(Array.isArray(item.images) ? item.images : []) as string[]}
+        onChanged={reload}
+      />
 
       {/* TABS — capsules */}
       <div className="sticky top-2 z-10 flex flex-nowrap gap-2 overflow-x-auto py-1" role="tablist" style={{ scrollbarWidth: 'none' }}>

@@ -86,12 +86,31 @@ export async function PATCH(
     const uid = getUserIdFromSupabaseCookie(token)
     if (!uid) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
 
-    let body: { amenity?: unknown; value?: unknown; fields?: unknown } = {}
+    let body: { amenity?: unknown; value?: unknown; fields?: unknown; images?: unknown } = {}
     try { body = await req.json() } catch {/* empty */}
 
     const sb = supabaseService()
     const { data: user } = await sb.from('users').select('org_id').eq('id', uid).maybeSingle()
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+    // --- Images edit: { images: string[] } — full replacement (reorder / remove / append). ---
+    // The client uploads new files to storage first, then PATCHes the resulting ordered URL list.
+    if (Array.isArray(body.images)) {
+      const images = (body.images as unknown[])
+        .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+        .map((u) => u.trim())
+        .slice(0, 40)
+      const { data: updated, error } = await sb
+        .from('properties')
+        .update({ images, updated_at: new Date().toISOString() })
+        .eq('org_id', user.org_id)
+        .eq('id', params.id)
+        .select('id')
+        .maybeSingle()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      if (!updated) return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+      return NextResponse.json({ ok: true, images })
+    }
 
     // --- General field edit: { fields: { ...subset } } ---
     if (body.fields && typeof body.fields === 'object') {
