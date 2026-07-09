@@ -38,6 +38,7 @@ type ThreadRow = {
 const TABS: Array<{ id: string; label: string }> = [
   { id: 'all', label: 'הכל' },
   { id: 'awaiting_reply', label: 'ממתינות לתגובה' },
+  { id: 'dead', label: 'שיחות מתות' },
   { id: 'interested', label: 'מתעניינים' },
   { id: 'price_objection', label: 'מו״מ מחיר' },
   { id: 'callback_later', label: 'לחזור אליהם' },

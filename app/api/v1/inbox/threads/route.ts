@@ -20,6 +20,14 @@ const INTENT_FILTER: Record<string, string[]> = {
   not_relevant: ['not_interested', 'already_rented'],
 }
 
+// "Dead" conversation = they REPLIED at least once, then we messaged and they went silent for at
+// least this long (we're waiting on them). Never-answered threads are excluded on purpose.
+// Landlords reply slower than renters, so they get a longer grace window. Tune here.
+const DEAD_LANDLORD_HOURS = 48
+const DEAD_RENTER_HOURS = 24
+// Finished / opted-out threads aren't "dead" — they're closed. Keep them out of this view.
+const DEAD_TERMINAL_STATUSES = ['closed_won', 'closed_lost', 'opted_out']
+
 export async function GET(req: NextRequest) {
   const cookie = cookies().get('sb-access-token')?.value
   const userId = getUserIdFromSupabaseCookie(cookie)
@@ -43,13 +51,28 @@ export async function GET(req: NextRequest) {
     .eq('org_id', orgId)
     .eq('channel', 'whatsapp')
     .neq('status', 'admin_alerts')
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .limit(100)
   if (propertyId) query = query.eq('property_id', propertyId)
   if (renterId) query = query.eq('tags->>renter_id', renterId)
 
-  if (intents.length > 0) query = query.or(intents.map(i => `tags->>intent.eq.${i}`).join(','))
-  else if (statuses.length > 0) query = query.in('status', statuses)
+  if (filter === 'dead') {
+    // Pre-filter in SQL by the smaller threshold; the exact per-audience cut + the
+    // "our message is the latest" (col-to-col) check happen in JS below, since PostgREST
+    // can't compare two columns. Order freshly-dead first (most recent outbound) so the
+    // still-revivable conversations float to the top, not month-old cold ones.
+    const minHours = Math.min(DEAD_LANDLORD_HOURS, DEAD_RENTER_HOURS)
+    const cutoffIso = new Date(Date.now() - minHours * 3_600_000).toISOString()
+    query = query
+      .not('last_inbound_at', 'is', null)
+      .not('last_outbound_at', 'is', null)
+      .lte('last_outbound_at', cutoffIso)
+      .not('status', 'in', `(${DEAD_TERMINAL_STATUSES.join(',')})`)
+      .order('last_outbound_at', { ascending: false })
+      .limit(200)
+  } else {
+    if (intents.length > 0) query = query.or(intents.map(i => `tags->>intent.eq.${i}`).join(','))
+    else if (statuses.length > 0) query = query.in('status', statuses)
+    query = query.order('last_message_at', { ascending: false, nullsFirst: false }).limit(100)
+  }
 
   const { data: threads, error } = await query
   if (error) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
@@ -128,5 +151,18 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json({ threads: rows, filter })
+  let outRows = rows
+  if (filter === 'dead') {
+    const now = Date.now()
+    outRows = rows.filter(r => {
+      if (!r.last_inbound_at || !r.last_outbound_at) return false
+      // Our last message must be AFTER their last reply — i.e. the ball is in their court.
+      if (new Date(r.last_outbound_at).getTime() <= new Date(r.last_inbound_at).getTime()) return false
+      const silentMs = now - new Date(r.last_outbound_at).getTime()
+      const thresholdHours = r.audience === 'landlord' ? DEAD_LANDLORD_HOURS : DEAD_RENTER_HOURS
+      return silentMs >= thresholdHours * 3_600_000
+    })
+  }
+
+  return NextResponse.json({ threads: outRows, filter })
 }
