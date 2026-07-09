@@ -72,6 +72,7 @@ const EDITABLE_FIELDS: Record<string, 'text' | 'int' | 'num' | 'date' | 'bool'> 
   description: 'text', full_text: 'text',
   contact_name: 'text', contact_phone: 'text',
   pets_allowed: 'bool', smokers_allowed: 'bool', long_term: 'bool',
+  agreed_commission_months: 'num', agreed_commission_note: 'text',
 }
 // NOT NULL columns — refuse to blank them.
 const REQUIRED_FIELDS = new Set(['title', 'city', 'price'])

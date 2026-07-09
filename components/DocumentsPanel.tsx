@@ -8,6 +8,7 @@ type EntityType = 'property' | 'renter' | 'tenancy' | 'thread'
 
 const KINDS: Array<{ k: string; label: string }> = [
   { k: 'broker_agreement', label: 'הסכם תיווך' },
+  { k: 'commission_proof', label: 'הוכחת עמלה' },
   { k: 'contract', label: 'חוזה שכירות' },
   { k: 'id', label: 'תעודת זהות' },
   { k: 'payslip', label: 'תלושי שכר' },

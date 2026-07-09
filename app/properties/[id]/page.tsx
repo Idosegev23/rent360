@@ -8,6 +8,7 @@ import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight, Share2, 
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
 import NotesBanner from '../../../components/NotesBanner'
 import ManagePropertyImages from '../../../components/properties/ManagePropertyImages'
+import AgreedCommission from '../../../components/properties/AgreedCommission'
 import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
 import MarkRented from '../../../components/MarkRented'
 import ApproveBrokerage from '../../../components/ApproveBrokerage'
@@ -243,6 +244,15 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         propertyId={item.id}
         images={(Array.isArray(item.images) ? item.images : []) as string[]}
         onChanged={reload}
+      />
+
+      {/* Agreed commission (months of rent) + saved proof, captured at recruitment. */}
+      <AgreedCommission
+        propertyId={item.id}
+        price={item.price ?? null}
+        initialMonths={(item as any).agreed_commission_months != null ? Number((item as any).agreed_commission_months) : null}
+        initialNote={(item as any).agreed_commission_note ?? null}
+        onSaved={reload}
       />
 
       {/* TABS — capsules */}
