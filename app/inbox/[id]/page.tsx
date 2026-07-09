@@ -7,6 +7,7 @@ import { ThreadGoogleActions } from '@/components/google/ThreadGoogleActions'
 import { RelatedItems } from '@/components/RelatedItems'
 import { AddTaskButton } from '@/components/tasks/AddTaskButton'
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
+import NotesBanner from '@/components/NotesBanner'
 
 type Message = {
   id: string
@@ -213,6 +214,9 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
       <Link href="/inbox" className="inline-flex items-center gap-1 text-sm text-brand-primary hover:underline mb-3">
         <ArrowRight className="h-4 w-4" /> חזרה לתיבה
       </Link>
+
+      {/* Notes surface at the top of the conversation, not hidden behind a tab. */}
+      <NotesBanner entityType="thread" entityId={thread.id} className="mb-3" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
         {/* ===== Chat column ===== */}

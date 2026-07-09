@@ -7,6 +7,7 @@ export default function ApprovedPropertiesPage() {
       pageTitle="נכסים מאושרים לתיווך"
       showDeleteButton
       showIrrelevantButton
+      defaultActiveOnly
     />
   );
 }

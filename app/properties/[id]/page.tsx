@@ -6,6 +6,7 @@ import { type ExtendedProperty } from '../../../types/property'
 import Link from 'next/link'
 import { Calendar, MapPin, Phone, Clock, Info, ChevronLeft, ArrowRight, Share2, Target, AlertTriangle, ChevronDown, ChevronUp, Loader2, RefreshCw, User } from 'lucide-react'
 import PropertyImageGallery from '../../../components/PropertyImageGallery'
+import NotesBanner from '../../../components/NotesBanner'
 import SharePropertyDialog from '../../../components/properties/SharePropertyDialog'
 import MarkRented from '../../../components/MarkRented'
 import ApproveBrokerage from '../../../components/ApproveBrokerage'
@@ -190,6 +191,9 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
           <span>חזרה לרשימת נכסים</span>
         </button>
       </div>
+
+      {/* Notes surface prominently at the top of the property. */}
+      <NotesBanner entityType="property" entityId={item.id} />
 
       {/* HERO */}
       <div className="surface-card overflow-hidden">

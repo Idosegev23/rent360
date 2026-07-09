@@ -48,6 +48,8 @@ interface ModernPropertiesPageProps {
   showIrrelevantButton?: boolean;
   showRestoreButton?: boolean;
   extraParams?: Record<string, string>;
+  /** Seed the status filter to "active only" (approved page: approved + on-market + not rented). */
+  defaultActiveOnly?: boolean;
 }
 
 interface FilterState {
@@ -72,7 +74,10 @@ export default function ModernPropertiesPage({
   showIrrelevantButton = false,
   showRestoreButton = false,
   extraParams,
+  defaultActiveOnly = false,
 }: ModernPropertiesPageProps) {
+  // Default status filter: "active only" for the approved list, "all" elsewhere.
+  const initialIsActive = defaultActiveOnly ? 'true' : '';
   const [properties, setProperties] = useState<ExtendedProperty[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
@@ -91,7 +96,7 @@ export default function ModernPropertiesPage({
     priceMax: '',
     roomsMin: '',
     roomsMax: '',
-    isActive: '',
+    isActive: initialIsActive,
     amenities: [],
     isBrokerage: ''
   });
@@ -189,7 +194,7 @@ export default function ModernPropertiesPage({
       priceMax: '',
       roomsMin: '',
       roomsMax: '',
-      isActive: '',
+      isActive: initialIsActive,
       amenities: [],
       isBrokerage: ''
     };
@@ -410,7 +415,7 @@ export default function ModernPropertiesPage({
               <option value="true">יד 2 תיווך</option>
             </select>
 
-            {(filters.search || filters.city || filters.neighborhood || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive || filters.isBrokerage || filters.amenities.length > 0) && (
+            {(filters.search || filters.city || filters.neighborhood || filters.priceMin || filters.priceMax || filters.roomsMin || filters.roomsMax || filters.isActive !== initialIsActive || filters.isBrokerage || filters.amenities.length > 0) && (
               <button
                 onClick={clearFilters}
                 className="w-full px-4 py-3 text-brand-primary border border-brand-primary rounded-lg hover:bg-brand-primary hover:text-white transition-colors"
