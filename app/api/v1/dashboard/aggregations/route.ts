@@ -16,14 +16,15 @@ export async function GET(){
   const orgId = user.org_id
 
   try {
-    // Get only approved properties data
-    // First get approved property IDs
-    const { data: approvedProps } = await sb
-      .from('approved_properties')
-      .select('property_id')
-      .eq('org_id', orgId)
-    
-    const approvedPropertyIds = approvedProps?.map(ap => ap.property_id) || []
+    // Approved property IDs — matching the /approved-properties page: exclude approvals marked
+    // irrelevant and properties already rented (active tenancy). Otherwise the charts over-count.
+    const [approvedRes, activeTenRes] = await Promise.all([
+      sb.from('approved_properties').select('property_id').eq('org_id', orgId).is('irrelevant_at', null),
+      sb.from('tenancies').select('property_id').eq('org_id', orgId).eq('status', 'active'),
+    ])
+    const rentedSet = new Set((activeTenRes.data || []).map(t => t.property_id).filter(Boolean))
+    const approvedPropertyIds = (approvedRes.data?.map(ap => ap.property_id).filter(Boolean) || [])
+      .filter(id => !rentedSet.has(id))
     
     if (approvedPropertyIds.length === 0) {
       // No approved properties yet, return empty data

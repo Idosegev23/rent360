@@ -20,7 +20,6 @@ export async function GET() {
 
   const [
     importsErr,
-    approvedPropsCount,
     rentersCount,
     rentersSinceWeek,
     matchesAll,
@@ -32,7 +31,6 @@ export async function GET() {
     optedOut,
   ] = await Promise.all([
     sb.from('imports').select('failed', { count: 'exact' }).eq('org_id', orgId).gte('ran_at', since7),
-    sb.from('approved_properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
     sb.from('renters').select('id', { count: 'exact', head: true }),
     sb.from('renters').select('id', { count: 'exact', head: true }).gte('created_at', since7),
     sb.from('matches').select('score, is_disqualified').eq('org_id', orgId),
@@ -50,9 +48,33 @@ export async function GET() {
     ? Math.round(nonDqMatches.reduce((s, m) => s + (Number(m.score) || 0), 0) / nonDqMatches.length)
     : null
 
+  // "Approved" must match the /approved-properties page, not raw approved_properties rows —
+  // otherwise the dashboard over-counts approvals marked irrelevant + already-rented ones.
+  // approved_properties = approved AND not irrelevant AND not rented (active tenancy).
+  // active_approved_properties = of those, still on-market (is_active=true).
+  const [apprRowsRes, activeTenRes] = await Promise.all([
+    sb.from('approved_properties').select('property_id').eq('org_id', orgId).is('irrelevant_at', null),
+    sb.from('tenancies').select('property_id').eq('org_id', orgId).eq('status', 'active'),
+  ])
+  const rentedSet = new Set((activeTenRes.data || []).map(t => t.property_id).filter(Boolean))
+  const approvedPropIds = Array.from(new Set((apprRowsRes.data || []).map(a => a.property_id).filter(Boolean)))
+    .filter(id => !rentedSet.has(id))
+  let activeApprovedCount = 0
+  if (approvedPropIds.length) {
+    const { count } = await sb
+      .from('properties')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .in('id', approvedPropIds)
+    activeApprovedCount = count || 0
+  }
+  const approvedTotal = approvedPropIds.length
+
   const kpis = {
     import_errors_7d: (importsErr.data || []).reduce((a: any, b: any) => a + (b.failed || 0), 0),
-    approved_properties: approvedPropsCount.count || 0,
+    approved_properties: approvedTotal,
+    active_approved_properties: activeApprovedCount,
     renters_pool: rentersCount.count || 0,
     renters_new_7d: rentersSinceWeek.count || 0,
     matches_total: allMatches.length,
