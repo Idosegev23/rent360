@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
+import { requireOrg } from '../../../../../lib/api/org-context'
 import { renterSendCounts, RENTER_PER_DAY_CAP } from '../../../../../lib/outreach/governance'
+
+const LEAD_STATUSES = new Set(['new', 'contacted', 'qualified', 'viewing', 'negotiating', 'placed', 'lost'])
+const SOURCES = new Set(['facebook', 'whatsapp', 'referral', 'manual', 'website', 'other'])
 
 /** Admin: full renter profile + their org-scoped matches (with property details). */
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -80,4 +84,71 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // The real per-day cap (env-overridable) so the UI badge stays truthful if it changes.
     per_day_cap: RENTER_PER_DAY_CAP,
   })
+}
+
+/**
+ * Admin: update the renter's CRM layer (lead_status / source / rating / approved_budget /
+ * assigned_to). Whitelisted + validated; unknown keys ignored; empty string clears a nullable
+ * field. The questionnaire fields are NOT editable here — they come from the intake flow.
+ */
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const ctx = await requireOrg()
+  if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
+
+  let body: Record<string, any> = {}
+  try { body = await req.json() } catch {/* empty body */}
+
+  const update: Record<string, any> = {}
+  const bad = (message: string) => NextResponse.json({ error: { code: 'BAD_REQUEST', message } }, { status: 400 })
+
+  if ('lead_status' in body) {
+    const v = String(body.lead_status || '')
+    if (!LEAD_STATUSES.has(v)) return bad(`invalid lead_status: ${v}`)
+    update.lead_status = v
+  }
+  if ('source' in body) {
+    const raw = body.source
+    if (raw === null || raw === '') update.source = null
+    else {
+      const v = String(raw)
+      if (!SOURCES.has(v)) return bad(`invalid source: ${v}`)
+      update.source = v
+    }
+  }
+  if ('rating' in body) {
+    const raw = body.rating
+    if (raw === null || raw === '') update.rating = null
+    else {
+      const n = Number(raw)
+      if (!Number.isInteger(n) || n < 1 || n > 5) return bad('rating must be an integer 1-5')
+      update.rating = n
+    }
+  }
+  if ('approved_budget' in body) {
+    const raw = body.approved_budget
+    if (raw === null || raw === '') update.approved_budget = null
+    else {
+      const n = Number(raw)
+      if (!Number.isInteger(n) || n < 0) return bad('approved_budget must be a non-negative integer')
+      update.approved_budget = n
+    }
+  }
+  if ('assigned_to' in body) {
+    const raw = body.assigned_to
+    if (raw === null || raw === '') update.assigned_to = null
+    else {
+      const v = String(raw)
+      const { data: u } = await ctx.sb.from('users').select('id').eq('id', v).eq('org_id', ctx.orgId).maybeSingle()
+      if (!u) return bad('assigned_to is not a staff member in this org')
+      update.assigned_to = v
+    }
+  }
+
+  if (Object.keys(update).length === 0) return bad('no updatable fields provided')
+  update.updated_at = new Date().toISOString()
+
+  const { data, error } = await ctx.sb.from('renters').update(update).eq('id', params.id).select('*').maybeSingle()
+  if (error) return NextResponse.json({ error: { code: 'UPDATE_FAILED', message: error.message } }, { status: 500 })
+  if (!data) return NextResponse.json({ error: { code: 'NOT_FOUND' } }, { status: 404 })
+  return NextResponse.json({ ok: true, renter: data })
 }

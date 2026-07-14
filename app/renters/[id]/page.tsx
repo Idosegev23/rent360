@@ -14,6 +14,7 @@ import { RelatedItems } from '@/components/RelatedItems'
 import DocumentsPanel from '@/components/DocumentsPanel'
 import NotesBanner from '@/components/NotesBanner'
 import ScheduleMeetingButton from '@/components/ScheduleMeetingButton'
+import LeadManagementPanel from '@/components/renters/LeadManagementPanel'
 
 type Renter = Record<string, any>
 type MatchProperty = {
@@ -296,6 +297,18 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
           </div>
         )}
       </div>
+
+      {/* Lead management (CRM) — pipeline stage, source, rating, vetted budget, owner. */}
+      <LeadManagementPanel
+        renterId={params.id}
+        initialStatus={renter.lead_status ?? null}
+        initialSource={renter.source ?? null}
+        initialRating={renter.rating ?? null}
+        initialApprovedBudget={renter.approved_budget ?? null}
+        initialAssignedTo={renter.assigned_to ?? null}
+        statedBudget={renter.budget_max ?? null}
+        onSaved={load}
+      />
 
       {/* Team notes / extra info about the renter — beyond the questionnaire. */}
       <NotesBanner entityType="renter" entityId={params.id} />
