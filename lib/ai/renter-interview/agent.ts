@@ -66,7 +66,7 @@ export async function runRenterAgentTurn(input: RenterAgentInput): Promise<Rente
     ...((input.imageUrls || []).map(url => ({ type: 'input_image', image_url: url }))),
   ]
   const requestBase: Record<string, unknown> = { model: MODEL, store: true, tools: RENTER_TOOL_DEFINITIONS, parallel_tool_calls: false }
-  const systemPrompt = buildRenterSystemPrompt(ctx)
+  const systemPrompt = await buildRenterSystemPrompt(ctx, thread.org_id)
 
   let response: any = await (client() as any).responses.create({
     ...requestBase,
