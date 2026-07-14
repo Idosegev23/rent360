@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
   const intents = INTENT_FILTER[filter] ?? []
   const propertyId = url.searchParams.get('propertyId')   // conversations linked to a property
   const renterId = url.searchParams.get('renterId')       // conversations linked to a renter
+  const audience = url.searchParams.get('audience')       // 'renter' | 'landlord' | null (all)
 
   let query = sb
     .from('threads')
@@ -53,6 +54,9 @@ export async function GET(req: NextRequest) {
     .neq('status', 'admin_alerts')
   if (propertyId) query = query.eq('property_id', propertyId)
   if (renterId) query = query.eq('tags->>renter_id', renterId)
+  // Renter vs landlord split. Landlord = the default (audience tag absent or not 'renter').
+  if (audience === 'renter') query = query.eq('tags->>audience', 'renter')
+  else if (audience === 'landlord') query = query.or('tags->>audience.neq.renter,tags->>audience.is.null')
 
   if (filter === 'dead') {
     // Pre-filter in SQL by the smaller threshold; the exact per-audience cut + the

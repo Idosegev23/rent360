@@ -79,6 +79,7 @@ function timeAgo(iso: string | null): string {
 
 export default function InboxPage() {
   const [filter, setFilter] = useState('all')
+  const [audience, setAudience] = useState<'all' | 'renter' | 'landlord'>('all')
   const [threads, setThreads] = useState<ThreadRow[]>([])
   const [loading, setLoading] = useState(true)        // full-page spinner (initial / filter change only)
   const [refreshing, setRefreshing] = useState(false) // silent background poll / manual refresh
@@ -93,7 +94,7 @@ export default function InboxPage() {
   const loadThreads = useCallback(async (silent: boolean) => {
     if (silent) setRefreshing(true); else setLoading(true)
     try {
-      const res = await fetch(`/api/v1/inbox/threads?filter=${filter}`)
+      const res = await fetch(`/api/v1/inbox/threads?filter=${filter}${audience !== 'all' ? `&audience=${audience}` : ''}`)
       const data = await res.json()
       if (data.error) {
         if (!silent) setError(data.error.message || data.error.code)
@@ -122,7 +123,7 @@ export default function InboxPage() {
     } finally {
       if (silent) setRefreshing(false); else setLoading(false)
     }
-  }, [filter])
+  }, [filter, audience])
 
   // Initial load + reset baselines whenever the filter (tab) changes.
   useEffect(() => {
@@ -185,6 +186,21 @@ export default function InboxPage() {
               {newIds.size} חדש
             </button>
           )}
+        </div>
+        {/* Renter vs landlord split */}
+        <div className="flex w-fit gap-1 mb-3 rounded-lg bg-gray-100 p-1">
+          {([['all', 'הכל'], ['landlord', 'בעלי דירות'], ['renter', 'שוכרים']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setAudience(id)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                audience === id ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
           {TABS.map(t => (
