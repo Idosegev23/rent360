@@ -9,8 +9,14 @@ import { supabaseService } from '../supabase'
  */
 const TASK_TEMPLATE = process.env.STAFF_TASK_TEMPLATE || 'staff_task_reminder_v1'
 const MEETING_TEMPLATE = process.env.STAFF_MEETING_TEMPLATE || 'staff_meeting_reminder_v1'
+// Dedicated escalation template (submitted for approval separately). Until it's approved we fall
+// back to the already-approved admin_handoff_alert_v2 (identical shape: 4 body params + thread
+// button) so escalation works from day one. Set ESCALATION_FALLBACK_TEMPLATE='' to disable the
+// fallback and wait for the dedicated template's approval instead.
+const ESCALATION_TEMPLATE = process.env.STAFF_ESCALATION_TEMPLATE || 'staff_escalation_reminder_v1'
+const ESCALATION_FALLBACK_TEMPLATE = process.env.ESCALATION_FALLBACK_TEMPLATE ?? 'admin_handoff_alert_v2'
 
-type StaffResult = { sent: number; skipped?: string }
+type StaffResult = { sent: number; skipped?: string; template?: string }
 
 async function staffTarget(orgId: string, userId: string): Promise<{ phone: string; name: string } | null> {
   const sb = supabaseService()
@@ -81,6 +87,67 @@ export async function notifyStaffMeeting(p: { orgId: string; userId: string; mee
     await sendTemplate({ to: u.phone, name: MEETING_TEMPLATE, language: 'he', components })
     await audit(p.orgId, MEETING_TEMPLATE, { kind: 'meeting_reminder', meeting_id: p.meetingId, to: u.phone })
     return { sent: 1 }
+  } catch {
+    return { sent: 0, skipped: 'send_failed' }
+  }
+}
+
+const truncate = (s: string, n: number) => (s || '').slice(0, n)
+
+/**
+ * WhatsApp a staff member that a handed-off conversation is still undocumented. Prefers the
+ * dedicated `staff_escalation_reminder_v1` template; until Meta approves it, sends via the
+ * approved `admin_handoff_alert_v2` fallback (which has the same 4-body-param + thread-button
+ * shape). No-ops (skipped:'no_template') if neither is approved. Caller is responsible for
+ * dedupe (activity rows) and the send window.
+ */
+export async function notifyStaffEscalation(p: {
+  orgId: string
+  level: 24 | 48
+  to: string
+  staffName: string
+  threadId: string
+  contactLabel: string
+  contactPhone: string
+  title: string
+  ageLabel: string
+  reason: string
+}): Promise<StaffResult> {
+  const useDedicated = await templateApproved(ESCALATION_TEMPLATE)
+  const fallbackOk = !!ESCALATION_FALLBACK_TEMPLATE && (await templateApproved(ESCALATION_FALLBACK_TEMPLATE))
+  const templateName = useDedicated ? ESCALATION_TEMPLATE : (fallbackOk ? ESCALATION_FALLBACK_TEMPLATE : null)
+  if (!templateName) return { sent: 0, skipped: 'no_template' }
+
+  let components: TemplateComponent[]
+  if (useDedicated) {
+    // staff_escalation_reminder_v1 body: {{1}} staff, {{2}} contact, {{3}} age, {{4}} reason
+    components = [
+      { type: 'body', parameters: [
+        { type: 'text', text: truncate(p.staffName, 40) },
+        { type: 'text', text: truncate(p.contactLabel, 40) },
+        { type: 'text', text: truncate(p.ageLabel, 20) },
+        { type: 'text', text: truncate(p.reason, 60) },
+      ] },
+      { type: 'button', sub_type: 'url', index: 0, parameters: [{ type: 'text', text: p.threadId }] },
+    ]
+  } else {
+    // Reusing admin_handoff_alert_v2 body: {{1}} name, {{2}} phone, {{3}} title, {{4}} reason
+    const reason = `תזכורת אסקלציה (${p.level}ש׳, לא תועד) — ${p.reason}`
+    components = [
+      { type: 'body', parameters: [
+        { type: 'text', text: truncate(p.contactLabel, 40) },
+        { type: 'text', text: truncate(p.contactPhone, 20) },
+        { type: 'text', text: truncate(p.title, 50) },
+        { type: 'text', text: truncate(reason, 60) },
+      ] },
+      { type: 'button', sub_type: 'url', index: 0, parameters: [{ type: 'text', text: p.threadId }] },
+    ]
+  }
+
+  try {
+    await sendTemplate({ to: p.to, name: templateName, language: 'he', components })
+    await audit(p.orgId, templateName, { kind: 'escalation_reminder', level: p.level, thread_id: p.threadId, to: p.to })
+    return { sent: 1, template: templateName }
   } catch {
     return { sent: 0, skipped: 'send_failed' }
   }

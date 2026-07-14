@@ -105,6 +105,14 @@ Per run:
 
 **Dedupe** is entirely `activity` rows keyed to "since T", so a re-handoff (newer T) re-arms both levels.
 
+**Cold-start / backlog guards (added after simulating prod data — 28 threads sat in human_takeover
+for 5–29 days undocumented, which a naive cron would have spam-blasted on first run):**
+- `ESCALATION_MAX_AGE_HOURS` (default 96): a handoff older than this is **stale-skipped**, never
+  escalated. Escalation is a timely 24h/48h nudge; ancient stuck threads are an inbox/backlog concern,
+  not a staff-ping concern. This is also what makes the first production run safe.
+- `ESCALATION_MAX_SENDS_PER_RUN` (default 5): hard ceiling on WhatsApps per run; oldest-eligible
+  threads drain first across successive hourly runs. A burst can never flood שי/זיו.
+
 ### 5. Dry-run for verification (no test runner in this repo)
 
 `GET /api/v1/cron/escalations?dryRun=1` (still requires `CRON_SECRET`) runs steps 1–4 and returns the
@@ -114,7 +122,7 @@ Per run:
 
 - new `lib/alerts/escalation-recipients.ts`
 - new `lib/whatsapp/template-admin.ts` (`createMessageTemplate`)
-- new `scripts/submit-escalation-template.ts` (one-off submit + register)
+- new `scripts/submit-escalation-template.mjs` (one-off submit + register; self-contained ESM)
 - new `app/api/v1/cron/escalations/route.ts`
 - edit `lib/alerts/staff-whatsapp.ts` (+`notifyStaffEscalation`)
 - edit `vercel.json` (+cron entry), `middleware.ts` (+allowlist path)

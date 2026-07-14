@@ -132,6 +132,16 @@ function sendLink(ctx: ReplyToolContext) {
 async function handoff(args: { reason: string }, ctx: ReplyToolContext) {
   const sb = supabaseService()
   await sb.from('threads').update({ status: 'human_takeover' }).eq('id', ctx.threadId)
+  // Ledger the handoff (mirrors the landlord bot) so the alerts UI and the escalation cron have a
+  // uniform, timestamped anchor for every human_takeover — not just landlord-side ones.
+  try {
+    await sb.from('conversation_alerts').insert({
+      org_id: ctx.orgId,
+      thread_id: ctx.threadId,
+      type: 'handoff',
+      payload: { reason: args.reason || 'שוכר ביקש לדבר עם אדם', side: 'renter' },
+    })
+  } catch {/* best-effort */}
   try {
     const { data: r } = await sb.from('renters').select('first_name').eq('id', ctx.renterId).maybeSingle()
     const base = (ctx.appBaseUrl || process.env.APP_BASE_URL || 'https://rent360-vert.vercel.app').replace(/\/$/, '')
