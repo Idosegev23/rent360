@@ -14,16 +14,20 @@ export default function AgreedCommission({
   propertyId,
   price,
   initialMonths,
+  initialAmount,
   initialNote,
   onSaved,
 }: {
   propertyId: string
   price: number | null
   initialMonths: number | null
+  initialAmount: number | null
   initialNote: string | null
   onSaved?: () => void
 }) {
+  const [mode, setMode] = useState<'months' | 'amount'>(initialAmount != null ? 'amount' : 'months')
   const [months, setMonths] = useState(initialMonths != null ? String(initialMonths) : '')
+  const [amount, setAmount] = useState(initialAmount != null ? String(initialAmount) : '')
   const [note, setNote] = useState(initialNote || '')
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState(false)
@@ -42,8 +46,12 @@ export default function AgreedCommission({
   }, [propertyId])
 
   const monthsNum = months.trim() === '' ? null : parseFloat(months)
-  const shekels = monthsNum != null && Number.isFinite(monthsNum) && price ? Math.round(monthsNum * price) : null
-  const belowFloor = monthsNum != null && Number.isFinite(monthsNum) && monthsNum > 0 && monthsNum < 0.5
+  const amountNum = amount.trim() === '' ? null : parseFloat(amount)
+  const monthsShekels = monthsNum != null && Number.isFinite(monthsNum) && price ? Math.round(monthsNum * price) : null
+  const shekels = mode === 'amount'
+    ? (amountNum != null && Number.isFinite(amountNum) ? Math.round(amountNum) : null)
+    : monthsShekels
+  const belowFloor = mode === 'months' && monthsNum != null && Number.isFinite(monthsNum) && monthsNum > 0 && monthsNum < 0.5
 
   async function save() {
     setSaving(true)
@@ -55,7 +63,8 @@ export default function AgreedCommission({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
-            agreed_commission_months: months.trim() === '' ? null : monthsNum,
+            agreed_commission_months: mode === 'months' && months.trim() !== '' ? monthsNum : null,
+            agreed_commission_amount: mode === 'amount' && amount.trim() !== '' ? amountNum : null,
             agreed_commission_note: note.trim() === '' ? null : note.trim(),
           },
         }),
@@ -100,28 +109,61 @@ export default function AgreedCommission({
         <Coins className="h-4 w-4 text-brand-primary" /> עמלה מוסכמת
       </div>
 
+      {/* Mode: months of rent, or a fixed shekel amount independent of the rent. */}
+      <div className="mb-3 flex w-fit gap-1 rounded-lg bg-gray-100 p-1">
+        {([['months', 'לפי חודשי שכירות'], ['amount', 'סכום קבוע (₪)']] as const).map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === m ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs text-gray-500">חודשי שכירות</label>
-          <input
-            type="number"
-            step="0.25"
-            min="0"
-            inputMode="decimal"
-            value={months}
-            onChange={(e) => setMonths(e.target.value)}
-            placeholder="1"
-            className="mt-1 w-28 rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
+        {mode === 'months' ? (
+          <div>
+            <label className="block text-xs text-gray-500">חודשי שכירות</label>
+            <input
+              type="number"
+              step="0.25"
+              min="0"
+              inputMode="decimal"
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+              placeholder="1"
+              className="mt-1 w-28 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs text-gray-500">סכום קבוע (₪)</label>
+            <input
+              type="number"
+              step="100"
+              min="0"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="למשל 5000"
+              className="mt-1 w-36 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+        )}
         <div className="pb-2 text-sm text-gray-700">
           {shekels != null ? (
             <>
-              ≈ <span className="num font-bold text-brand-primary">₪{shekels.toLocaleString('he-IL')}</span>
+              {mode === 'months' ? '≈ ' : ''}
+              <span className="num font-bold text-brand-primary">₪{shekels.toLocaleString('he-IL')}</span>
               <span className="text-gray-400"> · כולל מע״מ</span>
             </>
           ) : (
-            <span className="text-gray-400">הזן חודשים כדי לחשב לפי שכר הדירה</span>
+            <span className="text-gray-400">{mode === 'months' ? 'הזן חודשים כדי לחשב לפי שכר הדירה' : 'הזן סכום'}</span>
           )}
         </div>
       </div>

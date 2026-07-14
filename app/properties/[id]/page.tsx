@@ -251,6 +251,7 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
         propertyId={item.id}
         price={item.price ?? null}
         initialMonths={(item as any).agreed_commission_months != null ? Number((item as any).agreed_commission_months) : null}
+        initialAmount={(item as any).agreed_commission_amount != null ? Number((item as any).agreed_commission_amount) : null}
         initialNote={(item as any).agreed_commission_note ?? null}
         onSaved={reload}
       />
