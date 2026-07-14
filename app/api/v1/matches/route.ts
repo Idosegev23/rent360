@@ -33,6 +33,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'property_id or renter_id required' } }, { status: 400 })
   }
 
+  // Don't show property matches for a renter who hasn't completed a questionnaire — an
+  // intake-less renter has no real preferences, so any "matches" are noise.
+  if (renterId) {
+    const { data: rq } = await sb.from('renters').select('submissions_count').eq('id', renterId).maybeSingle()
+    if (!rq || (rq.submissions_count ?? 0) <= 0) {
+      return NextResponse.json({ matches: [], count: 0, no_questionnaire: true })
+    }
+  }
+
   let q = sb
     .from('matches')
     .select('id, renter_id, property_id, score, is_disqualified, disqualifying_reasons, breakdown, reasons, status, updated_at, renter_notified_at')
@@ -57,8 +66,10 @@ export async function GET(req: NextRequest) {
         .from('renters')
         .select('id, first_name, last_name, phone, budget_min, budget_max, preferred_rooms, preferred_cities, move_in_date, has_pets, smokers, household_size, has_payslips, has_security_checks, has_guarantors')
         .in('id', renterIds)
+        .gt('submissions_count', 0) // only renters who completed a questionnaire
       const map = Object.fromEntries((renters || []).map(r => [r.id, r]))
-      enriched = (matches || []).map(m => ({ ...m, renter: map[m.renter_id] || null }))
+      // Drop matches whose renter has no questionnaire — intake-less renters are noise.
+      enriched = (matches || []).filter(m => map[m.renter_id]).map(m => ({ ...m, renter: map[m.renter_id] }))
     }
   } else if (renterId) {
     const propertyIds = Array.from(new Set((matches || []).map(m => m.property_id))).filter(Boolean) as string[]

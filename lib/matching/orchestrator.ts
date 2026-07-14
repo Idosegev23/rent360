@@ -62,9 +62,12 @@ export async function computeMatchesForProperty(propertyId: string): Promise<{ i
     .maybeSingle()
   if (irrAp) return { inserted: 0, total: 0 }
 
+  // Only renters who completed a questionnaire (submissions_count > 0) produce matches —
+  // intake-less renters have no real preferences, so scoring them just creates noise.
   const { data: renters, error: renterErr } = await sb
     .from('renters')
     .select(RENTER_COLUMNS)
+    .gt('submissions_count', 0)
   if (renterErr) {
     console.error('[matching] renters fetch:', renterErr.message)
     return { inserted: 0, total: 0 }
@@ -94,6 +97,7 @@ export async function computeMatchesForRenter(renterId: string): Promise<{ inser
     .from('renters')
     .select(RENTER_COLUMNS)
     .eq('id', renterId)
+    .gt('submissions_count', 0) // intake-less renters (no questionnaire) don't produce matches
     .maybeSingle()
   if (renterErr || !renter) {
     if (renterErr) console.error('[matching] renter fetch:', renterErr.message)
