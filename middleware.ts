@@ -27,6 +27,13 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/share/') ||
     pathname.startsWith('/api/v1/shares/')
 
+  // Public Facebook onboarding: the /join chooser + forms and their POST endpoint. Prospects
+  // arrive from a Facebook link with no session — these must be reachable unauthenticated.
+  const isPublicOnboarding =
+    pathname === '/join' ||
+    pathname.startsWith('/join/') ||
+    pathname === '/api/v1/public/onboarding'
+
   // Cron-authenticated endpoints — they verify Authorization: Bearer <CRON_SECRET> themselves.
   // Without this allowlist Vercel Cron / curl can't reach them through the session middleware.
   const isCronAuthed =
@@ -51,6 +58,7 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/api/v1/integrations') ||
     isPublicRenter ||
     isPublicShare ||
+    isPublicOnboarding ||
     isCronAuthed ||
     isGoogleOAuthCallback
   ) {
