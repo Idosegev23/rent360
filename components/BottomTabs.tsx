@@ -15,11 +15,14 @@ export default function BottomTabs() {
   const pathname = usePathname()
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 border-t lg:hidden"
+      // Hide at ≥901px to match where the sidebar returns (max-width:900px). Using lg (1024px)
+      // left both navs visible on tablets. Safe-area padding clears the iPhone home indicator.
+      className="fixed inset-x-0 bottom-0 z-30 border-t min-[901px]:hidden"
       style={{
         borderColor: 'var(--line)',
         background: 'color-mix(in oklab, var(--paper) 92%, transparent)',
         backdropFilter: 'blur(8px)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <ul className="mx-auto flex max-w-xl items-stretch justify-between gap-1 px-2 py-2">

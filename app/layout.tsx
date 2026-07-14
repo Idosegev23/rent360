@@ -1,6 +1,6 @@
 import '../styles/globals.css'
 import Providers from './providers'
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Assistant, Frank_Ruhl_Libre, JetBrains_Mono } from 'next/font/google'
 
 const assistant = Assistant({
@@ -27,6 +27,14 @@ const jetMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'rent360 — real estate ops',
   description: 'ניהול נכסי שכירות, שוכרים והתאמות',
+}
+
+// viewport-fit=cover enables env(safe-area-inset-*) so fixed UI (bottom tabs) clears the
+// iPhone notch/home indicator. Mobile-first zoom defaults kept.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
