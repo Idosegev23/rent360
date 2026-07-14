@@ -12,6 +12,7 @@ import { ActivityTimeline } from '@/components/activity/ActivityTimeline'
 import { AddTaskButton } from '@/components/tasks/AddTaskButton'
 import { RelatedItems } from '@/components/RelatedItems'
 import DocumentsPanel from '@/components/DocumentsPanel'
+import NotesBanner from '@/components/NotesBanner'
 import ScheduleMeetingButton from '@/components/ScheduleMeetingButton'
 
 type Renter = Record<string, any>
@@ -290,11 +291,14 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
 
         {renter.notes && (
           <div className="mt-3 text-sm bg-amber-50 border border-amber-200 rounded p-3">
-            <div className="text-xs text-amber-700 font-medium mb-1">הערות</div>
+            <div className="text-xs text-amber-700 font-medium mb-1">הערות מהשאלון</div>
             <div className="text-amber-900 whitespace-pre-wrap">{renter.notes}</div>
           </div>
         )}
       </div>
+
+      {/* Team notes / extra info about the renter — beyond the questionnaire. */}
+      <NotesBanner entityType="renter" entityId={params.id} />
 
       {/* Full questionnaire details */}
       <QuestionnaireDetails renter={renter} lastSubmission={lastSubmission} />
