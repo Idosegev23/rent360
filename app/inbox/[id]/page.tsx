@@ -98,6 +98,7 @@ const INTENT_LABELS: Record<string, string> = {
 export default function ThreadDetailPage({ params }: { params: { id: string } }) {
   const [thread, setThread] = useState<Thread | null>(null)
   const [property, setProperty] = useState<Property | null>(null)
+  const [displayName, setDisplayName] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -119,6 +120,7 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
       if (!res.ok) throw new Error(data?.error?.message || data?.error?.code || 'load failed')
       setThread(data.thread)
       setProperty(data.property)
+      setDisplayName(data.display_name ?? null)
       setMessages(prev => {
         const next = data.messages || []
         // Avoid a needless re-render when nothing changed (same count + same last id).
@@ -206,7 +208,9 @@ export default function ThreadDetailPage({ params }: { params: { id: string } })
 
   const intent = (thread.tags && typeof thread.tags === 'object' ? (thread.tags as any).intent : null) as string | null
   const statusInfo = STATUS_LABELS[thread.status] || { label: thread.status, tone: 'gray' as Tone }
-  const contactName = property?.contact_name || thread.phone || 'ללא שם'
+  // Renter threads show the renter's name (resolved server-side); landlord threads show the
+  // property contact (owner). Never the apartment owner on a renter conversation. See the API.
+  const contactName = displayName || thread.phone || 'ללא שם'
   const composerDisabled = !windowOpen || thread.status === 'opted_out' || !inHumanMode || sending
 
   return (

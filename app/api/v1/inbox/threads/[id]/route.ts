@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseService } from '../../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../../lib/auth'
+import { normalizePhone } from '../../../../../../lib/whatsapp/meta-provider'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const cookie = cookies().get('sb-access-token')?.value
@@ -65,10 +66,35 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     }
   }
 
+  // Header display name. For renter threads the linked property is the RECOMMENDED apartment, so
+  // property.contact_name is the apartment OWNER — not the renter. Resolve the renter's own name
+  // (mirrors the inbox list route). Landlord threads keep the property contact (owner) name.
+  const tags = (thread.tags && typeof thread.tags === 'object') ? thread.tags as Record<string, any> : {}
+  const audience: 'renter' | 'landlord' = tags.audience === 'renter' ? 'renter' : 'landlord'
+  let displayName: string | null = audience === 'landlord' ? (property?.contact_name || null) : null
+  if (audience === 'renter') {
+    const tagName = typeof tags.renter_name === 'string' ? tags.renter_name.trim() : ''
+    displayName = tagName || null
+    if (!displayName) {
+      let r: { first_name: string | null; last_name: string | null } | null = null
+      if (tags.renter_id) {
+        const { data } = await sb.from('renters').select('first_name, last_name').eq('id', tags.renter_id).maybeSingle()
+        r = data || null
+      }
+      if (!r && thread.phone) {
+        const { data } = await sb.from('renters').select('first_name, last_name').eq('phone', normalizePhone(thread.phone)).maybeSingle()
+        r = data || null
+      }
+      if (r) displayName = [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || null
+    }
+  }
+
   return NextResponse.json({
     thread,
     property,
     messages: list,
+    audience,
+    display_name: displayName,
   })
 }
 
