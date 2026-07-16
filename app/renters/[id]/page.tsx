@@ -15,6 +15,7 @@ import DocumentsPanel from '@/components/DocumentsPanel'
 import NotesBanner from '@/components/NotesBanner'
 import ScheduleMeetingButton from '@/components/ScheduleMeetingButton'
 import LeadManagementPanel from '@/components/renters/LeadManagementPanel'
+import RenterEditDialog from '@/components/renters/RenterEditDialog'
 
 type Renter = Record<string, any>
 type MatchProperty = {
@@ -244,6 +245,7 @@ export default function RenterDetailPage({ params }: { params: { id: string } })
             </div>
           </div>
           <div className="flex flex-col gap-2">
+            <RenterEditDialog renter={renter} onSaved={load} />
             <button
               type="button"
               onClick={recompute}
