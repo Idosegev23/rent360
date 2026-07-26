@@ -41,7 +41,31 @@ export async function GET(req: NextRequest) {
   // Open tasks first, then by due date (nulls last), newest created last.
   const { data, error } = await query.order('due_at', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: { code: 'QUERY_FAILED', message: error.message } }, { status: 500 })
-  return NextResponse.json({ tasks: data || [] })
+
+  // Attach the handoff-note count + latest note per task (activity log, entity_type='task'), so the
+  // list can show "someone left you a note/request" without a per-task fetch.
+  const tasks = (data || []) as Array<Record<string, any>>
+  const ids = tasks.map(t => t.id)
+  if (ids.length) {
+    const { data: notes } = await ctx.sb
+      .from('activity')
+      .select('entity_id, body, created_at')
+      .eq('org_id', ctx.orgId).eq('entity_type', 'task').eq('kind', 'note')
+      .in('entity_id', ids)
+      .order('created_at', { ascending: false })
+    const byTask = new Map<string, { count: number; last: { body: string | null; created_at: string } }>()
+    for (const n of notes || []) {
+      const cur = byTask.get(n.entity_id)
+      if (cur) cur.count += 1
+      else byTask.set(n.entity_id, { count: 1, last: { body: n.body, created_at: n.created_at } })
+    }
+    for (const t of tasks) {
+      const info = byTask.get(t.id)
+      t.notes_count = info?.count || 0
+      t.last_note = info?.last || null
+    }
+  }
+  return NextResponse.json({ tasks })
 }
 
 const CreateBody = z.object({

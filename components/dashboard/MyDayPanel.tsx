@@ -11,6 +11,23 @@ function fmt(iso: string): string {
   try { return new Date(iso).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return '' }
 }
 
+// Friendly, color-coded due label so the daily task list reads at a glance.
+function dueInfo(iso: string | null): { text: string; color: string } | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const now = new Date()
+  const hhmm = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startDue = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const dayDiff = Math.round((startDue.getTime() - startToday.getTime()) / 86400000)
+  if (d.getTime() < now.getTime()) return { text: 'באיחור', color: '#dc2626' }
+  if (dayDiff === 0) return { text: `היום ${hhmm}`, color: '#d97706' }
+  if (dayDiff === 1) return { text: `מחר ${hhmm}`, color: 'var(--ink-4)' }
+  return { text: fmt(iso), color: 'var(--ink-4)' }
+}
+const PRIO_DOT: Record<string, string> = { urgent: '#dc2626', high: '#d97706' }
+
 /** Personal "my day" strip at the top of the dashboard — the current user's tasks for today and
  *  their upcoming meetings (scope=mine / ownerUserId=me), so each staff member sees their own work. */
 export default function MyDayPanel() {
@@ -54,13 +71,18 @@ export default function MyDayPanel() {
           </div>
           {tasks.length === 0
             ? <div className="text-sm faint py-3">אין משימות פתוחות ✦</div>
-            : tasks.slice(0, 6).map(t => (
-              <div key={t.id} className="flex items-center gap-2 py-1.5" style={{ borderTop: '1px solid var(--line)' }}>
-                <button onClick={() => markDone(t.id)} title="בוצע" className="h-5 w-5 rounded flex items-center justify-center shrink-0" style={{ border: '1px solid var(--line-2)' }}><Check size={12} /></button>
-                <span className="text-sm flex-1 truncate">{t.title}</span>
-                {t.due_at && <span className="num text-xs faint">{fmt(t.due_at)}</span>}
-              </div>
-            ))}
+            : tasks.slice(0, 6).map(t => {
+              const due = dueInfo(t.due_at)
+              const dot = t.priority ? PRIO_DOT[t.priority] : undefined
+              return (
+                <div key={t.id} className="flex items-center gap-2 py-1.5" style={{ borderTop: '1px solid var(--line)' }}>
+                  <button onClick={() => markDone(t.id)} title="בוצע" className="h-5 w-5 rounded flex items-center justify-center shrink-0" style={{ border: '1px solid var(--line-2)' }}><Check size={12} /></button>
+                  {dot && <span title={t.priority} style={{ width: 6, height: 6, borderRadius: 999, background: dot, flexShrink: 0 }} />}
+                  <span className="text-sm flex-1 truncate">{t.title}</span>
+                  {due && <span className="num text-xs shrink-0" style={{ color: due.color, fontWeight: due.text === 'באיחור' ? 600 : 400 }}>{due.text}</span>}
+                </div>
+              )
+            })}
         </div>
         <div className="surface-card" style={{ padding: 16 }}>
           <div className="flex items-center justify-between mb-2">

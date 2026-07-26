@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Plus, Check, Clock, User as UserIcon, Pencil, Repeat, X } from 'lucide-react'
 import { DateTimeField } from '@/components/ui/DateTimePicker'
+import TaskNotes from '@/components/tasks/TaskNotes'
 
 type Recurrence = 'daily' | 'weekdays' | 'weekly' | 'monthly' | ''
 type Task = {
@@ -15,6 +16,8 @@ type Task = {
   entity_type: string | null
   recurrence: Recurrence | null
   created_at: string
+  notes_count?: number
+  last_note?: { body: string | null; created_at: string } | null
 }
 type Member = { id: string; name: string | null }
 
@@ -102,7 +105,7 @@ export default function TasksPage() {
     }
   }
 
-  async function saveEdit(t: Task) {
+  async function saveEdit(t: Task, note?: string) {
     await fetch(`/api/v1/tasks/${t.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -110,6 +113,13 @@ export default function TasksPage() {
         due_at: t.due_at, remind_at: t.due_at, recurrence: t.recurrence || null,
       }),
     }).catch(() => {})
+    // A handoff note/request left while reassigning or returning the task — kept in the task's log.
+    if (note && note.trim()) {
+      await fetch('/api/v1/activity', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_type: 'task', entity_id: t.id, kind: 'note', body: note.trim() }),
+      }).catch(() => {})
+    }
     setEditing(null)
     load(tab)
   }
@@ -179,29 +189,39 @@ export default function TasksPage() {
       ) : (
         <div className="space-y-2">
           {tasks.map((t) => (
-            <div key={t.id} className="surface-card flex items-center gap-3 p-3">
-              <button
-                onClick={() => markDone(t.id)}
-                title="סמן כבוצע"
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-gray-300 text-gray-400 hover:border-green-500 hover:text-green-600"
-              >
-                <Check className="h-4 w-4" />
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className={`text-sm font-medium ${t.status === 'done' ? 'text-gray-400 line-through' : ''}`}>{t.title}</div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                  <span className="inline-flex items-center gap-1"><UserIcon className="h-3 w-3" />{nameOf(t.assignee_user_id)}</span>
-                  {t.due_at && <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{fmtDue(t.due_at)}</span>}
-                  {t.recurrence && <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-blue-700"><Repeat className="h-3 w-3" />{RECUR[t.recurrence]}</span>}
-                  {t.entity_type && <span className="rounded bg-gray-100 px-1.5 py-0.5">{t.entity_type}</span>}
+            <div key={t.id} className="surface-card p-3">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => markDone(t.id)}
+                  title="סמן כבוצע"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-gray-300 text-gray-400 hover:border-green-500 hover:text-green-600"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm font-medium ${t.status === 'done' ? 'text-gray-400 line-through' : ''}`}>{t.title}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <span className="inline-flex items-center gap-1"><UserIcon className="h-3 w-3" />{nameOf(t.assignee_user_id)}</span>
+                    {t.due_at && <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{fmtDue(t.due_at)}</span>}
+                    {t.recurrence && <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-blue-700"><Repeat className="h-3 w-3" />{RECUR[t.recurrence]}</span>}
+                    {t.entity_type && <span className="rounded bg-gray-100 px-1.5 py-0.5">{t.entity_type}</span>}
+                  </div>
                 </div>
+                <span className="shrink-0 rounded-full px-2 py-0.5 text-xs" style={{ background: PRIORITY[t.priority].color + '1a', color: PRIORITY[t.priority].color }}>
+                  {PRIORITY[t.priority].label}
+                </span>
+                <button onClick={() => setEditing(t)} title="עריכה" className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                  <Pencil className="h-4 w-4" />
+                </button>
               </div>
-              <span className="shrink-0 rounded-full px-2 py-0.5 text-xs" style={{ background: PRIORITY[t.priority].color + '1a', color: PRIORITY[t.priority].color }}>
-                {PRIORITY[t.priority].label}
-              </span>
-              <button onClick={() => setEditing(t)} title="עריכה" className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-                <Pencil className="h-4 w-4" />
-              </button>
+
+              {/* Handoff notes: the latest request shown inline + the full thread on expand. */}
+              <div className="mt-2 ps-9">
+                {t.last_note?.body && (
+                  <div className="mb-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900 whitespace-pre-wrap">{t.last_note.body}</div>
+                )}
+                <TaskNotes taskId={t.id} count={t.notes_count || 0} onChanged={() => load(tab)} />
+              </div>
             </div>
           ))}
         </div>
@@ -212,9 +232,10 @@ export default function TasksPage() {
   )
 }
 
-function EditTaskModal({ task, team, onClose, onSave }: { task: Task; team: Member[]; onClose: () => void; onSave: (t: Task) => void }) {
+function EditTaskModal({ task, team, onClose, onSave }: { task: Task; team: Member[]; onClose: () => void; onSave: (t: Task, note?: string) => void }) {
   const [t, setT] = useState<Task>(task)
   const [due, setDue] = useState<Date | null>(task.due_at ? new Date(task.due_at) : null)
+  const [note, setNote] = useState('')
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
       <div className="surface-card w-full max-w-md p-4" dir="rtl" onClick={(e) => e.stopPropagation()}>
@@ -243,9 +264,16 @@ function EditTaskModal({ task, team, onClose, onSave }: { task: Task; team: Memb
               <option value="monthly">כל חודש</option>
             </select>
           </div>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="הערה / בקשה בהעברה (אופציונלי) — למשל: חסר חוזה, נא להשלים…"
+            rows={2}
+            className="w-full rounded-md border border-brand-border px-3 py-2 text-sm resize-y"
+          />
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500">ביטול</button>
-            <button onClick={() => onSave(t)} disabled={!t.title.trim()} className="rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">שמירה</button>
+            <button onClick={() => onSave(t, note)} disabled={!t.title.trim()} className="rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">שמירה</button>
           </div>
         </div>
       </div>
