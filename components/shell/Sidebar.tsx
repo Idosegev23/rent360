@@ -21,6 +21,7 @@ import {
   BarChart3,
   ClipboardList,
   KeyRound,
+  History,
 } from 'lucide-react'
 
 type Me = { name: string | null; email: string | null; google: { connected: boolean; email: string | null } }
@@ -46,6 +47,7 @@ const main: NavLink[] = [
   { href: '/team',                 label: 'צוות',            Icon: UserCog },
   { href: '/outreach',             label: 'שליחה',           Icon: Send },
   { href: '/outreach/renter-sends', label: 'יומן שליחות',    Icon: ClipboardList },
+  { href: '/renewals',             label: 'לידי חידוש',      Icon: History },
   { href: '/inbox',                label: 'שיחות',           Icon: Inbox },
 ]
 
@@ -64,11 +66,19 @@ function isActive(pathname: string | null, href: string) {
 export default function Sidebar() {
   const pathname = usePathname()
   const [me, setMe] = useState<Me | null>(null)
+  const [renewalsDue, setRenewalsDue] = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/me')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setMe(d))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/v1/renewals/queue')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && Array.isArray(d.rows)) setRenewalsDue(d.rows.length) })
       .catch(() => {})
   }, [])
 
@@ -102,6 +112,7 @@ export default function Sidebar() {
       <div className="nav-section-label">ראשי</div>
       {main.map(item => {
         const active = isActive(pathname, item.href)
+        const badge = item.href === '/renewals' ? renewalsDue : item.badge
         return (
           <Link
             key={item.href}
@@ -110,7 +121,7 @@ export default function Sidebar() {
           >
             <span className="nav-icon"><item.Icon size={17} /></span>
             <span>{item.label}</span>
-            {item.badge != null && <span className="nav-badge">{item.badge}</span>}
+            {badge != null && <span className="nav-badge">{badge}</span>}
           </Link>
         )
       })}
