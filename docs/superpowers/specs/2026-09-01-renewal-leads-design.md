@@ -129,12 +129,19 @@ Result on this export: A(80+) 4,442 · B(60–79) 5,216 · C(40–59) 3,360 · D
 `matures_at = delisted_at + 365`, computed once at import. Maturity is then **a query on a date** —
 no cron, no job, no drift, and the window can move without a migration:
 
-- `matures_at > today` → **עתידי**
-- `matures_at` within `[today-45, today]` and `status='pending'` → **מבשיל** (the send queue)
+- `matures_at > today+30` → **עתידי**
+- `matures_at` within `[today-45, today+30]` and `status='pending'` → **מבשיל** (the send queue)
 - `matures_at < today-45` → **פג**, reachable only by explicit manual filter
 
-The 45-day grace means six quiet weeks lose no leads. Today (2026-09-01) that yields **259 due**;
-the pipeline then delivers 512 (Oct) · 1,222 (Nov) · 1,192 (Dec) · 1,139 (Jan) · 552 (Feb) · 0 (Mar,
+The window looks **forward as well as back**. The tenancy began when the listing came down, so the
+renewal decision is made shortly *before* the anniversary — a purely backward window would always
+arrive late. 30 days forward catches the decision while it is live; 45 days back is the grace so a
+quiet stretch loses nothing.
+
+Today (2026-09-01) that yields **259 due** — the whole of the 2026-09 bucket, matching the source
+export's own "ליד פעיל עכשיו" definition. (A backward-only window would yield **0**: the earliest
+`matures_at` in this dataset is 2026-09-13.) The pipeline then delivers
+512 (Oct) · 1,222 (Nov) · 1,192 (Dec) · 1,139 (Jan) · 552 (Feb) · 0 (Mar,
 the gap) · 934 (Apr) · 2,064 (May) · 1,854 (Jun) · 1,184 (Jul) · 2,508 (Aug) · 43 (Sep 2027) —
 13,463 in total.
 

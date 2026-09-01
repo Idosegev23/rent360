@@ -566,9 +566,11 @@ from renewal_leads group by 1 order by 1;
 Expected: 2026-09 259 · 2026-10 512 · 2026-11 1222 · 2026-12 1192 · 2027-01 1139 · 2027-02 552 · 2027-04 934 · 2027-05 2064 · 2027-06 1854 · 2027-07 1184 · 2027-08 2508 · 2027-09 43. (2027-03 absent — the known source gap.)
 
 ```sql
--- 7. Due-now count
+-- 7. Due-now count. NOTE the window looks forward as well as back (ruling R12): the renewal
+-- decision is made shortly BEFORE the anniversary, so a backward-only window always arrives late.
+-- A backward-only window would return 0 here — the earliest matures_at in this data is 2026-09-13.
 select count(*) from renewal_leads
-where status='pending' and matures_at between current_date - 45 and current_date;
+where status='pending' and matures_at between current_date - 45 and current_date + 30;
 ```
 Expected: `259` when run on 2026-09-01.
 
@@ -783,9 +785,11 @@ Follow `landlord-queue/route.ts`'s structure. Select from `renewal_leads` joined
 .eq('org_id', orgId)
 .eq('status', 'pending')
 .gte('matures_at', isoDaysAgo(45))
-.lte('matures_at', todayIso())
+.lte('matures_at', isoDaysAhead(30))
 .order('score', { ascending: false })
 ```
+
+Define `todayIso()`, `isoDaysAgo(n)` and `isoDaysAhead(n)` inline, all returning `YYYY-MM-DD`.
 
 Plus optional `city`, `segment`, and `grade` (A→`score>=80`, B→`60..79`, C→`40..59`, D→`<40`). Enrich with `recipientMessageCounts` chunked at 120 phones, exactly as the landlord queue does. Read both template rows from `whatsapp_templates` to populate `templates`.
 
