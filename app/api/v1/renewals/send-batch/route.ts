@@ -52,11 +52,16 @@ export async function POST(req: NextRequest) {
     if (r.ok) {
       sent++
       results.push({ leadId, status: 'sent' })
+      // Deliberate divergence from landlord-send-batch/route.ts: jitter only after a row that
+      // actually sent, not after every row including skips. The renewal queue's "select all" can
+      // put up to 300 rows in one batch, most of which can be skips (suppressed/blocked/template
+      // not approved/etc.) — jittering on every row burns ~2.25s each and can exhaust
+      // `maxDuration = 180` before the batch reaches the daily cap or even finishes.
+      if (sent < limit) await sleepJitter()
     } else {
       skipped++
       results.push({ leadId, status: 'skipped', reason: `${r.code}: ${r.message}` })
     }
-    if (sent < limit) await sleepJitter()
   }
 
   return NextResponse.json({

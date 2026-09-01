@@ -243,6 +243,10 @@ export function scoreRecord(r, phoneFreq) {
   return s
 }
 
+// Grade boundaries (80/60/40) are duplicated in three other places that cannot share code across
+// JS/TSX/SQL — keep all four in sync when changing these numbers: lib/outreach/renewal-shared.ts
+// (`gradeScoreRange`), components/renewals/RenewalQueue.tsx (`gradeForScore`), and the CASE in
+// supabase/migrations/0039_renewal_leads_aggregates_rpc.sql.
 function gradeFor(score) {
   if (score >= 80) return 'A'
   if (score >= 60) return 'B'

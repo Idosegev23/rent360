@@ -510,8 +510,19 @@ function classifySkipReason({ existing, rec, approvedPropertyIds, suppressionSet
  * `propertiesToUpdate` (normalized to a uniform shape via `normalizeUpdateRow`) as TWO SEPARATE
  * upsert calls, deliberately never mixed in one batch — mixing create-shaped rows (which carry
  * `is_active`, `source`, etc.) with update-shaped rows would pull those extra columns into the
- * update statement's column list too. `onConflict: 'external_id'` per the brief:
- * `properties_external_id_unique` is a GLOBAL unique index (confirmed live), not per-org.
+ * update statement's column list too.
+ *
+ * `onConflict: 'org_id,external_id'` (org-scoped index `properties_org_external_unique`), NOT
+ * `'external_id'` (the global `properties_external_id_unique`). The global index arbitrates
+ * across orgs: a row classified "create" here (the existing-row lookup above is org-scoped) can
+ * collide with another org's property sharing that `external_id`, and `DO UPDATE` would silently
+ * rewrite that row's `org_id` to ours plus `is_active`/title/city/contact/timeline — a cross-org
+ * property transfer with no error and nothing in `--verify-snapshot` (which only covers the
+ * update path). Org-scoping the conflict target turns that into a loud 23505 instead. Every row
+ * in both batches already carries `org_id` (create: below; update: `normalizeUpdateRow`), so the
+ * composite target always has both columns to arbitrate on. Behaviour on today's data is
+ * byte-identical — the collision this guards against doesn't exist yet (see FIX 2 in the
+ * 2026-09-01 final review).
  *
  * Returns { propertyIdByExternalId, createOk, createFailed, updateOk, updateFailed }.
  */
@@ -527,7 +538,7 @@ async function writeProperties(sb, plan, existingByExternalId, orgId) {
     try {
       const { data, error } = await sb
         .from('properties')
-        .upsert(rows, { onConflict: 'external_id' })
+        .upsert(rows, { onConflict: 'org_id,external_id' })
         .select('id, external_id')
       if (error) throw error
       for (const row of data || []) propertyIdByExternalId.set(row.external_id, row.id)
@@ -547,7 +558,7 @@ async function writeProperties(sb, plan, existingByExternalId, orgId) {
     const slice = updateChunks[i]
     const rows = slice.map((u) => normalizeUpdateRow(existingByExternalId.get(u.externalId), u.patch, orgId))
     try {
-      const { error } = await sb.from('properties').upsert(rows, { onConflict: 'external_id' })
+      const { error } = await sb.from('properties').upsert(rows, { onConflict: 'org_id,external_id' })
       if (error) throw error
       updateOk += rows.length
     } catch (err) {

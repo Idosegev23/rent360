@@ -188,7 +188,7 @@ export async function dispatchRenewalOutreach(opts: {
   // --- Success: thread → message → lead, in that order -------------------
   const thread = await upsertThread(sb, orgId, normalizedPhone, property.id)
 
-  const { data: msg } = await sb
+  const { data: msg, error: msgError } = await sb
     .from('messages')
     .insert({
       org_id: orgId,
@@ -210,6 +210,16 @@ export async function dispatchRenewalOutreach(opts: {
     })
     .select('id')
     .single()
+
+  // The WhatsApp send already succeeded and the lead is correctly stamped 'sent' below
+  // regardless — the message really was delivered, so this is not a reason to fail the
+  // request or leave the lead pending. Only make a failed `messages` insert (which leaves
+  // `message_id: null` on an otherwise-correct 'sent' lead) visible instead of silent.
+  if (msgError) {
+    console.error(
+      `[renewal-dispatcher] messages insert failed for lead=${leadId} org=${orgId} thread=${thread.id}: ${msgError.message}`
+    )
+  }
 
   await sb
     .from('threads')

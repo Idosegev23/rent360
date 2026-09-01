@@ -37,7 +37,7 @@ export async function upsertThread(
     .limit(1)
   const found = existing?.[0]
   if (found) return found
-  const { data: created } = await sb
+  const { data: created, error: insertError } = await sb
     .from('threads')
     .insert({
       org_id: orgId,
@@ -48,5 +48,14 @@ export async function upsertThread(
     })
     .select('id')
     .single()
-  return created!
+  // Both dispatchers call this AFTER `sendTemplate` already delivered the WhatsApp message —
+  // a thrown TypeError here (from the old `created!` non-null assertion, on a failed insert)
+  // 500s the route before the lead/property is ever stamped 'sent', so the next batch resends
+  // the same cold marketing message to the same person. Throwing a descriptive error instead
+  // still fails the request, but at least surfaces the real cause instead of "created is not
+  // defined" — and callers can be extended later to fall back to a lookup-by-phone retry.
+  if (insertError || !created) {
+    throw new Error(`upsertThread: thread insert failed for org=${orgId} phone=${normalizedPhone}: ${insertError?.message || 'no row returned'}`)
+  }
+  return created
 }

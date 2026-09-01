@@ -78,7 +78,14 @@ export default function Sidebar() {
   useEffect(() => {
     fetch('/api/v1/renewals/queue')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d && Array.isArray(d.rows)) setRenewalsDue(d.rows.length) })
+      .then((d) => {
+        if (!d) return
+        // `total` is the accurate due-window count (a count(*) query, not the page of rows the
+        // route returns) — using `rows.length` here froze the badge at the route's `limit` (300)
+        // once the due window grew past it.
+        if (typeof d.total === 'number') setRenewalsDue(d.total)
+        else if (Array.isArray(d.rows)) setRenewalsDue(d.rows.length)
+      })
       .catch(() => {})
   }, [])
 

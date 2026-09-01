@@ -144,19 +144,32 @@ export function pickRenewalTemplate(
 }
 
 /**
- * Render the approved template body for a UI preview, substituting
- * {{1}}/{{2}}/{{3}} positionally in the segment's body-param order.
+ * Render the approved template's exact rendered message for a UI preview: the TEXT header
+ * followed by the body, substituting {{1}}/{{2}}/{{3}} positionally in the segment's body-param
+ * order.
+ *
+ * Both templates carry a Meta-registered TEXT header whose sole content is `{{1}}` = `street_city`
+ * (confirmed against the Meta Graph API — the exact same value `pickRenewalTemplate`'s
+ * `headerComp` sends, and the dispatcher DOES send that header component). A preview of the body
+ * alone is therefore not "the exact rendered message" per spec §4 — the landlord's first line is
+ * missing from what the operator reviews. Prepended here as its own line, set off from the body
+ * by a rule, so it reads as a header rather than folding into the body's first line.
  *
  * `bodyTemplate` must be the live `body_template` from the `whatsapp_templates`
  * row — this function deliberately does not hardcode a second copy of the
  * Hebrew copy, since a hardcoded copy would silently drift from what Meta
  * actually sends and the operator would review one text while the landlord
- * receives another.
+ * receives another. The header line is built from `vars.street_city` (data, not copy) for the
+ * same reason — never a hardcoded Hebrew string.
  */
 export function renderRenewalPreview(bodyTemplate: string, vars: RenewalVars, segment: RenewalSegment): string {
   const params = segment === 'repeat'
     ? [vars.first_name, vars.street_city, vars.times_listed]
     : [vars.first_name, vars.street_city]
 
-  return params.reduce<string>((text, value, idx) => text.split(`{{${idx + 1}}}`).join(value), bodyTemplate)
+  const body = params.reduce<string>((text, value, idx) => text.split(`{{${idx + 1}}}`).join(value), bodyTemplate)
+
+  const headerLine = vars.street_city
+  const rule = '─'.repeat(Math.max(8, Math.min(32, headerLine.length)))
+  return `${headerLine}\n${rule}\n${body}`
 }

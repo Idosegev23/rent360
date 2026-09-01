@@ -55,6 +55,10 @@ language sql stable as $$
       select coalesce(jsonb_object_agg(grade, cnt), '{}'::jsonb)
       from (
         select
+          -- Grade boundaries (80/60/40) are duplicated in three other places that cannot share
+          -- code across JS/TSX/SQL — keep all four in sync when changing these numbers:
+          -- scripts/lib/renewal-merge.mjs (`gradeFor`), lib/outreach/renewal-shared.ts
+          -- (`gradeScoreRange`), components/renewals/RenewalQueue.tsx (`gradeForScore`).
           case
             when score >= 80 then 'A'
             when score >= 60 then 'B'

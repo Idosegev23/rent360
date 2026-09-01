@@ -64,8 +64,28 @@ export async function GET(req: NextRequest) {
     if (range.lt !== undefined) q = q.lt('score', range.lt)
   }
 
-  const { data, error } = await q
+  // Accurate count of the whole due window (same filters, ignoring limit/offset), via a
+  // `count: 'exact', head: true` query — no rows fetched, just the count — so the UI can show
+  // "X of TOTAL" and the sidebar badge doesn't freeze at `limit` once the window outgrows it
+  // (measured: crosses 300 on 2026-09-05, 2,000 on 2026-11-21, peaks at 4,109 on 2027-07-28).
+  let qCount = sb
+    .from('renewal_leads')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('status', 'pending')
+    .gte('matures_at', isoDaysAgo(45))
+    .lte('matures_at', isoDaysAhead(30))
+  if (city) qCount = qCount.eq('city', city)
+  if (segment === 'private_once' || segment === 'repeat') qCount = qCount.eq('segment', segment)
+  if (range) {
+    if (range.gte !== undefined) qCount = qCount.gte('score', range.gte)
+    if (range.lte !== undefined) qCount = qCount.lte('score', range.lte)
+    if (range.lt !== undefined) qCount = qCount.lt('score', range.lt)
+  }
+
+  const [{ data, error }, { count: total, error: countError }] = await Promise.all([q, qCount])
   if (error) return NextResponse.json({ error: { code: 'DB_ERROR', message: error.message } }, { status: 500 })
+  if (countError) return NextResponse.json({ error: { code: 'DB_ERROR', message: countError.message } }, { status: 500 })
 
   const fetched = (data || []) as unknown as RenewalLeadJoinRow[]
   const hasMore = fetched.length > limit
@@ -91,6 +111,7 @@ export async function GET(req: NextRequest) {
     },
     templates,
     hasMore,
+    total: total ?? 0,
   })
 }
 

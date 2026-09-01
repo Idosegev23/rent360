@@ -186,7 +186,14 @@ export function normalizeGrade(raw: string | null | undefined): Grade | null {
   return g === 'A' || g === 'B' || g === 'C' || g === 'D' ? g : null
 }
 
-/** Takes an already-normalized grade (`normalizeGrade`) — this function does no parsing of its own. */
+/**
+ * Takes an already-normalized grade (`normalizeGrade`) — this function does no parsing of its own.
+ *
+ * Grade boundaries (80/60/40) are duplicated in three other places that cannot share code across
+ * JS/TSX/SQL — keep all four in sync when changing these numbers: scripts/lib/renewal-merge.mjs
+ * (`gradeFor`), components/renewals/RenewalQueue.tsx (`gradeForScore`), and the CASE in
+ * supabase/migrations/0039_renewal_leads_aggregates_rpc.sql.
+ */
 export function gradeScoreRange(grade: Grade | null): ScoreRange | null {
   switch (grade) {
     case 'A': return { gte: 80 }

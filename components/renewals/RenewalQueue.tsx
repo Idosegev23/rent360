@@ -30,6 +30,10 @@ export type TemplateStatus = 'approved' | 'pending' | 'missing'
 export type Templates = { private: TemplateStatus; repeat: TemplateStatus }
 type Counters = { sentToday: number; dailyCap: number; remaining: number }
 
+// Grade boundaries (80/60/40) are duplicated in three other places that cannot share code across
+// JS/TSX/SQL — keep all four in sync when changing these numbers: scripts/lib/renewal-merge.mjs
+// (`gradeFor`), lib/outreach/renewal-shared.ts (`gradeScoreRange`), and the CASE in
+// supabase/migrations/0039_renewal_leads_aggregates_rpc.sql.
 export function gradeForScore(score: number): Grade {
   if (score >= 80) return 'A'
   if (score >= 60) return 'B'
@@ -104,6 +108,9 @@ export default function RenewalQueue() {
   const [sending, setSending] = useState(false)
   const [busyRow, setBusyRow] = useState<string | null>(null)
   const [results, setResults] = useState<{ sent: number; skipped: number } | null>(null)
+  const [total, setTotal] = useState<number | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   // Mandatory gate (R): while either template is not Meta-approved, every send control is
   // disabled — review/filter/select still work, only dispatch is blocked.
@@ -123,6 +130,8 @@ export default function RenewalQueue() {
       setRows(data.rows || [])
       setCounters(data.counters || null)
       setTemplates(data.templates || null)
+      setTotal(typeof data.total === 'number' ? data.total : null)
+      setHasMore(Boolean(data.hasMore))
       setSelected(new Set())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'טעינה נכשלה')
@@ -132,6 +141,32 @@ export default function RenewalQueue() {
   }, [city, grade, segment])
 
   useEffect(() => { load() }, [load])
+
+  // Separate from `load` (not memoized into its useEffect dependency) so appending a page never
+  // re-triggers the fresh-load effect. Fixes the queue silently truncating at `limit` (300 today,
+  // due window crosses that on 2026-09-05) with no pagination and no notice.
+  async function loadMore() {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams()
+      if (city) params.set('city', city)
+      if (grade) params.set('grade', grade)
+      if (segment) params.set('segment', segment)
+      params.set('offset', String(rows.length))
+      const res = await fetch(`/api/v1/renewals/queue?${params.toString()}`)
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data?.error?.message || data?.error?.code || 'טעינה נכשלה')
+      setRows(prev => [...prev, ...(data.rows || [])])
+      setHasMore(Boolean(data.hasMore))
+      if (typeof data.total === 'number') setTotal(data.total)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'טעינה נכשלה')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   function applyCity() { setCity(cityInput.trim()) }
 
@@ -239,6 +274,12 @@ export default function RenewalQueue() {
       )}
 
       <CountersBar counters={counters} />
+
+      {!loading && !error && typeof total === 'number' && (
+        <div className="text-xs text-gray-500 mt-2">
+          מוצגים {rows.length} מתוך {total} לידים בתור ההבשלה{hasMore ? ' (יש עוד לטעינה)' : ''}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 my-3">
         <input
@@ -392,6 +433,20 @@ export default function RenewalQueue() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && !error && hasMore && (
+        <div className="flex justify-center py-4">
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="btn border border-brand-border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
+            {loadingMore ? 'טוען…' : `טעינת עוד (${rows.length}${total != null ? ` מתוך ${total}` : ''})`}
+          </button>
         </div>
       )}
     </>
