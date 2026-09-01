@@ -83,9 +83,18 @@ const PROTECTED_COLUMNS = [
   'status',
 ]
 
-// R11: every column `buildUpdatePatch` can write, captured in the snapshot (for undo) even
-// though `--verify-snapshot` only asserts zero-diff on PROTECTED_COLUMNS above.
-const WIDE_SNAPSHOT_COLUMNS = [
+// Every column `normalizeUpdateRow` ever writes on the existing-row path, EXCLUDING
+// `external_id` (the upsert match key, already captured separately as its own top-level
+// snapshot field, not "data" in this sense). This is the single source of truth for "what can
+// this script write to an existing property" — `normalizeUpdateRow` asserts its own output keys
+// against this list at runtime (see its body), and WIDE_SNAPSHOT_COLUMNS below is DERIVED from
+// it, specifically so the write-set and the snapshot-set cannot silently drift apart again.
+// (Task 5 review, Finding 2: `org_id`/`title`/`city` were being written but not snapshotted —
+// R11's intent, "the merge is undoable," wasn't actually satisfied for those three columns.)
+const UPDATE_WRITE_COLUMNS = [
+  'org_id',
+  'title',
+  'city',
   'contact_phone',
   'contact_name',
   'neighborhood',
@@ -94,10 +103,17 @@ const WIDE_SNAPSHOT_COLUMNS = [
   'floor',
   'rooms',
   'price',
-  'type',
   'timeline',
   'scraped_metadata',
 ]
+
+// R11: every column `buildUpdatePatch`/`normalizeUpdateRow` can write, captured in the snapshot
+// (for undo) even though `--verify-snapshot` only asserts zero-diff on PROTECTED_COLUMNS above.
+// INVARIANT (enforced structurally, not just by convention): every column in
+// UPDATE_WRITE_COLUMNS must appear here — satisfied by derivation. `type` is added on top: R11
+// asked for it to be captured as a forward-looking margin even though nothing currently writes
+// it (buildUpdatePatch's existing-row allowlist never included `type` — see R1).
+const WIDE_SNAPSHOT_COLUMNS = [...UPDATE_WRITE_COLUMNS, 'type']
 
 const SNAPSHOT_SELECT = ['id', 'external_id', ...PROTECTED_COLUMNS, ...WIDE_SNAPSHOT_COLUMNS].join(', ')
 const VERIFY_SELECT = ['id', 'external_id', ...PROTECTED_COLUMNS].join(', ')
@@ -378,13 +394,29 @@ function buildUpdatePatch(existing, rec, now) {
 
   patch.timeline = rec.timeline
   // R2: existing.scraped_metadata was selected, so this is a real spread, not `...undefined`.
+  //
+  // previous_phone (Task 5 review, Finding 3 — the serious one): a phone conflict THIS run
+  // records `existing.contact_phone` (the value being overwritten) as `previous_phone`. On a
+  // RE-run, `existing.contact_phone` has already converged to `rec.phone` from the prior run, so
+  // the conflict branch above no longer fires and `patch.contact_phone` is unset — the ORIGINAL
+  // code then dropped `previous_phone` entirely on every re-run (it rebuilt `renewal_import`
+  // wholesale from only this run's own state), silently destroying the audit trail for every one
+  // of the 436 real conflicts the first run recorded. Fixed by explicitly carrying forward
+  // whatever `previous_phone` the PRIOR `renewal_import` already had whenever this run doesn't
+  // establish a new one — i.e. merging into the prior value, not replacing wholesale. A fresh
+  // conflict this run always wins (it's the more recent, more specific fact).
+  const priorRenewalImport = (existing.scraped_metadata && existing.scraped_metadata.renewal_import) || {}
+  const previousPhone =
+    patch.contact_phone && existing.contact_phone
+      ? existing.contact_phone // new conflict THIS run — the value it's replacing
+      : priorRenewalImport.previous_phone // no new conflict — carry forward whatever was already recorded (undefined if none)
   patch.scraped_metadata = {
     ...(existing.scraped_metadata || {}),
     renewal_import: {
       at: now.toISOString(),
       source: 'nadlanone',
       delisted_at: rec.delistedAt,
-      ...(patch.contact_phone && existing.contact_phone ? { previous_phone: existing.contact_phone } : {}),
+      ...(previousPhone ? { previous_phone: previousPhone } : {}),
     },
   }
 
@@ -418,7 +450,7 @@ function buildUpdatePatch(existing, rec, now) {
  */
 function normalizeUpdateRow(existing, patch, orgId) {
   const pick = (key) => (key in patch ? patch[key] : existing[key])
-  return {
+  const row = {
     org_id: orgId,
     external_id: existing.external_id,
     title: existing.title,
@@ -434,6 +466,23 @@ function normalizeUpdateRow(existing, patch, orgId) {
     timeline: patch.timeline, // buildUpdatePatch always sets this
     scraped_metadata: patch.scraped_metadata, // buildUpdatePatch always sets this
   }
+
+  // Drift guard (Task 5 review, Finding 2): if a future edit adds/removes a key here without
+  // updating UPDATE_WRITE_COLUMNS (and therefore WIDE_SNAPSHOT_COLUMNS), fail loudly and
+  // immediately rather than silently writing a column the snapshot never captured.
+  const writtenKeys = Object.keys(row)
+    .filter((k) => k !== 'external_id')
+    .sort()
+  const expectedKeys = [...UPDATE_WRITE_COLUMNS].sort()
+  if (writtenKeys.join(',') !== expectedKeys.join(',')) {
+    throw new Error(
+      `normalizeUpdateRow's output columns [${writtenKeys.join(', ')}] no longer match ` +
+        `UPDATE_WRITE_COLUMNS [${expectedKeys.join(', ')}] — update UPDATE_WRITE_COLUMNS (which ` +
+        `WIDE_SNAPSHOT_COLUMNS is derived from) before writing.`
+    )
+  }
+
+  return row
 }
 
 /**
@@ -512,15 +561,28 @@ async function writeProperties(sb, plan, existingByExternalId, orgId) {
   return { propertyIdByExternalId, createOk, createFailed, updateOk, updateFailed }
 }
 
-// renewal_leads.price_change_pct is numeric(5,1) — max representable magnitude is 999.9. The
-// source export has 13/13463 records where an implausible price_first (a data-entry artifact,
-// e.g. ₪100/₪150 placeholder) makes the computed pct explode (seen live up to 41297.8%). This is
-// a display/analytics-only derived field — price_first and price_last (the real numbers this was
+// renewal_leads.price_change_pct is numeric(5,1) — that's 5 significant digits with 1 after the
+// decimal point, i.e. up to 4 digits before it: max representable magnitude is 9999.9, NOT
+// 999.9 (Task 5 review, Finding 1 — the original 999.9 ceiling was 10x too strict and would have
+// silently nulled 12 perfectly representable values on a fresh import: 13/13463 records recompute
+// above 999.9, but live data confirms only ONE, external_id 9505873 (41297.8%, an implausible
+// priceFirst=9300 -> priceLast=3,850,000 — a genuine data-entry artifact), actually exceeds
+// 9999.9; the other 12 (max seen: 3700.0) are real, storable values). This is a
+// display/analytics-only derived field — price_first and price_last (the real numbers this was
 // computed from) are stored as-is in their own `integer` columns regardless, so nothing is lost
-// by nulling an unrepresentable derived percentage rather than truncating it into a false value.
-const PRICE_CHANGE_PCT_MAX = 999.9
+// by nulling a genuinely unrepresentable derived percentage rather than truncating it into a
+// false value.
+const PRICE_CHANGE_PCT_MAX = 9999.9
 function clampPriceChangePct(pct) {
   if (pct == null) return null
+  // NaN/Infinity are a DIFFERENT failure mode than overflow (a divide-by-zero upstream, not an
+  // implausible-but-real value) and deliberately checked first and separately: `Math.abs(NaN) <=
+  // x` and `Math.abs(Infinity) <= x` are BOTH `false` too, so without this explicit branch a
+  // non-finite value would silently fall into the same "overflow" `null` below with no way for a
+  // reader to tell the two causes apart. In practice this shouldn't occur in this dataset — the
+  // priceChangePct calc in renewal-merge.mjs already guards `priceFirst !== 0` before computing —
+  // but the guard costs nothing and keeps a future null price_change_pct debuggable.
+  if (!Number.isFinite(pct)) return null
   return Math.abs(pct) <= PRICE_CHANGE_PCT_MAX ? pct : null
 }
 
