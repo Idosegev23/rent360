@@ -51,10 +51,22 @@ export async function upsertThread(
   // Both dispatchers call this AFTER `sendTemplate` already delivered the WhatsApp message —
   // a thrown TypeError here (from the old `created!` non-null assertion, on a failed insert)
   // 500s the route before the lead/property is ever stamped 'sent', so the next batch resends
-  // the same cold marketing message to the same person. Throwing a descriptive error instead
-  // still fails the request, but at least surfaces the real cause instead of "created is not
-  // defined" — and callers can be extended later to fall back to a lookup-by-phone retry.
+  // the same cold marketing message to the same person. `(org_id, phone)` has no unique
+  // constraint (see header), so the most likely cause of a failed insert is a race: a
+  // concurrent request created the thread for this same recipient between our SELECT above and
+  // this INSERT. Re-run the SELECT before giving up — if that row exists now, use it instead of
+  // failing the caller. Only throw (still fails the request, but with a descriptive cause
+  // instead of "created is not defined") if the row genuinely cannot be found either way.
   if (insertError || !created) {
+    const { data: retry } = await sb
+      .from('threads')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('phone', normalizedPhone)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+    const retryFound = retry?.[0]
+    if (retryFound) return retryFound
     throw new Error(`upsertThread: thread insert failed for org=${orgId} phone=${normalizedPhone}: ${insertError?.message || 'no row returned'}`)
   }
   return created

@@ -6,7 +6,7 @@
  * in behaviour, so any change here should be considered against that file
  * too.
  *
- * Two deliberate differences from the reference dispatcher, both load-bearing:
+ * Three deliberate differences from the reference dispatcher, all load-bearing:
  *
  *  1. This module never touches `properties.initial_message_sent`. That flag
  *     means "we sent a first-touch about a *live listing*" and drives the
@@ -18,6 +18,13 @@
  *  2. `canSendNow()` is a hard gate INSIDE this dispatcher (the reference
  *     dispatcher leaves that to its callers), so no future caller of
  *     `dispatchRenewalOutreach` can accidentally bypass the send window.
+ *  3. Post-send bookkeeping (thread upsert, message insert, thread touch) is
+ *     wrapped so a failure there can never leave the lead un-stamped after a
+ *     real delivery — see the "POINT OF NO RETURN" comment below. The
+ *     reference dispatcher does not have this yet and retains the
+ *     resend-on-bookkeeping-failure weakness; it shares the same
+ *     `upsertThread` race-recovery fix from `./threads`, which independently
+ *     removes most real-world occurrences there too.
  *
  * The thread-upsert helper lives in `./threads` and is shared with the
  * reference dispatcher (extracted in fix round 1 of Task 7) rather than
@@ -38,7 +45,10 @@ import {
 } from './renewal-templates'
 
 export type RenewalDispatchResult =
-  | { ok: true; messageId: string; threadId: string; phone: string; templateName: string }
+  // threadId is null when thread bookkeeping failed after the WhatsApp send already succeeded —
+  // the send is still reported as ok:true because it was (see the point-of-no-return comment
+  // below); there is simply no internal thread row to point to yet.
+  | { ok: true; messageId: string; threadId: string | null; phone: string; templateName: string }
   | { ok: false; code: string; message: string }
 
 const TEMPLATE_LANG = 'he'
@@ -174,6 +184,12 @@ export async function dispatchRenewalOutreach(opts: {
 
   let sent
   try {
+    // ==================== POINT OF NO RETURN ====================
+    // sendTemplate() delivers the WhatsApp message. This cannot be undone. Every step after
+    // this line is bookkeeping (thread/message rows, the lead's own status stamp) and MUST NOT
+    // be allowed to cause a resend: if any of it fails and the lead is left 'pending', the next
+    // batch dispatches this same lead again and the landlord gets the same cold-outreach
+    // template a second time. See the try/catch immediately below.
     sent = await sendTemplate({
       to: normalizedPhone,
       name: templateName,
@@ -181,67 +197,79 @@ export async function dispatchRenewalOutreach(opts: {
       components: components as any,
     })
   } catch (err) {
-    // Transient — a Meta/network hiccup. Do NOT stamp the lead.
+    // Transient — a Meta/network hiccup, and nothing was delivered. Do NOT stamp the lead.
     return { ok: false, code: 'META_SEND_FAILED', message: err instanceof Error ? err.message : String(err) }
   }
 
-  // --- Success: thread → message → lead, in that order -------------------
-  const thread = await upsertThread(sb, orgId, normalizedPhone, property.id)
+  // --- Success: thread → message → thread-touch, best-effort -------------
+  // The message is already delivered (point of no return, above). None of this bookkeeping may
+  // throw past this block or leave the lead un-stamped: catch anything (including upsertThread's
+  // thrown error on an unrecoverable insert failure), log it loudly since it hides a real data
+  // gap, and fall through to stamping the lead 'sent' with whatever ids we actually obtained —
+  // thread_id/message_id stay null where the bookkeeping didn't complete.
+  let threadId: string | null = null
+  let dbMessageId: string | null = null
+  try {
+    const thread = await upsertThread(sb, orgId, normalizedPhone, property.id)
+    threadId = thread.id
 
-  const { data: msg, error: msgError } = await sb
-    .from('messages')
-    .insert({
-      org_id: orgId,
-      thread_id: thread.id,
-      property_id: property.id,
-      channel: 'whatsapp',
-      direction: 'out',
-      body: null,
-      status: 'sent',
-      external_id: sent.messageId,
-      meta_message_type: 'template',
-      template_name: templateName,
-      template_params: {
-        first_name: vars.first_name,
-        street_city: vars.street_city,
-        times_listed: vars.times_listed,
-      },
-      metadata: { renewal_lead_id: leadId, segment: lead.segment },
-    })
-    .select('id')
-    .single()
+    const { data: msg, error: msgError } = await sb
+      .from('messages')
+      .insert({
+        org_id: orgId,
+        thread_id: thread.id,
+        property_id: property.id,
+        channel: 'whatsapp',
+        direction: 'out',
+        body: null,
+        status: 'sent',
+        external_id: sent.messageId,
+        meta_message_type: 'template',
+        template_name: templateName,
+        template_params: {
+          first_name: vars.first_name,
+          street_city: vars.street_city,
+          times_listed: vars.times_listed,
+        },
+        metadata: { renewal_lead_id: leadId, segment: lead.segment },
+      })
+      .select('id')
+      .single()
 
-  // The WhatsApp send already succeeded and the lead is correctly stamped 'sent' below
-  // regardless — the message really was delivered, so this is not a reason to fail the
-  // request or leave the lead pending. Only make a failed `messages` insert (which leaves
-  // `message_id: null` on an otherwise-correct 'sent' lead) visible instead of silent.
-  if (msgError) {
+    if (msgError) {
+      console.error(
+        `[renewal-dispatcher] messages insert failed for lead=${leadId} org=${orgId} thread=${thread.id}: ${msgError.message}`
+      )
+    } else {
+      dbMessageId = msg?.id ?? null
+    }
+
+    await sb
+      .from('threads')
+      .update({
+        last_outbound_at: new Date().toISOString(),
+        last_message_at: new Date().toISOString(),
+        property_id: property.id,
+      })
+      .eq('id', thread.id)
+  } catch (err) {
     console.error(
-      `[renewal-dispatcher] messages insert failed for lead=${leadId} org=${orgId} thread=${thread.id}: ${msgError.message}`
+      `[renewal-dispatcher] bookkeeping failed AFTER WhatsApp delivery for lead=${leadId} org=${orgId} phone=${normalizedPhone}: ${err instanceof Error ? err.message : String(err)}. The message WAS delivered — stamping the lead 'sent' regardless, with thread_id/message_id left null where unknown. Needs manual reconciliation.`
     )
   }
-
-  await sb
-    .from('threads')
-    .update({
-      last_outbound_at: new Date().toISOString(),
-      last_message_at: new Date().toISOString(),
-      property_id: property.id,
-    })
-    .eq('id', thread.id)
 
   await sb
     .from('renewal_leads')
     .update({
       status: 'sent',
       sent_at: new Date().toISOString(),
-      thread_id: thread.id,
-      message_id: msg?.id ?? null,
+      thread_id: threadId,
+      message_id: dbMessageId,
     })
     .eq('id', leadId)
     .eq('org_id', orgId)
 
-  return { ok: true, messageId: sent.messageId, threadId: thread.id, phone: normalizedPhone, templateName }
+  return { ok: true, messageId: sent.messageId, threadId, phone: normalizedPhone, templateName }
 }
 
 /** Mark a renewal lead permanently skipped (never for a transient failure). */
