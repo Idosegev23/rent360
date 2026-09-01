@@ -4,11 +4,6 @@ import { useCallback, useEffect, useState, Fragment } from 'react'
 import { Loader2, AlertCircle, ChevronRight, ChevronLeft } from 'lucide-react'
 import { RenewalRowCells, RENEWAL_COLSPAN_DATA, type RenewalRow } from './RenewalQueue'
 
-// The Nadlan One export drops this month's delist `תאריך` on ingest (root cause: the external
-// scraper feed, not this table) — a real hole in the source data, not a UI bug. Always rendered,
-// hatched, even when the aggregates response has no key for it at all.
-const GAP_MONTH = '2027-03'
-
 type Aggregates = { byMonth: Record<string, number>; byGrade: Record<string, number>; byCity: Record<string, number>; bySegment: Record<string, number> }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -107,7 +102,7 @@ export default function RenewalPipeline() {
           <option value="">כל הסטטוסים</option>
           {Object.entries(STATUS_LABEL).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
-        <button type="button" onClick={applyFilters} className="btn border border-brand-border bg-white text-gray-600 hover:bg-gray-50">סנן</button>
+        <button type="button" onClick={applyFilters} className="btn border border-brand-border bg-white text-gray-600 hover:bg-gray-50">סינון</button>
         <div className="flex-1" />
         <span className="text-xs text-gray-500 tnum">סה״כ {total.toLocaleString('he-IL')}</span>
       </div>
@@ -150,7 +145,7 @@ export default function RenewalPipeline() {
                           onClick={() => setExpanded(expanded === row.leadId ? null : row.leadId)}
                           className="rounded-md border border-brand-border bg-white px-2 py-1 text-xs hover:bg-gray-50"
                         >
-                          {expanded === row.leadId ? 'סגור' : 'תצוגה'}
+                          {expanded === row.leadId ? 'סגירה' : 'תצוגה'}
                         </button>
                       </div>
                     </td>
@@ -198,9 +193,37 @@ export default function RenewalPipeline() {
   )
 }
 
-/** Horizontal bar chart of aggregates.byMonth. GAP_MONTH always renders, hatched, even when absent. */
+/**
+ * Every 'YYYY-MM' from the earliest to the latest month present in `byMonth`, inclusive — not
+ * just the keys the API happened to return. The Nadlan One export currently drops one month's
+ * delist `תאריך` on ingest (2027-03, root cause: the external scraper feed, not this table),
+ * which leaves a real hole in the source data. Filling the full range (rather than unioning in
+ * that one known-bad literal) means ANY month with zero rows — this one or a future one — still
+ * renders as an explicit hatched "אין נתונים" row instead of silently vanishing from the chart.
+ */
+function monthRange(byMonth: Record<string, number>): string[] {
+  const keys = Object.keys(byMonth).sort()
+  const first = keys[0]
+  const last = keys[keys.length - 1]
+  if (!first || !last) return keys
+  const [startY, startM] = first.split('-').map(Number)
+  const [endY, endM] = last.split('-').map(Number)
+  if (startY == null || startM == null || endY == null || endM == null) return keys
+
+  const months: string[] = []
+  let y = startY
+  let m = startM
+  while (y < endY || (y === endY && m <= endM)) {
+    months.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++
+    if (m > 12) { m = 1; y++ }
+  }
+  return months
+}
+
+/** Horizontal bar chart of aggregates.byMonth. Any gap month in the range renders hatched. */
 function MonthChart({ byMonth }: { byMonth: Record<string, number> }) {
-  const months = Array.from(new Set([...Object.keys(byMonth), GAP_MONTH])).sort()
+  const months = monthRange(byMonth)
   const max = Math.max(1, ...Object.values(byMonth))
   return (
     <div className="surface-card mb-4" style={{ padding: 16 }}>

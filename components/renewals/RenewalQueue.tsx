@@ -261,20 +261,32 @@ export default function RenewalQueue() {
           <option value="private_once">פרטי</option>
           <option value="repeat">חוזר</option>
         </select>
-        <button type="button" onClick={applyCity} className="btn border border-brand-border bg-white text-gray-600 hover:bg-gray-50">סנן</button>
+        <button type="button" onClick={applyCity} className="btn border border-brand-border bg-white text-gray-600 hover:bg-gray-50">סינון</button>
       </div>
 
       {!loading && !error && rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-border bg-gray-50 p-2 mb-3">
-          <button type="button" onClick={toggleAll} className="rounded-md border border-brand-border bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50">
-            {allSelected ? 'נקה הכל' : 'בחר הכל'}
+          <button
+            type="button"
+            onClick={toggleAll}
+            disabled={blocked}
+            {...(blocked ? { title: 'הבחירה חסומה עד לאישור התבניות ב-Meta' } : {})}
+            className="rounded-md border border-brand-border bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {allSelected ? 'ניקוי הכל' : 'בחירת הכל'}
           </button>
-          <button type="button" onClick={() => selectNextN(50)} className="rounded-md bg-brand-primary/10 px-2.5 py-1 text-xs font-medium text-brand-primary hover:bg-brand-primary/20">
-            בחר 50 הבאים
+          <button
+            type="button"
+            onClick={() => selectNextN(50)}
+            disabled={blocked}
+            {...(blocked ? { title: 'הבחירה חסומה עד לאישור התבניות ב-Meta' } : {})}
+            className="rounded-md bg-brand-primary/10 px-2.5 py-1 text-xs font-medium text-brand-primary hover:bg-brand-primary/20 disabled:opacity-50"
+          >
+            בחירת 50 הבאים
           </button>
           {selected.size > 0 && (
             <button type="button" onClick={() => setSelected(new Set())} className="rounded-md border border-brand-border bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50">
-              נקה בחירה
+              ניקוי הבחירה
             </button>
           )}
           <span className="text-xs text-gray-500">נבחרו <strong className="text-gray-800">{selected.size}</strong> מתוך {rows.length}</span>
@@ -287,7 +299,7 @@ export default function RenewalQueue() {
             className="btn btn-brand disabled:opacity-50"
           >
             {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            {sending ? 'שולח…' : `שלח נבחרים (${selected.size})`}
+            {sending ? 'שולח…' : `שליחה לנבחרים (${selected.size})`}
           </button>
         </div>
       )}
@@ -312,7 +324,7 @@ export default function RenewalQueue() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b text-right text-xs text-gray-500">
-                <th className="px-3 py-2 font-medium"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-4 w-4" aria-label="בחר הכל" /></th>
+                <th className="px-3 py-2 font-medium"><input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={blocked} className="h-4 w-4 disabled:opacity-50" aria-label="בחירת הכל" /></th>
                 <th className="px-3 py-2 font-medium">ציון</th>
                 <th className="px-3 py-2 font-medium">כתובת</th>
                 <th className="px-3 py-2 font-medium">סוג</th>
@@ -331,7 +343,7 @@ export default function RenewalQueue() {
               {rows.map(row => (
                 <Fragment key={row.leadId}>
                   <tr className="border-b last:border-0">
-                    <td className="px-3 py-2"><input type="checkbox" checked={selected.has(row.leadId)} onChange={() => toggle(row.leadId)} className="h-4 w-4" /></td>
+                    <td className="px-3 py-2"><input type="checkbox" checked={selected.has(row.leadId)} onChange={() => toggle(row.leadId)} disabled={blocked} className="h-4 w-4 disabled:opacity-50" /></td>
                     <RenewalRowCells row={row} />
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
@@ -340,7 +352,7 @@ export default function RenewalQueue() {
                           onClick={() => setExpanded(expanded === row.leadId ? null : row.leadId)}
                           className="rounded-md border border-brand-border bg-white px-2 py-1 text-xs hover:bg-gray-50"
                         >
-                          {expanded === row.leadId ? 'סגור' : 'תצוגה'}
+                          {expanded === row.leadId ? 'סגירה' : 'תצוגה'}
                         </button>
                         <button
                           type="button"
@@ -349,7 +361,7 @@ export default function RenewalQueue() {
                           {...(blocked ? { title: 'שליחה חסומה עד לאישור התבניות ב-Meta' } : {})}
                           className="rounded-md border border-brand-border bg-white px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1"
                         >
-                          {busyRow === row.leadId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}שלח
+                          {busyRow === row.leadId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}שליחה
                         </button>
                         <button
                           type="button"
@@ -357,7 +369,7 @@ export default function RenewalQueue() {
                           disabled={busyRow === row.leadId}
                           className="rounded-md border border-brand-border bg-white px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1"
                         >
-                          <SkipForward className="h-3 w-3" />דלג
+                          <SkipForward className="h-3 w-3" />דילוג
                         </button>
                       </div>
                     </td>
