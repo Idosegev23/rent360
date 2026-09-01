@@ -449,14 +449,16 @@ Expected — reconcile against the spec before going further:
 
 | line | expected |
 |---|---|
-| properties to create | 6201 |
-| properties to update | 7262 |
-| phone fills | 3616 |
-| phone conflicts | 893 |
+| properties to create | 4125 |
+| properties to update | 9338 |
+| phone fills | ~3875 |
+| phone conflicts | ~435 |
 | leads total | 13463 |
-| leads skipped — `approved_property` | 17 |
+| leads skipped — `approved_property` | 35 |
+| leads skipped — `outreach_blocked` | ~460 |
+| leads skipped — `suppressed` | 63 |
 
-`outreach_blocked` and `suppressed` counts are not predicted in the spec — record whatever the dry run reports and carry those numbers into Task 5's verification. If create+update ≠ 13463, or the create/update split differs from 6201/7262, stop and find out why before writing anything.
+If create+update ≠ 13463, or the create/update split differs from 4125/9338, stop and find out why before writing anything. The `~` figures depend on phone-normalization edge cases on the 3,146 two-number rows and may vary by a handful; the create/update split must be exact.
 
 - [ ] **Step 3: Confirm the dry run wrote nothing**
 
@@ -481,7 +483,7 @@ git commit -m "feat(renewals): import script with dry-run plan"
 - Modify: `scripts/import-renewal-leads.mjs`
 
 **Interfaces:**
-- Produces: 6,201 new `properties` rows, 13,463 `renewal_leads` rows. Every later task reads these.
+- Produces: 4,125 new `properties` rows, 13,463 `renewal_leads` rows. Every later task reads these.
 
 - [ ] **Step 1: Snapshot the existing rows so the merge can be proved non-destructive**
 
@@ -493,7 +495,7 @@ set -a; . ./.env.local; set +a; NODE_PATH="$(pwd)/node_modules" \
 
 Add a `--snapshot <path>` flag that writes, for every existing property that will be touched:
 `{ id, external_id, initial_message_sent, outreach_blocked, is_active, landlord_id, assigned_agent_user_id, agreed_commission_months, agreed_commission_amount, status }`.
-Expected: 7,262 entries.
+Expected: 9,338 entries.
 
 - [ ] **Step 2: Add the write phase**
 
@@ -570,7 +572,7 @@ where status='pending' and matures_at between current_date - 45 and current_date
 ```
 Expected: `259` when run on 2026-09-01.
 
-- [ ] **Step 5: Prove no protected column changed on the 7,262**
+- [ ] **Step 5: Prove no protected column changed on the 9,338**
 
 Add a `--verify-snapshot <path>` flag that re-reads those ids and diffs the same field set. Run:
 
@@ -579,7 +581,7 @@ set -a; . ./.env.local; set +a; NODE_PATH="$(pwd)/node_modules" \
   node scripts/import-renewal-leads.mjs --verify-snapshot /tmp/pre-import.json
 ```
 
-Expected: `0 differences across 7262 properties`. Any difference is a bug in `buildUpdatePatch` — investigate before proceeding.
+Expected: `0 differences across 9338 properties`. Any difference is a bug in `buildUpdatePatch` — investigate before proceeding.
 
 - [ ] **Step 6: Commit**
 

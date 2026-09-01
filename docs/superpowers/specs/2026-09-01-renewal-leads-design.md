@@ -9,8 +9,8 @@
   counts), `lib/outreach/suppression.ts` (opt-out), `lib/time/send-window.ts` (09:00–21:00 Israel +
   Hebcal Shabbat/חג), and `app/outreach/page.tsx` — a review-and-send queue with
   landlord/renter/suppression tabs. This design **reuses all of it** and adds no parallel copy.
-- **`properties.external_id` is already the Nadlan One property id.** Measured: 7,262 of the 13,463
-  exported ids match existing rows exactly. rent360's external scraper is fed by the same upstream
+- **`properties.external_id` is already the Nadlan One property id.** Measured: 9,338 of the 13,463
+  exported ids match existing rows exactly (see the correction note below). rent360's external scraper is fed by the same upstream
   feed but discards the movement `תאריך` on ingest — which is why no delist date exists in the DB
   today and had to be estimated from Hebrew relative strings.
 - Constraints: `properties_external_id_unique UNIQUE (external_id)` (global, not org-scoped) and
@@ -55,15 +55,15 @@ The inbox, the AI conversation agent and `threads.property_id` all key off `prop
 leads must have a row here or the conversational side has nothing to talk about. Upsert on
 `external_id`:
 
-- **6,201 new** → created with `source='nadlanone_renewal'`, `is_active=false`.
-- **7,262 existing** → **field-level merge only**. Writable: `contact_phone` (see below), `timeline`,
+- **4,125 new** → created with `source='nadlanone_renewal'`, `is_active=false`.
+- **9,338 existing** → **field-level merge only**. Writable: `contact_phone` (see below), `timeline`,
   `neighborhood`/`street`/`sqm`/`floor`/`rooms`/`price` **only when currently null**, and
   `scraped_metadata.renewal_import`. Never touched: `initial_message_sent`, `outreach_blocked`,
   `is_active`, `landlord_id`, `assigned_agent_user_id`, `agreed_commission_*`, `status`.
-- **893 phone conflicts** → Nadlan One wins (its export is complete and dated 2026-09-01); the prior
+- **~435 phone conflicts** → Nadlan One wins (its export is complete and dated 2026-09-01); the prior
   value is preserved at `scraped_metadata.renewal_import.previous_phone`.
-- **3,616 rows gain a phone they were missing.** Regional phone coverage goes 4,879/9,868 (49%) →
-  14,696/16,069 (91%).
+- **~3,875 rows gain a phone they were missing.** Phone coverage across all rows carrying a Nadlan One
+  id goes 6,744/12,076 (55.8%) → 14,746/16,201 (**91.0%**).
 
 ### `renewal_leads` — migration 0038, holds the campaign lifecycle
 
@@ -151,7 +151,7 @@ Gates evaluated before every send, each producing a `skip_reason`:
 |---|---|
 | phone on the suppression list | `whatsapp_suppression` (420 rows today) |
 | `properties.outreach_blocked = true` | property |
-| already an approved brokerage property | `approved_properties` — **17 of the 13,463 hit this** |
+| already an approved brokerage property | `approved_properties` — **35 of the 13,463 hit this** |
 | lead not `pending` | `renewal_leads.status` |
 | outside 09:00–21:00 Israel, or Shabbat/חג | `canSendNow()` |
 | daily template cap reached | `templatesSentToday()` vs `DAILY_CAP` |
@@ -238,7 +238,7 @@ writes nothing.
 2. Spot-check 5 imported leads field-by-field against the source CSV.
 3. Assert post-import: the 17 `approved_properties` leads are `status='skipped'`; no row with
    `outreach_blocked=true` is `pending`; no suppressed phone is `pending`; no existing property had a
-   protected column changed (diff a pre-import snapshot of the 7,262).
+   protected column changed (diff a pre-import snapshot of the 9,338).
 4. `npm run build` + `npm run lint`.
 5. First live send goes to the client's own number, before any real lead is touched.
 
@@ -250,20 +250,48 @@ writes nothing.
 - **13,463 people who never contacted rent360.** Raised previously; the client's decision. Mechanical
   protections: opt-out button on every template, suppression enforced per send, 250/day cap, send
   window, and manual approval on every batch.
-- **The import writes to 7,262 existing production rows.** Mitigated by an explicit column allowlist,
+- **The import writes to 9,338 existing production rows.** Mitigated by an explicit column allowlist,
   `--dry-run`, and check 3 above.
 - **March 2026 gap** — ~1,000 leads missing until a re-export is requested.
 
 ## Acceptance
 
-1. `--dry-run` reconciles exactly with §Source data; a live import creates 6,201 properties and
-   13,463 `renewal_leads`, and changes no protected column on the 7,262 existing rows.
+1. `--dry-run` reconciles exactly with the corrected figures; a live import creates 4,125 properties
+   and 13,463 `renewal_leads`, and changes no protected column on the 9,338 existing rows.
 2. `/renewals` "מבשילים" lists 259 leads today, honors filters, and previews the exact message.
 3. A batch send respects suppression, the 17 approved properties, the daily cap and the send window,
    and stamps `status='sent'` with a real `thread_id` and `message_id`.
 4. With the templates still `pending`, every send fails with `TEMPLATE_NOT_APPROVED` and the page
    says so plainly — nothing sends silently.
 5. Both templates exist at Meta and in `whatsapp_templates`.
+
+## Correction — 2026-09-01a (numbers, not design)
+
+The original overlap figures in this spec were wrong. They came from a query that filtered
+`city IN (…10 spellings…)`, written to answer a different question ("how many of these are in our DB
+for this region"). **The import matches on `external_id` alone**, because `properties_external_id_unique`
+is global — so it legitimately finds more existing rows than that query did.
+
+The city filter silently dropped 2,372 rows whose `city` string is dirty but whose listing is squarely
+in the region: `חיפה - מגורים` (1,044), `קרית חיים` (655 — a Haifa neighbourhood stored as a city),
+`קרית אתא - מגורים` (163), `קרית מוצקין - מגורים` (126), `קרית ביאליק - מגורים` (114),
+`קרית ים - מגורים` (80), plus rows where a whole street address was written into `city`.
+
+| | was (wrong) | is (verified twice, independently) |
+|---|---|---|
+| properties to create | 6,201 | **4,125** |
+| properties to update | 7,262 | **9,338** |
+| phone fills | 3,616 | ~3,875 |
+| phone conflicts | 893 | ~435 |
+| already an approved property | 17 | **35** |
+| phone coverage after import | 91% | **91.0%** (6,744/12,076 → 14,746/16,201) |
+
+Nothing about the design changes. The headline — coverage rising to ~91% — survives. The `~` figures
+vary by a handful depending on how the 3,146 two-number rows are normalized; the create/update split
+is exact.
+
+This also means `cleanCity()` (`lib/outreach/personalization.ts`) is doing more work than the spec
+credited it for: it is the only thing that turns `חיפה - מגורים` into `חיפה` at send time.
 
 ## Out of scope
 
