@@ -20,14 +20,14 @@ export class PersonalizationError extends Error {
 }
 
 /** Strip listing junk from a city: "קרית אתא - מגורים" → "קרית אתא". */
-function cleanCity(c: string | null | undefined): string {
+export function cleanCity(c: string | null | undefined): string {
   if (!c) return ''
   return c.replace(/\s*-\s*(מגורים|משרדים|rent).*$/i, '').replace(/\s+/g, ' ').trim()
 }
 
 /** Keep just the street name — cut at the first house number / floor:
  *  "יצחק שדה 4 קומה 2 גבעת הרקפות" → "יצחק שדה". */
-function cleanStreet(s: string | null | undefined): string {
+export function cleanStreet(s: string | null | undefined): string {
   if (!s) return ''
   let out = s.split(/\s*\d/)[0] || s
   out = out.replace(/קומה.*$/g, '').replace(/\s+/g, ' ').trim()
