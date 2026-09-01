@@ -5,6 +5,7 @@ import {
   buildRenewalRow,
   renewalCountsChunked,
   gradeScoreRange,
+  normalizeGrade,
   loadRenewalTemplates,
   type RenewalLeadJoinRow,
 } from '../../../../../lib/outreach/renewal-shared'
@@ -37,7 +38,9 @@ export async function GET(req: NextRequest) {
   const city = url.searchParams.get('city')?.trim() || null
   const segmentParam = url.searchParams.get('segment')?.trim() || null
   const segment = segmentParam === 'private_once' || segmentParam === 'repeat' ? segmentParam : null
-  const grade = url.searchParams.get('grade')
+  // Normalized ONCE here and reused as-is for both the row query (via gradeScoreRange) and the
+  // RPC's p_grade below — the two must never re-derive it separately (see normalizeGrade's doc).
+  const grade = normalizeGrade(url.searchParams.get('grade'))
   const status = url.searchParams.get('status')?.trim() || null
   // PostgREST's `.or()` filter uses `,` and `()` as syntax — strip them from free-text input so
   // a stray comma/paren in the search box can't corrupt the filter string.
@@ -79,7 +82,7 @@ export async function GET(req: NextRequest) {
     sb.rpc('renewal_leads_aggregates', {
       p_org_id: orgId,
       p_city: city,
-      p_grade: grade || null,
+      p_grade: grade,
       p_segment: segment,
       p_status: status,
       p_q: q,

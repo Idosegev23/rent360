@@ -163,10 +163,32 @@ export async function renewalCountsChunked(
 // Grade → score-range filter (A→80+, B→60-79, C→40-59, D→<40)
 // ---------------------------------------------------------------------------
 
+export type Grade = 'A' | 'B' | 'C' | 'D'
 export type ScoreRange = { gte?: number; lte?: number; lt?: number }
 
-export function gradeScoreRange(grade: string | null | undefined): ScoreRange | null {
-  switch ((grade || '').trim().toUpperCase()) {
+/**
+ * Normalize a raw `grade` query-string value into a valid enum member or `null` — the SINGLE
+ * normalization path for this parameter. A route that reads `grade` raw and hands it to more than
+ * one downstream consumer (a JS-side filter AND a SQL RPC, e.g.) must call this exactly once and
+ * reuse the returned value everywhere, never re-derive it from the raw string a second time.
+ *
+ * (Task 8 fix round 1: the pipeline route used to pass the untouched raw string to the
+ * `renewal_leads_aggregates` RPC while routing the same param through `gradeScoreRange`'s OWN
+ * internal `.toUpperCase()` for the row query — two normalization paths for one input. `?grade=a`
+ * matched rows correctly but the RPC's exact-case `p_grade = 'A'` matched nothing, so `aggregates`
+ * silently came back all-zero while `rows`/`total` were correct. Same failure shape for any
+ * grade value outside `A`/`B`/`C`/`D`: `gradeScoreRange` treats it as "no filter" while the RPC's
+ * `p_grade is null or …` treats a non-null-but-unmatched string as "filter to nothing" — collapsed
+ * here into one function so both callers can only ever see the same already-validated value.)
+ */
+export function normalizeGrade(raw: string | null | undefined): Grade | null {
+  const g = (raw || '').trim().toUpperCase()
+  return g === 'A' || g === 'B' || g === 'C' || g === 'D' ? g : null
+}
+
+/** Takes an already-normalized grade (`normalizeGrade`) — this function does no parsing of its own. */
+export function gradeScoreRange(grade: Grade | null): ScoreRange | null {
+  switch (grade) {
     case 'A': return { gte: 80 }
     case 'B': return { gte: 60, lte: 79 }
     case 'C': return { gte: 40, lte: 59 }

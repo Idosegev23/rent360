@@ -7,6 +7,7 @@ import {
   buildRenewalRow,
   renewalCountsChunked,
   gradeScoreRange,
+  normalizeGrade,
   loadRenewalTemplates,
   type RenewalLeadJoinRow,
 } from '../../../../../lib/outreach/renewal-shared'
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
   const url = req.nextUrl
   const city = url.searchParams.get('city')?.trim() || null
   const segment = url.searchParams.get('segment')?.trim() || null
-  const grade = url.searchParams.get('grade')
+  const grade = normalizeGrade(url.searchParams.get('grade'))
   // The due window today is ~256 rows — default high enough that the common case (no
   // pagination) returns the whole queue in one call; limit/offset still work as the window grows.
   const limit = Math.max(1, Math.min(parseInt(url.searchParams.get('limit') || '300', 10) || 300, 2000))
