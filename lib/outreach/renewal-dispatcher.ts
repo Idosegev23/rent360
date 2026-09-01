@@ -18,6 +18,10 @@
  *  2. `canSendNow()` is a hard gate INSIDE this dispatcher (the reference
  *     dispatcher leaves that to its callers), so no future caller of
  *     `dispatchRenewalOutreach` can accidentally bypass the send window.
+ *
+ * The thread-upsert helper lives in `./threads` and is shared with the
+ * reference dispatcher (extracted in fix round 1 of Task 7) rather than
+ * duplicated — see that file's header for why.
  */
 
 import { supabaseService } from '../supabase'
@@ -25,6 +29,7 @@ import { sendTemplate, normalizePhone } from '../whatsapp/meta-provider'
 import { isSuppressed } from './suppression'
 import { canSendNow } from '../time/send-window'
 import { PersonalizationError } from './personalization'
+import { upsertThread } from './threads'
 import {
   buildRenewalVariables,
   pickRenewalTemplate,
@@ -99,24 +104,46 @@ export async function dispatchRenewalOutreach(opts: {
   // reference dispatcher, which leaves this to its callers) so no future
   // caller of dispatchRenewalOutreach can bypass it. Transient — the lead
   // stays 'pending' and returns to the queue on the next attempt.
-  const window = await canSendNow()
-  if (!window.ok) {
-    return { ok: false, code: 'SEND_WINDOW', message: 'מחוץ לשעות/לימי השליחה המותרים כרגע' }
+  const sendWindow = await canSendNow()
+  if (!sendWindow.ok) {
+    return {
+      ok: false,
+      code: 'SEND_WINDOW',
+      message: `מחוץ לשעות/לימי השליחה המותרים כרגע (${sendWindow.reason || 'לא ידוע'})`,
+    }
   }
 
   const normalizedPhone = normalizePhone(property.contact_phone)
   if (await isSuppressed(orgId, normalizedPhone)) {
     await stampLeadSkipped(sb, leadId, orgId, 'suppressed')
-    await sb.from('properties').update({ outreach_blocked: true }).eq('id', property.id)
+    await sb.from('properties').update({ outreach_blocked: true }).eq('id', property.id).eq('org_id', orgId)
     return { ok: false, code: 'SUPPRESSED', message: 'המספר נמצא ברשימת הסירוב' }
   }
 
-  // Build personalization (throws PersonalizationError on bad data)
+  // Build personalization (throws PersonalizationError on bad data).
+  //
+  // Discrimination rule (load-bearing — read before adding a new
+  // PersonalizationError reason anywhere it's thrown): `PersonalizationError`
+  // conflates two very different failure classes under one type.
+  //   - Genuine, permanent DATA problems on the lead/property itself
+  //     (`name_invalid:*`, `street_missing`, `phone_missing`,
+  //     `property_not_found`) will never resolve on retry — stamping the
+  //     lead 'skipped' is correct, it should not keep coming back.
+  //   - `db_error` is an INFRASTRUCTURE failure (the `properties` select
+  //     inside `buildRenewalVariables` itself failed) — a Supabase blip, not
+  //     a bad lead. Stamping it 'skipped' would permanently destroy a
+  //     perfectly good lead over a transient read failure. Any new reason
+  //     that represents "the read/write failed" rather than "the data is
+  //     bad" belongs on this side, not the stamped side.
   let vars: RenewalVars
   try {
     vars = await buildRenewalVariables(property.id, lead.times_listed)
   } catch (err) {
     if (err instanceof PersonalizationError) {
+      if (err.reason === 'db_error') {
+        // Transient — do NOT stamp. Leaves status='pending' for retry.
+        return { ok: false, code: 'DB_ERROR', message: err.message || 'שגיאת מסד נתונים בעת בניית ההודעה' }
+      }
       await stampLeadSkipped(sb, leadId, orgId, err.reason)
       return { ok: false, code: 'PERSONALIZATION', message: humanReasonForCode(err.reason) }
     }
@@ -219,38 +246,6 @@ async function stampLeadSkipped(
     .update({ status: 'skipped', skip_reason: reason })
     .eq('id', leadId)
     .eq('org_id', orgId)
-}
-
-/**
- * Upsert-by-(org_id, phone) thread helper, copied from the reference
- * dispatcher's `upsertThread` (not exported there) rather than invented
- * as a variant — same shape, same behaviour.
- */
-async function upsertThread(
-  sb: ReturnType<typeof supabaseService>,
-  orgId: string,
-  normalizedPhone: string,
-  propertyId: string,
-): Promise<{ id: string }> {
-  const { data: existing } = await sb
-    .from('threads')
-    .select('id')
-    .eq('org_id', orgId)
-    .eq('phone', normalizedPhone)
-    .maybeSingle()
-  if (existing) return existing
-  const { data: created } = await sb
-    .from('threads')
-    .insert({
-      org_id: orgId,
-      phone: normalizedPhone,
-      channel: 'whatsapp',
-      status: 'awaiting_reply',
-      property_id: propertyId,
-    })
-    .select('id')
-    .single()
-  return created!
 }
 
 function humanReasonForCode(code: string): string {

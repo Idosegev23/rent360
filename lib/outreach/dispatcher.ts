@@ -16,6 +16,7 @@ import {
   type TemplateChoice,
 } from './personalization'
 import { generateAndStorePersonalization } from '../ai/property-vision'
+import { upsertThread } from './threads'
 
 export type DispatchResult =
   | { ok: true; messageId: string; threadId: string; phone: string; templateName: string }
@@ -152,33 +153,6 @@ export async function dispatchInitialOutreach(opts: {
   }).eq('id', thread.id)
 
   return { ok: true, messageId: sent.messageId, threadId: thread.id, phone: normalized, templateName }
-}
-
-async function upsertThread(
-  sb: ReturnType<typeof supabaseService>,
-  orgId: string,
-  normalizedPhone: string,
-  propertyId: string,
-): Promise<{ id: string }> {
-  const { data: existing } = await sb
-    .from('threads')
-    .select('id')
-    .eq('org_id', orgId)
-    .eq('phone', normalizedPhone)
-    .maybeSingle()
-  if (existing) return existing
-  const { data: created } = await sb
-    .from('threads')
-    .insert({
-      org_id: orgId,
-      phone: normalizedPhone,
-      channel: 'whatsapp',
-      status: 'awaiting_reply',
-      property_id: propertyId,
-    })
-    .select('id')
-    .single()
-  return created!
 }
 
 function humanReasonForCode(code: string): string {
