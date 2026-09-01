@@ -136,3 +136,6 @@ supabase/.temp/
 *.csv
 SESSION_HANDOFF.md
 rent360-landlord-bot-prompt.txt
+
+# Nadlan One raw exports + merged dataset (22MB, kept locally)
+docs/*haifa*.csv
