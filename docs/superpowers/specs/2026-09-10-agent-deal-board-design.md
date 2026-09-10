@@ -179,7 +179,9 @@ Measured on today's data: September has 2 deals, ₪10,400.
 
 No test runner exists. Verification is: backfill `--dry-run` reconciling exactly to §2's table;
 `npm run build`; `ESLINT_USE_FLAT_CONFIG=false npm run lint`; authenticated HTTP `GET /api/v1/board`
-returning 41 items for Shai and 22 orphans; one stage change producing a `deal_stages` row and an
+whose item and orphan counts equal the counts recomputed from the data — Shai's 41 assigned and the
+22 unassigned, each **less** any property whose signed month has already passed (the board shows
+open properties, so not 41 flat); one stage change producing a `deal_stages` row and an
 `activity` row, with a note-only edit leaving `stage_changed_at` unchanged; then a look in the browser.
 
 ## Execution
