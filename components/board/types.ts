@@ -26,6 +26,8 @@ export type BoardTargets = {
 
 export type BoardData = {
   me: { id: string }
+  /** The agent this payload describes — the targets form writes for this id, not the selector's. */
+  agentId: string
   agents: Array<{ id: string; name: string }>
   targets: BoardTargets
   orphans: BoardItem[]
@@ -49,4 +51,12 @@ export function fmtShortDate(iso: string | null): string {
 
 export function fmtShekel(n: number): string {
   return `₪${Math.round(n).toLocaleString('he-IL')}`
+}
+
+/** Days in a stage, the way Hebrew says it. */
+export function fmtDays(n: number): string {
+  if (n <= 0) return 'היום'
+  if (n === 1) return 'יום אחד'
+  if (n === 2) return 'יומיים'
+  return `${n} ימים`
 }

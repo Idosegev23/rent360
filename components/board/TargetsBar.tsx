@@ -52,7 +52,14 @@ export default function TargetsBar({ targets, userId, onSaved }: { targets: Boar
             <input type="number" min={0} step={100} value={commission} onChange={e => setCommission(e.target.value)} className="block border rounded px-2 py-1 mt-1 num" style={{ width: 140 }} />
           </label>
           <button type="button" className="btn btn-primary btn-sm" disabled={saving} onClick={save}>שמירה</button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>ביטול</button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              // Discard what was typed so reopening the form shows the saved target, not the draft.
+              setDeals(String(targets.targetDeals)); setCommission(String(targets.targetCommission)); setErr(null); setEditing(false)
+            }}
+          >ביטול</button>
           {err && <span className="text-sm" style={{ color: 'var(--red, #dc2626)' }}>{err}</span>}
         </div>
       ) : (

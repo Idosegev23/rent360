@@ -61,10 +61,12 @@ for (const r of plan) {
   if (!data?.length) continue // assigned by someone in the meantime — leave it alone
   ok++
   // Same row shape logActivity() writes; the TS helper can't be imported from an .mjs script.
-  await sb.from('activity').insert({
+  // The assignment already succeeded, so a failed log is reported, not fatal.
+  const { error: logErr } = await sb.from('activity').insert({
     org_id: ORG, entity_type: 'property', entity_id: r.propertyId, author_user_id: null, kind: 'system',
     body: `שיוך אוטומטי: ${r.name}, לפי אישור הנכס`,
     metadata: { source: 'backfill-agent-assignment', assigned_to: r.userId },
   })
+  if (logErr) console.warn(`activity log failed for ${r.propertyId}: ${logErr.message}`)
 }
 console.log(`assigned: ${ok} / ${plan.length}`)

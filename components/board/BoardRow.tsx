@@ -3,11 +3,11 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { MANUAL_STAGE_KEYS, stageLabel, type StageKey } from '../../lib/board/stages'
 import type { BoardItem } from './types'
-import { STAGE_TONE, fmtShortDate } from './types'
+import { STAGE_TONE, fmtDays, fmtShortDate } from './types'
 
 function DaysPill({ days }: { days: number }) {
   const tone = days >= 14 ? 'pill-red' : days >= 7 ? 'pill-amber' : 'pill-gray'
-  return <span className={`pill ${tone} num`} title="ימים בשלב הנוכחי">{days} ימים</span>
+  return <span className={`pill ${tone} num`} title="זמן בשלב הנוכחי">{fmtDays(days)}</span>
 }
 
 export default function BoardRow({ item, onChanged }: { item: BoardItem; onChanged: () => void }) {
@@ -25,6 +25,12 @@ export default function BoardRow({ item, onChanged }: { item: BoardItem; onChang
     setBusy(false)
     if (!r || !r.ok) { setErr('העדכון נכשל. אפשר לנסות שוב.'); return }
     onChanged()
+  }
+
+  // A stage change moves the row to another group and remounts it, so an unsaved note would be
+  // lost — send it together with the stage.
+  function changeStage(next: StageKey) {
+    void post({ stage: next, ...(noteDirty ? { note: noteDraft } : {}) })
   }
 
   return (
@@ -46,7 +52,7 @@ export default function BoardRow({ item, onChanged }: { item: BoardItem; onChang
               aria-label="שלב"
               value={item.stage}
               disabled={busy}
-              onChange={e => void post({ stage: e.target.value as StageKey })}
+              onChange={e => changeStage(e.target.value as StageKey)}
               className="border rounded px-2 py-1 text-sm"
             >
               {MANUAL_STAGE_KEYS.map(k => <option key={k} value={k}>{stageLabel(k)}</option>)}
@@ -75,7 +81,7 @@ export default function BoardRow({ item, onChanged }: { item: BoardItem; onChang
           aria-label="הערה"
           value={noteDraft}
           onChange={e => setNoteDraft(e.target.value)}
-          placeholder="הערה — למשל: ממתין לצ׳קים מהשוכר"
+          placeholder="הערה — למשל: ממתינים לצ׳קים מהשוכר"
           className="flex-1 border rounded px-2 py-1 text-sm"
           maxLength={2000}
         />

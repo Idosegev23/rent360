@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import Topbar from '../../components/shell/Topbar'
 import TargetsBar from '../../components/board/TargetsBar'
@@ -13,17 +13,23 @@ export default function BoardPage() {
   const [data, setData] = useState<BoardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Each load gets a sequence number; only the newest may write state. A fast agent switch can
+  // otherwise land an older agent's response last and show it under the newer selection.
+  const reqSeq = useRef(0)
 
   const load = useCallback(async () => {
+    const seq = ++reqSeq.current
     setError(null)
     try {
       const r = await fetch(`/api/v1/board${agent ? `?agent=${encodeURIComponent(agent)}` : ''}`)
       if (!r.ok) throw new Error(String(r.status))
-      setData((await r.json()) as BoardData)
+      const d = (await r.json()) as BoardData
+      if (seq !== reqSeq.current) return
+      setData(d)
     } catch {
-      setError('טעינת הלוח נכשלה. אפשר לרענן את העמוד.')
+      if (seq === reqSeq.current) setError('טעינת הלוח נכשלה. אפשר לרענן את העמוד.')
     } finally {
-      setLoading(false)
+      if (seq === reqSeq.current) setLoading(false)
     }
   }, [agent])
 
@@ -45,6 +51,7 @@ export default function BoardPage() {
               </select>
             </label>
             <span className="text-sm faint num">{openCount} דירות פתוחות</span>
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-brand-primary" aria-label="טוען" />}
           </div>
         )}
         {loading && !data ? (
@@ -53,8 +60,9 @@ export default function BoardPage() {
           <div className="surface-card text-sm" style={{ padding: 16 }}>{error}</div>
         ) : data ? (
           <>
-            <TargetsBar key={`${selectedAgent}-${data.targets.month}`} targets={data.targets} userId={selectedAgent} onSaved={() => void load()} />
-            <OrphansStrip orphans={data.orphans} meId={data.me.id} onChanged={() => void load()} />
+            {/* Keyed and addressed by the payload's agent, never the selector — see BoardData.agentId. */}
+            <TargetsBar key={`${data.agentId}-${data.targets.month}`} targets={data.targets} userId={data.agentId} onSaved={() => void load()} />
+            <OrphansStrip orphans={data.orphans} onChanged={() => void load()} />
             {data.groups.map(g => (
               <StageGroup key={g.stage} stage={g.stage} label={g.label} items={g.items} onChanged={() => void load()} />
             ))}

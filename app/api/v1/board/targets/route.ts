@@ -14,11 +14,11 @@ export async function PUT(req: NextRequest) {
   const deals = Number(body.targetDeals)
   const commission = Number(body.targetCommission)
   if (!userId || !month || !Number.isInteger(deals) || deals < 0 || !Number.isInteger(commission) || commission < 0) {
-    return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'userId, month (YYYY-MM-01) and non-negative whole numbers are required' } }, { status: 400 })
+    return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'חסרים נתונים: סוכן, חודש (YYYY-MM-01) ומספרים שלמים, 0 ומעלה' } }, { status: 400 })
   }
 
   const { data: u } = await sb.from('users').select('id').eq('id', userId).eq('org_id', orgId).maybeSingle()
-  if (!u) return NextResponse.json({ error: { code: 'BAD_USER' } }, { status: 400 })
+  if (!u) return NextResponse.json({ error: { code: 'BAD_USER', message: 'הסוכן לא נמצא' } }, { status: 400 })
 
   const { error } = await sb.from('agent_targets').upsert(
     { org_id: orgId, user_id: userId, month, target_deals: deals, target_commission: commission, updated_at: new Date().toISOString() },

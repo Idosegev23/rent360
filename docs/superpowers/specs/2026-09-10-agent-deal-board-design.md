@@ -194,3 +194,22 @@ waits for confirmation before the live write.
 
 Drag-and-drop kanban · alerts when a deal is stuck · creating or editing tasks and meetings inside
 the board (it links out) · per-stage time limits · changes to `/pipeline`.
+
+## Changes after code review (2026-09-10)
+
+One review of the branch found nothing critical; all five invariants held. Changes made in response:
+
+- **Claiming an orphan uses `POST /api/v1/board/claim`, not the general assign endpoint** (a deviation
+  from §2). The claim succeeds only while the property is still unassigned, so two people claiming the
+  same orphan cannot silently take it from each other (the second gets 409), and every claim is logged
+  to `activity`. The general assign endpoint keeps overwriting by design — it serves the property page.
+- **Note-only saves write the note columns only.** Previously a note save re-wrote the stage it had
+  just read, so a concurrent stage change by the other person on the same property could be reverted.
+- **Ended tenancies.** A stored stage set before a tenancy that has since ended is treated as stale: the
+  property reads as `new`, counted from the end date, in both the GET and the stage POST. Otherwise a
+  property coming back to market would show its pre-rental stage with a months-long red counter.
+- **Month anchors are Israel-local** for timestamp columns (`israelDateOf`).
+- **The GET fails loudly** on any query error instead of rendering every stage as `new` with a zero
+  target — e.g. if the code is deployed before 0041 is applied.
+- The targets form writes for the agent the payload describes (`agentId`), not the selector, so a fast
+  agent switch cannot save one agent's numbers onto another.

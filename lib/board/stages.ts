@@ -46,6 +46,16 @@ export function monthStartIso(d: Date = new Date()): string {
   return `${d.toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).slice(0, 7)}-01`
 }
 
+/**
+ * The Israel-local calendar date ('YYYY-MM-DD') of a DB value. Date-only strings are already local;
+ * timestamps are converted — otherwise a row written between 00:00 and 03:00 Israel time on the 1st
+ * would land in the previous month.
+ */
+export function israelDateOf(v: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+  return new Date(v).toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).slice(0, 10)
+}
+
 /** The first day of the month after `monthStart` ('YYYY-MM-01'). */
 export function nextMonthStartIso(monthStart: string): string {
   const [y, m] = monthStart.split('-').map(Number)
