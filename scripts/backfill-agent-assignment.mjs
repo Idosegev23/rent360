@@ -1,6 +1,7 @@
 /**
  * One-time: assign each approved, not-irrelevant, UNASSIGNED property to whoever approved it —
- * only when that approver is an ACTIVE user, never overwriting an existing assignment.
+ * only when that approver is an ACTIVE user who handles properties (users.handles_properties),
+ * never overwriting an existing assignment. Staff who are not agents (e.g. the owner) get none.
  * Spec: docs/superpowers/specs/2026-09-10-agent-deal-board-design.md §2.
  *
  * Run:  set -a; . ./.env.local; set +a; NODE_PATH="$(pwd)/node_modules" node scripts/backfill-agent-assignment.mjs [--dry-run]
@@ -13,7 +14,7 @@ const ORG = '11111111-1111-1111-1111-111111111111'
 const DRY = process.argv.includes('--dry-run')
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE, { auth: { persistSession: false } })
 
-const { data: users, error: uErr } = await sb.from('users').select('id, name, is_active').eq('org_id', ORG)
+const { data: users, error: uErr } = await sb.from('users').select('id, name, is_active, handles_properties').eq('org_id', ORG)
 if (uErr) throw uErr
 const U = new Map(users.map(u => [u.id, u]))
 
@@ -38,9 +39,12 @@ for (const a of approved) {
   if (!p) continue
   if (p.assigned_agent_user_id) { already++; continue }
   const u = a.approved_by ? U.get(a.approved_by) : null
-  if (u && u.is_active) plan.push({ propertyId: p.id, userId: u.id, name: u.name })
+  if (u && u.is_active && u.handles_properties) plan.push({ propertyId: p.id, userId: u.id, name: u.name })
   else {
-    const reason = !a.approved_by ? 'no approver' : `${u?.name ?? 'unknown user'} (inactive)`
+    const reason = !a.approved_by ? 'no approver'
+      : !u ? 'unknown user'
+      : !u.is_active ? `${u.name} (inactive)`
+      : `${u.name} (not an agent)`
     orphans[reason] = (orphans[reason] || 0) + 1
   }
 }

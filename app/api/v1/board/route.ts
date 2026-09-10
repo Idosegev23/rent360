@@ -6,9 +6,9 @@ import {
 
 /**
  * The agent deal board (spec: docs/superpowers/specs/2026-09-10-agent-deal-board-design.md).
- * Scope = approved, not-irrelevant properties assigned to `?agent=` (default: the viewer), plus the
- * unassigned ones surfaced as `orphans`. Next task / next meeting are read from the existing
- * `tasks` / `meetings` tables — the board never duplicates them.
+ * Scope = approved, not-irrelevant properties assigned to `?agent=` (default: the viewer when they
+ * handle properties, else the first agent), plus the unassigned ones surfaced as `orphans`. Next task /
+ * next meeting are read from the existing `tasks` / `meetings` tables — the board never duplicates them.
  * The client mirror of this response lives in components/board/types.ts.
  */
 export const dynamic = 'force-dynamic'
@@ -27,7 +27,7 @@ type BoardItem = {
   updatedAt: string | null
 }
 
-type AgentRow = { id: string; name: string | null }
+type UserRow = { id: string; name: string | null; handles_properties: boolean | null }
 type ApprovedRow = { property_id: string; approved_at: string | null }
 type PropRow = {
   id: string; street: string | null; address: string | null; city: string | null
@@ -67,24 +67,28 @@ function ms(v: string): number {
 export async function GET(req: NextRequest) {
   const ctx = await requireOrg()
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
-  const agentId = req.nextUrl.searchParams.get('agent') || ctx.uid
   try {
-    return NextResponse.json(await buildBoard(ctx.sb, ctx.orgId, ctx.uid, agentId))
+    return NextResponse.json(await buildBoard(ctx.sb, ctx.orgId, ctx.uid, req.nextUrl.searchParams.get('agent')))
   } catch (err) {
     return NextResponse.json({ error: { code: 'DB_ERROR', message: err instanceof Error ? err.message : String(err) } }, { status: 500 })
   }
 }
 
-async function buildBoard(sb: OrgContext['sb'], orgId: string, uid: string, agentId: string) {
+async function buildBoard(sb: OrgContext['sb'], orgId: string, uid: string, requestedAgent: string | null) {
   const month = monthStartIso()
   const nextMonth = nextMonthStartIso(month)
   const nowIso = new Date().toISOString()
 
-  const [agentsRes, approvedRes] = await Promise.all([
-    sb.from('users').select('id, name').eq('org_id', orgId).eq('is_active', true).order('name'),
+  const [usersRes, approvedRes] = await Promise.all([
+    sb.from('users').select('id, name, handles_properties').eq('org_id', orgId).eq('is_active', true).order('name'),
     sb.from('approved_properties').select('property_id, approved_at').eq('org_id', orgId).is('irrelevant_at', null),
   ])
-  const agents = must<AgentRow>(agentsRes)
+  const users = must<UserRow>(usersRes)
+  // Only staff who handle properties (users.handles_properties) get a board — not every active user.
+  const agents = users.filter(u => u.handles_properties)
+  // Default board: the viewer when they are an agent, else the first agent. Someone who is not an agent
+  // opening the board (e.g. reviewing) lands on a real board instead of an empty one of their own.
+  const agentId = requestedAgent || (agents.some(a => a.id === uid) ? uid : (agents[0]?.id ?? uid))
   const approvedAt = new Map(must<ApprovedRow>(approvedRes).map(a => [a.property_id, a.approved_at]))
 
   const props = await inChunks<PropRow>(Array.from(approvedAt.keys()), async c => must<PropRow>(await sb.from('properties')
@@ -132,7 +136,8 @@ async function buildBoard(sb: OrgContext['sb'], orgId: string, uid: string, agen
     const cur = meetingBy.get(m.property_id)
     if (!cur || m.starts_at < cur.starts_at) meetingBy.set(m.property_id, m)
   }
-  const nameBy = new Map(agents.map(a => [a.id, a.name || '']))
+  // Names of all active staff, not just agents — anyone may edit a stage and appear as "updated by".
+  const nameBy = new Map(users.map(u => [u.id, u.name || '']))
 
   function toItem(p: PropRow): BoardItem | null {
     const s = stageBy.get(p.id)

@@ -89,16 +89,17 @@ The board shows approved, not-irrelevant properties where
 ### One-time assignment backfill
 
 So that rule works on day one, a script assigns each unassigned approved property to whoever
-approved it — **only when that approver is an active user**, and **never overwriting** an existing
+approved it — **only when that approver is an active user who handles properties**
+(`users.handles_properties` — today שי and זיו; עידו and דנה are not agents), and **never overwriting** an existing
 assignment. Dry-run measured against production:
 
 | | count |
 |---|---|
 | already assigned | 12 |
 | → assigned to שי | **29** |
-| → assigned to עידו | 1 |
 | stays unassigned — no approver | 13 |
 | stays unassigned — approved by "Rent Admin" (inactive demo account) | 8 |
+| stays unassigned — approved by עידו (not an agent) | 1 |
 | stays unassigned — approved by דריה (offboarded) | 1 |
 
 Shai's board: **12 → 41**. The active-user rule matters: without it, 9 properties would land on
@@ -108,8 +109,8 @@ rows that are still unassigned).
 
 ### Surfacing the orphans
 
-The **22** that stay unassigned — and any future ones — are **surfaced**, not hidden: a strip at the
-top of the board, visible regardless of the agent selector: "22 נכסים מאושרים ללא סוכן", expandable,
+The **23** that stay unassigned — and any future ones — are **surfaced**, not hidden: a strip at the
+top of the board, visible regardless of the agent selector: "23 נכסים מאושרים ללא סוכן", expandable,
 each row with "שיוך אליי", which calls the existing assign endpoint with the viewer's id.
 
 ## 3. API
@@ -213,3 +214,9 @@ One review of the branch found nothing critical; all five invariants held. Chang
   target — e.g. if the code is deployed before 0041 is applied.
 - The targets form writes for the agent the payload describes (`agentId`), not the selector, so a fast
   agent switch cannot save one agent's numbers onto another.
+- **Agents are `users.handles_properties`.** The board's agent selector lists only them (today שי and
+  זיו). A viewer who is not an agent lands on the first agent's board instead of an empty one of their
+  own. The orphans strip assigns through a "שיוך ל" picker instead of "assign to me", and the claim
+  route accepts only an active agent. Per the client: assignment goes by approver, so זיו starts with an
+  empty board and receives properties as they are assigned; the one property עידו approved (הגפן 11,
+  קרית אתא) joins the unassigned list — 23 in all — to be split in the review.

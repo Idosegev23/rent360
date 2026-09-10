@@ -8,7 +8,8 @@ import StageGroup from '../../components/board/StageGroup'
 import type { BoardData } from '../../components/board/types'
 
 export default function BoardPage() {
-  // null = the server's default (the viewer). Set only by the selector, so the first load fetches once.
+  // null = the server's default (the viewer when they handle properties, else the first agent).
+  // Set only by the selector, so the first load fetches once.
   const [agent, setAgent] = useState<string | null>(null)
   const [data, setData] = useState<BoardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -35,7 +36,8 @@ export default function BoardPage() {
 
   useEffect(() => { setLoading(true); void load() }, [load])
 
-  const selectedAgent = agent ?? data?.me.id ?? ''
+  // The payload says which agent it describes — the default may not be the viewer.
+  const selectedAgent = agent ?? data?.agentId ?? ''
   const openCount = data ? data.groups.filter(g => g.stage !== 'signed').reduce((s, g) => s + g.items.length, 0) : 0
 
   return (
@@ -62,7 +64,7 @@ export default function BoardPage() {
           <>
             {/* Keyed and addressed by the payload's agent, never the selector — see BoardData.agentId. */}
             <TargetsBar key={`${data.agentId}-${data.targets.month}`} targets={data.targets} userId={data.agentId} onSaved={() => void load()} />
-            <OrphansStrip orphans={data.orphans} onChanged={() => void load()} />
+            <OrphansStrip orphans={data.orphans} agents={data.agents} meId={data.me.id} onChanged={() => void load()} />
             {data.groups.map(g => (
               <StageGroup key={g.stage} stage={g.stage} label={g.label} items={g.items} onChanged={() => void load()} />
             ))}
