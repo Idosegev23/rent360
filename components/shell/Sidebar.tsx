@@ -11,6 +11,7 @@ import {
   Settings,
   Send,
   ListChecks,
+  Target,
   Archive,
   UserCog,
   LogOut,
@@ -36,6 +37,7 @@ type NavLink = {
 const main: NavLink[] = [
   { href: '/dashboard',            label: 'דשבורד',         Icon: LayoutDashboard },
   { href: '/action',               label: 'מה לעשות',        Icon: ListChecks },
+  { href: '/board',                label: 'לוח בקרה',        Icon: Target },
   { href: '/pipeline',             label: 'צינור עסקאות',    Icon: GitBranch },
   { href: '/tasks',                label: 'משימות',          Icon: CheckSquare },
   { href: '/meetings',             label: 'פגישות',          Icon: CalendarDays },
