@@ -18,6 +18,9 @@ const START_HOUR = Number(process.env.SEND_WINDOW_START_HOUR || 9) // earliest s
 const END_HOUR = Number(process.env.SEND_WINDOW_END_HOUR || 21) // latest send hour (exclusive)
 const GEONAMEID = process.env.HEBCAL_GEONAMEID || '294801' // Haifa, Israel
 
+// Read-only, for pacing (the renewal autosend cron spreads its daily target over the hours left).
+export { START_HOUR as SEND_WINDOW_START_HOUR, END_HOUR as SEND_WINDOW_END_HOUR }
+
 // Candle-lighting → havdalah windows (Shabbat + Yom Tov), cached ~12h. Each pair is a no-send window.
 let _cache: { at: number; windows: Array<[number, number]> } | null = null
 

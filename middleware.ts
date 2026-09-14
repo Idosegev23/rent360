@@ -46,6 +46,8 @@ export function middleware(req: NextRequest) {
     pathname === '/api/v1/cron/callback-reminders' ||
     pathname === '/api/v1/cron/escalations' ||
     pathname === '/api/v1/cron/deal-doc-reminders' ||
+    pathname === '/api/v1/cron/renewal-autosend' ||
+    pathname === '/api/v1/cron/meta-health' ||
     pathname === '/api/v1/auth/seed-team'
 
   // Google OAuth login + callback — these run BEFORE a session exists (login) or are hit by

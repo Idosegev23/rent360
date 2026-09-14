@@ -63,6 +63,11 @@ function formatBody(ctx: AlertContext): string {
 }
 
 export async function sendTelegramAlert(ctx: AlertContext): Promise<{ sent: boolean; reason?: string }> {
+  return sendTelegramText(formatBody(ctx))
+}
+
+/** Send pre-formatted HTML to the admin chat — for reports that don't fit the per-thread alert shape. */
+export async function sendTelegramText(html: string): Promise<{ sent: boolean; reason?: string }> {
   const token = process.env.TELEGRAM_BOT_TOKEN
   const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID
   if (!token || !chatId) return { sent: false, reason: 'telegram_env_missing' }
@@ -73,7 +78,7 @@ export async function sendTelegramAlert(ctx: AlertContext): Promise<{ sent: bool
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
-        text: formatBody(ctx),
+        text: html,
         parse_mode: 'HTML',
         disable_web_page_preview: false,
       }),

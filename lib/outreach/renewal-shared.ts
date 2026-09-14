@@ -23,6 +23,30 @@ import {
   type RenewalSegment,
 } from './renewal-templates'
 import { recipientMessageCounts, type RecipientCount } from './governance'
+import { israelToday } from '../time/israel'
+
+// ---------------------------------------------------------------------------
+// Due window — shared by the /renewals queue and the autosend cron so they always pick the same leads
+// ---------------------------------------------------------------------------
+
+/**
+ * `matures_at BETWEEN today-45 AND today+60`, Israel-local. R12: the window looks forward too,
+ * because the renewal decision is made shortly *before* the year-mark. Widened from +30 to +60 on
+ * 2026-09-14 (client decision) so the automatic daily sends don't run dry between maturity waves.
+ */
+export const RENEWAL_DUE_BACK_DAYS = 45
+export const RENEWAL_DUE_AHEAD_DAYS = 60
+
+export function renewalDueWindow(today: string = israelToday()): { from: string; to: string } {
+  return { from: addDaysIso(today, -RENEWAL_DUE_BACK_DAYS), to: addDaysIso(today, RENEWAL_DUE_AHEAD_DAYS) }
+}
+
+function addDaysIso(base: string, days: number): string {
+  const [y, m, d] = base.split('-').map(Number)
+  const dt = new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1))
+  dt.setUTCDate(dt.getUTCDate() + days)
+  return dt.toISOString().slice(0, 10)
+}
 
 // ---------------------------------------------------------------------------
 // Row shape (shared response contract, Task 9 depends on these exact fields)
