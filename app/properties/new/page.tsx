@@ -18,6 +18,9 @@ type Amenities = {
   airConditioner: boolean
   storage: boolean
   mamad: boolean
+  // Same keys the property page toggles and the matcher reads (amenities.divided / amenities.garden).
+  divided: boolean
+  garden: boolean
 }
 
 const AMENITY_LABELS: Record<keyof Amenities, string> = {
@@ -27,6 +30,8 @@ const AMENITY_LABELS: Record<keyof Amenities, string> = {
   airConditioner: 'מזגן',
   storage: 'מחסן',
   mamad: 'ממ"ד',
+  divided: 'דירה מחולקת',
+  garden: 'חצר',
 }
 
 const CITIES = ['קריית אתא', 'קריית ביאליק', 'קריית מוצקין', 'קריית ים', 'קריית חיים', 'חיפה', 'נשר']
@@ -84,6 +89,8 @@ const INITIAL_AMENITIES: Amenities = {
   airConditioner: false,
   storage: false,
   mamad: false,
+  divided: false,
+  garden: false,
 }
 
 export default function NewPropertyPage() {
@@ -106,7 +113,8 @@ export default function NewPropertyPage() {
       const yes = window.confirm(`נמצאה טיוטה שמורה מלפני ${ageLabel}. לטעון אותה?`)
       if (yes) {
         setForm(saved.form)
-        if (saved.amenities) setAmenities(saved.amenities)
+        // Merge over the defaults: a draft saved before a new amenity existed lacks that key.
+        if (saved.amenities) setAmenities({ ...INITIAL_AMENITIES, ...saved.amenities })
         setDraftRestored(true)
       } else {
         clearDraft(DRAFT_KEY)
