@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
-import { canSendNow, SEND_WINDOW_END_HOUR } from '../../../../../lib/time/send-window'
+import { canSendNow } from '../../../../../lib/time/send-window'
 import { israelDayRangeUTC } from '../../../../../lib/time/israel'
 import { dispatchRenewalOutreach } from '../../../../../lib/outreach/renewal-dispatcher'
 import { DAILY_CAP, templatesSentToday, sleepJitter } from '../../../../../lib/outreach/governance'
 import { renewalDueWindow } from '../../../../../lib/outreach/renewal-shared'
+import { runQuota } from '../../../../../lib/outreach/autosend-pacing'
 
 /**
  * Every-15-minutes cron: automatic renewal outreach, paced across the day.
  *
  * The daily target (RENEWAL_AUTOSEND_DAILY, default 100 — client decision 2026-09-14) is spread over
- * the runs left before the send window closes, so sends trickle out all day instead of bursting at
- * 09:00. The target is GLOBAL, not per org: every org sends from the same WhatsApp number, and that
- * number's Meta quality rating is what the pace protects. Manual sends from /renewals count toward
- * it too. Each run:
+ * the runs left before the send window closes (lib/outreach/autosend-pacing.ts), so sends trickle out
+ * all day instead of bursting at 09:00. The target is GLOBAL, not per org: every org sends from the
+ * same WhatsApp number, and that number's Meta quality rating is what the pace protects. Manual sends
+ * from /renewals count toward it too. Each run:
  *  - does nothing unless RENEWAL_AUTOSEND_ENABLED=true (GET ?dryRun=1 still previews, never sends);
  *  - does nothing outside canSendNow() (09:00–21:00 Israel, never Shabbat/חג);
  *  - never exceeds an org's shared template DAILY_CAP that manual batches and renter alerts draw on;
@@ -28,7 +29,6 @@ import { renewalDueWindow } from '../../../../../lib/outreach/renewal-shared'
  */
 export const maxDuration = 120
 
-const RUN_EVERY_MIN = 15
 const DAILY_TARGET = Number(process.env.RENEWAL_AUTOSEND_DAILY || 100)
 const MAX_PER_RUN = Number(process.env.RENEWAL_AUTOSEND_MAX_PER_RUN || 6)
 // Results that mean "nothing can send right now" — end the run instead of burning through leads.
@@ -41,21 +41,6 @@ type OrgReport = {
   skipped: string[]
   stoppedOn: string | null
   wouldSend: string[] | null
-}
-
-function israelMinutesOfDay(now: Date): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Jerusalem', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
-  }).formatToParts(now)
-  const get = (type: string): number => Number(parts.find(p => p.type === type)?.value || 0)
-  return get('hour') * 60 + get('minute')
-}
-
-/** This run's even share of what is left today: remaining ÷ runs left before the window closes. */
-function runQuota(remaining: number, now: Date): number {
-  if (remaining <= 0) return 0
-  const runsLeft = Math.max(1, Math.ceil((SEND_WINDOW_END_HOUR * 60 - israelMinutesOfDay(now)) / RUN_EVERY_MIN))
-  return Math.min(MAX_PER_RUN, Math.round(remaining / runsLeft))
 }
 
 async function run(req: NextRequest) {
@@ -83,7 +68,7 @@ async function run(req: NextRequest) {
   if (dbErr) return NextResponse.json({ error: { code: 'DB_ERROR', message: dbErr.message } }, { status: 500 })
 
   const sentToday = sentRes.count || 0
-  let runLeft = runQuota(DAILY_TARGET - sentToday, now)
+  let runLeft = runQuota(DAILY_TARGET - sentToday, now, MAX_PER_RUN)
   const { from, to } = renewalDueWindow()
   const report: OrgReport[] = []
 
