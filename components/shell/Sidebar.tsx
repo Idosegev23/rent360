@@ -23,6 +23,7 @@ import {
   KeyRound,
   History,
   Table2,
+  ChevronDown,
 } from 'lucide-react'
 
 type Me = { name: string | null; email: string | null; capabilities?: string[]; google: { connected: boolean; email: string | null } }
@@ -36,34 +37,48 @@ type NavLink = {
   cap?: string
 }
 
-const main: NavLink[] = [
-  { href: '/dashboard',            label: 'דשבורד',         Icon: LayoutDashboard },
-  { href: '/board',                label: 'לוח בקרה',        Icon: Target },
-  { href: '/deals',                label: 'לוח עסקאות',      Icon: Table2 },
-  { href: '/pipeline',             label: 'צינור עסקאות',    Icon: GitBranch },
-  { href: '/tasks',                label: 'משימות',          Icon: CheckSquare },
-  { href: '/meetings',             label: 'פגישות',          Icon: CalendarDays },
-  { href: '/properties',           label: 'נכסים',           Icon: Building2 },
-  { href: '/approved-properties',  label: 'מאושרים',        Icon: CheckCircle2 },
-  { href: '/approved-properties/irrelevant', label: 'לא רלוונטיים', Icon: Archive },
-  { href: '/rented',               label: 'הושכרו על ידינו',  Icon: KeyRound },
-  { href: '/renters',              label: 'שוכרים',          Icon: Users },
-  { href: '/team',                 label: 'צוות',            Icon: UserCog },
-  { href: '/outreach',             label: 'שליחה',           Icon: Send, cap: 'outreach.send' },
-  { href: '/outreach/renter-sends', label: 'יומן שליחות',    Icon: ClipboardList, cap: 'outreach.send' },
-  { href: '/renewals',             label: 'לידי חידוש',      Icon: History, cap: 'outreach.send' },
-  { href: '/inbox',                label: 'שיחות',           Icon: Inbox },
+// Daily work stays one click away; everything else sits in groups that open on demand.
+const core: NavLink[] = [
+  { href: '/dashboard', label: 'דשבורד',  Icon: LayoutDashboard },
+  { href: '/tasks',     label: 'משימות',  Icon: CheckSquare },
+  { href: '/meetings',  label: 'פגישות',  Icon: CalendarDays },
+  { href: '/inbox',     label: 'שיחות',   Icon: Inbox },
 ]
 
-const secondary: NavLink[] = [
-  { href: '/commissions', label: 'עמלות', Icon: Coins },
-  { href: '/reports', label: 'דוחות', Icon: BarChart3, cap: 'reports.view' },
-  { href: '/admin', label: 'הגדרות', Icon: Settings },
+type NavGroup = { key: string; label: string; Icon: React.ComponentType<{ size?: number }>; items: NavLink[] }
+const groups: NavGroup[] = [
+  { key: 'deals', label: 'עסקאות', Icon: Table2, items: [
+    { href: '/deals',       label: 'לוח עסקאות',   Icon: Table2 },
+    { href: '/board',       label: 'לוח בקרה ליועץ', Icon: Target },
+    { href: '/pipeline',    label: 'צינור עסקאות', Icon: GitBranch },
+    { href: '/commissions', label: 'עמלות',        Icon: Coins },
+  ] },
+  { key: 'properties', label: 'נכסים', Icon: Building2, items: [
+    { href: '/properties',          label: 'כל הנכסים',       Icon: Building2 },
+    { href: '/approved-properties', label: 'מאושרים',         Icon: CheckCircle2 },
+    { href: '/rented',              label: 'הושכרו על ידינו', Icon: KeyRound },
+    { href: '/approved-properties/irrelevant', label: 'לא רלוונטיים', Icon: Archive },
+  ] },
+  { key: 'clients', label: 'לקוחות ושיווק', Icon: Users, items: [
+    { href: '/renters',               label: 'שוכרים',      Icon: Users },
+    { href: '/renewals',              label: 'לידי חידוש',  Icon: History, cap: 'outreach.send' },
+    { href: '/outreach',              label: 'שליחה',       Icon: Send, cap: 'outreach.send' },
+    { href: '/outreach/renter-sends', label: 'יומן שליחות', Icon: ClipboardList, cap: 'outreach.send' },
+  ] },
+  { key: 'admin', label: 'ניהול', Icon: Settings, items: [
+    { href: '/reports', label: 'דוחות',  Icon: BarChart3, cap: 'reports.view' },
+    { href: '/team',    label: 'צוות',   Icon: UserCog },
+    { href: '/admin',   label: 'הגדרות', Icon: Settings },
+  ] },
 ]
+
+const OPEN_KEY = 'sidebar-open-groups'
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false
   if (href === '/dashboard') return pathname === '/' || pathname.startsWith('/dashboard')
+  // '/outreach' and '/approved-properties' have their own children in the menu; don't light both up.
+  if (href === '/outreach' || href === '/approved-properties') return pathname === href
   return pathname === href || pathname.startsWith(href + '/')
 }
 
@@ -71,6 +86,18 @@ export default function Sidebar() {
   const pathname = usePathname()
   const [me, setMe] = useState<Me | null>(null)
   const [renewalsDue, setRenewalsDue] = useState<number | null>(null)
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    try { setOpen(JSON.parse(localStorage.getItem(OPEN_KEY) || '{}')) } catch { /* private mode */ }
+  }, [])
+  function toggle(key: string, isOpen: boolean) {
+    setOpen(prev => {
+      const next = { ...prev, [key]: !isOpen }
+      try { localStorage.setItem(OPEN_KEY, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
+  }
 
   useEffect(() => {
     fetch('/api/me')
@@ -123,35 +150,31 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <div className="nav-section-label">ראשי</div>
-      {main.filter(allowed).map(item => {
-        const active = isActive(pathname, item.href)
-        const badge = item.href === '/renewals' ? renewalsDue : item.badge
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`nav-item ${active ? 'active' : ''}`}
-          >
-            <span className="nav-icon"><item.Icon size={17} /></span>
-            <span>{item.label}</span>
-            {badge != null && <span className="nav-badge">{badge}</span>}
-          </Link>
-        )
-      })}
+      {core.map(item => <NavItem key={item.href} item={item} active={isActive(pathname, item.href)} />)}
 
-      <div className="nav-section-label">תצוגה</div>
-      {secondary.filter(allowed).map(item => {
-        const active = isActive(pathname, item.href)
+      {groups.map(g => {
+        const items = g.items.filter(allowed)
+        if (items.length === 0) return null
+        const hasActive = items.some(i => isActive(pathname, i.href))
+        // The group holding the current page is always open; others remember what the user chose.
+        const isOpen = hasActive || !!open[g.key]
+        const groupBadge = !isOpen && items.some(i => i.href === '/renewals') ? renewalsDue : null
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`nav-item ${active ? 'active' : ''}`}
-          >
-            <span className="nav-icon"><item.Icon size={17} /></span>
-            <span>{item.label}</span>
-          </Link>
+          <div key={g.key} className="nav-group">
+            <button type="button" className={`nav-item nav-group-head ${hasActive && !isOpen ? 'active' : ''}`} onClick={() => !hasActive && toggle(g.key, isOpen)} aria-expanded={isOpen}>
+              <span className="nav-icon"><g.Icon size={17} /></span>
+              <span>{g.label}</span>
+              {groupBadge != null && groupBadge > 0 && <span className="nav-badge">{groupBadge}</span>}
+              <ChevronDown size={14} className="nav-chevron" style={{ transform: isOpen ? 'rotate(180deg)' : undefined }} />
+            </button>
+            {isOpen && (
+              <div className="nav-group-items">
+                {items.map(item => (
+                  <NavItem key={item.href} item={item} active={isActive(pathname, item.href)} badge={item.href === '/renewals' ? renewalsDue : item.badge} />
+                ))}
+              </div>
+            )}
+          </div>
         )
       })}
 
@@ -168,5 +191,15 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+  )
+}
+
+function NavItem({ item, active, badge }: { item: NavLink; active: boolean; badge?: number | string | null | undefined }) {
+  return (
+    <Link href={item.href} className={`nav-item ${active ? 'active' : ''}`}>
+      <span className="nav-icon"><item.Icon size={17} /></span>
+      <span>{item.label}</span>
+      {badge != null && <span className="nav-badge">{badge}</span>}
+    </Link>
   )
 }

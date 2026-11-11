@@ -209,6 +209,13 @@ body {
 }
 .nav-item.active .nav-icon { color: var(--brand-glow); }
 
+/* Collapsible sidebar groups */
+.nav-group-head { width: 100%; background: none; border: 0; cursor: pointer; text-align: start; font: inherit; }
+.nav-group-head .nav-chevron { margin-inline-start: auto; color: var(--ink-4); transition: transform .15s; flex-shrink: 0; }
+.nav-group-head .nav-badge + .nav-chevron { margin-inline-start: 6px; }
+.nav-group-items { padding-inline-start: 14px; margin-bottom: 4px; }
+.nav-group-items .nav-item { font-size: 13px; padding-top: 6px; padding-bottom: 6px; }
+
 .sidebar-footer {
   margin-top: auto;
   padding: 12px;
