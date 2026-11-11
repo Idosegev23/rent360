@@ -21,6 +21,7 @@ import Topbar from '../shell/Topbar';
 import RecentInterest from './RecentInterest';
 import ActionCenter from './ActionCenter';
 import MyDayPanel from './MyDayPanel';
+import MonthlyTargets from './MonthlyTargets';
 
 interface DashboardData {
   kpis?: {
@@ -83,6 +84,7 @@ export default function ModernDashboard({ data }: { data: DashboardData }) {
       />
 
       <div className="page-wrap">
+        <MonthlyTargets />
         <MyDayPanel />
         <ActionCenter />
         <RecentInterest />

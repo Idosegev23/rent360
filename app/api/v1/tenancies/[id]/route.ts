@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireOrg } from '../../../../../lib/api/org-context'
+import { requireOrg, capabilitiesOf } from '../../../../../lib/api/org-context'
 import { computeMatchesInBackground } from '../../../../../lib/matching/orchestrator'
 import { logActivity } from '../../../../../lib/activity/log'
 
@@ -21,6 +21,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   // Commission update (collected / pending / waived / amount) — no re-rent side effects.
   if (body.commission_status || body.commission_amount != null) {
+    if (!(await capabilitiesOf(ctx)).includes('commissions.manage')) {
+      return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'רק הנהלה יכולה לעדכן עמלות' } }, { status: 403 })
+    }
     const upd: Record<string, unknown> = {}
     if (body.commission_status && ['pending', 'collected', 'waived'].includes(body.commission_status)) {
       upd.commission_status = body.commission_status
@@ -28,6 +31,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     if (body.commission_amount != null) upd.commission_amount = body.commission_amount
     await sb.from('tenancies').update(upd).eq('id', ten.id).eq('org_id', orgId)
+    // Mirror the payment status onto the deal board row (only if that row exists — it is created on first edit there).
+    if (upd.commission_status && ten.property_id) {
+      await sb.from('property_deals').update({
+        payment_status: upd.commission_status,
+        collected_at: upd.commission_status === 'collected' ? new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jerusalem' }) : null,
+      }).eq('org_id', orgId).eq('property_id', ten.property_id)
+    }
     return NextResponse.json({ ok: true })
   }
 

@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   Settings,
   Send,
-  ListChecks,
   Target,
   Archive,
   UserCog,
@@ -23,21 +22,24 @@ import {
   ClipboardList,
   KeyRound,
   History,
+  Table2,
 } from 'lucide-react'
 
-type Me = { name: string | null; email: string | null; google: { connected: boolean; email: string | null } }
+type Me = { name: string | null; email: string | null; capabilities?: string[]; google: { connected: boolean; email: string | null } }
 
 type NavLink = {
   href: string
   label: string
   Icon: React.ComponentType<{ size?: number }>
   badge?: number | string
+  /** Hidden for staff without this capability (lib/auth/permissions.ts). */
+  cap?: string
 }
 
 const main: NavLink[] = [
   { href: '/dashboard',            label: 'דשבורד',         Icon: LayoutDashboard },
-  { href: '/action',               label: 'מה לעשות',        Icon: ListChecks },
   { href: '/board',                label: 'לוח בקרה',        Icon: Target },
+  { href: '/deals',                label: 'לוח עסקאות',      Icon: Table2 },
   { href: '/pipeline',             label: 'צינור עסקאות',    Icon: GitBranch },
   { href: '/tasks',                label: 'משימות',          Icon: CheckSquare },
   { href: '/meetings',             label: 'פגישות',          Icon: CalendarDays },
@@ -47,15 +49,15 @@ const main: NavLink[] = [
   { href: '/rented',               label: 'הושכרו על ידינו',  Icon: KeyRound },
   { href: '/renters',              label: 'שוכרים',          Icon: Users },
   { href: '/team',                 label: 'צוות',            Icon: UserCog },
-  { href: '/outreach',             label: 'שליחה',           Icon: Send },
-  { href: '/outreach/renter-sends', label: 'יומן שליחות',    Icon: ClipboardList },
-  { href: '/renewals',             label: 'לידי חידוש',      Icon: History },
+  { href: '/outreach',             label: 'שליחה',           Icon: Send, cap: 'outreach.send' },
+  { href: '/outreach/renter-sends', label: 'יומן שליחות',    Icon: ClipboardList, cap: 'outreach.send' },
+  { href: '/renewals',             label: 'לידי חידוש',      Icon: History, cap: 'outreach.send' },
   { href: '/inbox',                label: 'שיחות',           Icon: Inbox },
 ]
 
 const secondary: NavLink[] = [
   { href: '/commissions', label: 'עמלות', Icon: Coins },
-  { href: '/reports', label: 'דוחות', Icon: BarChart3 },
+  { href: '/reports', label: 'דוחות', Icon: BarChart3, cap: 'reports.view' },
   { href: '/admin', label: 'הגדרות', Icon: Settings },
 ]
 
@@ -96,6 +98,9 @@ export default function Sidebar() {
     window.location.href = '/auth/login'
   }
 
+  // While /api/me is loading nothing is hidden (no flicker for managers); API guards are the real gate.
+  const allowed = (item: NavLink) => !item.cap || !me?.capabilities || me.capabilities.includes(item.cap)
+
   const displayName = me?.name || me?.email || 'rent360'
   const displaySub = me?.email || (me ? 'admin' : '…')
   const initials = me?.name
@@ -119,7 +124,7 @@ export default function Sidebar() {
       </div>
 
       <div className="nav-section-label">ראשי</div>
-      {main.map(item => {
+      {main.filter(allowed).map(item => {
         const active = isActive(pathname, item.href)
         const badge = item.href === '/renewals' ? renewalsDue : item.badge
         return (
@@ -136,7 +141,7 @@ export default function Sidebar() {
       })}
 
       <div className="nav-section-label">תצוגה</div>
-      {secondary.map(item => {
+      {secondary.filter(allowed).map(item => {
         const active = isActive(pathname, item.href)
         return (
           <Link
