@@ -6,6 +6,7 @@ const PatchBody = z.object({
   title: z.string().min(1).optional(),
   notes: z.string().nullable().optional(),
   assignee_user_id: z.string().uuid().nullable().optional(),
+  follower_user_id: z.string().uuid().nullable().optional(),
   status: z.enum(['open', 'in_progress', 'done', 'cancelled']).optional(),
   priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
   due_at: z.string().datetime().nullable().optional(),
@@ -42,6 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (b.title !== undefined) update.title = b.title
   if (b.notes !== undefined) update.notes = b.notes
   if (b.assignee_user_id !== undefined) update.assignee_user_id = b.assignee_user_id
+  if (b.follower_user_id !== undefined) update.follower_user_id = b.follower_user_id
   if (b.priority !== undefined) update.priority = b.priority
   if (b.recurrence !== undefined) update.recurrence = b.recurrence
   if (b.due_at !== undefined) update.due_at = b.due_at

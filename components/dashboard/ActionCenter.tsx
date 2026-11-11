@@ -59,7 +59,7 @@ function useActionData() {
   return { data, loading, error, load }
 }
 
-export default function ActionCenter({ variant = 'compact' }: { variant?: 'compact' | 'full' }) {
+export default function ActionCenter({ variant = 'compact', hideLanes = [] }: { variant?: 'compact' | 'full'; hideLanes?: LaneKey[] }) {
   const { data, loading, error, load } = useActionData()
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   async function dismiss(threadId?: string) {
@@ -68,7 +68,7 @@ export default function ActionCenter({ variant = 'compact' }: { variant?: 'compa
     try { await fetch('/api/v1/action-center/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: threadId }) }) } catch {/* optimistic */}
   }
   return variant === 'full'
-    ? <FullView data={data} loading={loading} error={error} reload={load} dismissed={dismissed} onDismiss={dismiss} />
+    ? <FullView data={data} loading={loading} error={error} reload={load} dismissed={dismissed} onDismiss={dismiss} hideLanes={hideLanes} />
     : <CompactView data={data} loading={loading} error={error} reload={load} dismissed={dismissed} onDismiss={dismiss} />
 }
 
@@ -156,7 +156,7 @@ function CompactView({ data, loading, error, reload, dismissed, onDismiss }: Vie
 }
 
 /* ---------------- Full (dedicated /action page) ---------------- */
-function FullView({ data, loading, error, reload, dismissed, onDismiss }: ViewProps) {
+function FullView({ data, loading, error, reload, dismissed, onDismiss, hideLanes }: ViewProps & { hideLanes: LaneKey[] }) {
   return (
     <section style={{ marginBottom: 24 }} dir="rtl">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -179,7 +179,7 @@ function FullView({ data, loading, error, reload, dismissed, onDismiss }: ViewPr
 
       {data && data.total > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {LANES.map(lane => {
+          {LANES.filter(lane => !hideLanes.includes(lane.key)).map(lane => {
             const l = data.lanes[lane.key]
             if (!l || l.count === 0) return null
             const Icon = lane.icon

@@ -7,6 +7,7 @@ import {
   Send, Copy, ExternalLink, CheckCircle2, Clock, MailOpen, Inbox as InboxIcon,
 } from 'lucide-react'
 import Topbar from '../../components/shell/Topbar'
+import ExportButton from '../../components/ui/ExportButton'
 
 type Renter = {
   id: string
@@ -268,6 +269,34 @@ function RenterPool({ refreshKey = 0 }: { refreshKey?: number }) {
             </button>
           ))}
         </div>
+        <ExportButton
+          disabled={renters.length === 0}
+          getSpec={() => ({
+            filename: 'שוכרים',
+            rows: renters,
+            columns: [
+              { header: 'שם', value: (r: Renter) => [r.first_name, r.last_name].filter(Boolean).join(' '), width: 20 },
+              { header: 'טלפון', value: (r: Renter) => r.phone, width: 16 },
+              { header: 'אימייל', value: (r: Renter) => r.email, width: 24 },
+              { header: 'תקציב מינימום', value: (r: Renter) => r.budget_min, numFmt: '₪#,##0', width: 14 },
+              { header: 'תקציב מקסימום', value: (r: Renter) => r.budget_max, numFmt: '₪#,##0', width: 14 },
+              { header: 'ערים', value: (r: Renter) => (r.preferred_cities || []).join(', '), width: 24 },
+              { header: 'חדרים', value: (r: Renter) => r.preferred_rooms, width: 8 },
+              { header: 'תאריך כניסה', value: (r: Renter) => (r.move_in_date ? new Date(r.move_in_date) : null), numFmt: 'dd/mm/yyyy', width: 14 },
+              { header: 'נפשות', value: (r: Renter) => r.household_size, width: 8 },
+              { header: 'ילדים', value: (r: Renter) => r.has_children, width: 8 },
+              { header: 'בעלי חיים', value: (r: Renter) => r.has_pets, width: 10 },
+              { header: 'מעשנים', value: (r: Renter) => r.smokers, width: 10 },
+              { header: 'תלושי שכר', value: (r: Renter) => r.has_payslips, width: 10 },
+              { header: 'צ׳קים לביטחון', value: (r: Renter) => r.has_security_checks, width: 12 },
+              { header: 'ערבים', value: (r: Renter) => r.has_guarantors, width: 8 },
+              { header: 'התאמות', value: (r: Renter) => r.matches?.total ?? 0, width: 10 },
+              { header: 'ציון התאמה מוביל', value: (r: Renter) => r.matches?.topScore, width: 12 },
+              { header: 'שאלונים שמולאו', value: (r: Renter) => r.submissions_count, width: 12 },
+              { header: 'נוצר', value: (r: Renter) => new Date(r.created_at), numFmt: 'dd/mm/yyyy', width: 12 },
+            ],
+          })}
+        />
         {vetted === 'false' && (
           <div className="flex items-center gap-2">
             {sendQMsg && <span className="text-xs text-gray-500">{sendQMsg}</span>}

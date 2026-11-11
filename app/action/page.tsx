@@ -1,15 +1,6 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import Topbar from '../../components/shell/Topbar'
-import ActionCenter from '../../components/dashboard/ActionCenter'
-
+// "מה לעשות עכשיו" and "משימות" are one screen now: the conversation signals live under the "מהשיחות" tab.
 export default function ActionPage() {
-  return (
-    <>
-      <Topbar crumb="בית" title="מה לעשות עכשיו" />
-      <div className="page-wrap">
-        <ActionCenter variant="full" />
-      </div>
-    </>
-  )
+  redirect('/tasks?tab=signals')
 }

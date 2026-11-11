@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Plus, MapPin, Clock, User as UserIcon, X, CalendarDays } from 'lucide-react'
 import { DateTimeField } from '@/components/ui/DateTimePicker'
+import ExportButton from '@/components/ui/ExportButton'
 
 type Meeting = {
   id: string
@@ -100,9 +101,28 @@ export default function MeetingsPage() {
     <main className="pb-20" dir="rtl">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">פגישות</h1>
-        <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white">
-          <Plus className="h-4 w-4" /> פגישה חדשה
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            disabled={meetings.length === 0}
+            getSpec={() => ({
+              filename: 'פגישות',
+              rows: meetings,
+              columns: [
+                { header: 'פגישה', value: (m: Meeting) => m.title, width: 36 },
+                { header: 'התחלה', value: (m: Meeting) => new Date(m.starts_at), numFmt: 'dd/mm/yyyy hh:mm', width: 18 },
+                { header: 'סיום', value: (m: Meeting) => new Date(m.ends_at), numFmt: 'dd/mm/yyyy hh:mm', width: 18 },
+                { header: 'אחראי', value: (m: Meeting) => nameOf(m.owner_user_id), width: 16 },
+                { header: 'מקום', value: (m: Meeting) => m.location, width: 24 },
+                { header: 'סטטוס', value: (m: Meeting) => ({ confirmed: 'מאושרת', cancelled: 'בוטלה', tentative: 'זמנית' }[m.status] ?? m.status), width: 10 },
+                { header: 'תוצאה', value: (m: Meeting) => OUTCOMES.find((o) => o.key === m.outcome)?.label ?? null, width: 14 },
+                { header: 'הערות', value: (m: Meeting) => m.notes, width: 40 },
+              ],
+            })}
+          />
+          <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 rounded-md bg-brand-primary px-4 py-2 text-sm font-medium text-white">
+            <Plus className="h-4 w-4" /> פגישה חדשה
+          </button>
+        </div>
       </div>
 
       {msg && <div className="surface-card mb-3 p-2 text-sm text-gray-700">{msg}</div>}

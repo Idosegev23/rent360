@@ -24,6 +24,8 @@ import Link from 'next/link';
 import { type ExtendedProperty } from '../../types/property';
 import PropertyCard from '../PropertyCard';
 import Topbar from '../shell/Topbar';
+import ExportButton from '../ui/ExportButton';
+import { priceIncludesLabel } from '../../lib/data/property-costs';
 
 interface PaginationInfo {
   page: number;
@@ -104,26 +106,58 @@ export default function ModernPropertiesPage({
   const [allCities, setAllCities] = useState<string[]>([]);
   const [allNeighborhoods, setAllNeighborhoods] = useState<string[]>([]);
 
+  // The query for a page of results; the Excel export reuses it with a big limit so it exports
+  // every row matching the current filters, not just the page on screen.
+  const filterParams = (page: number, limit: number, currentFilters: FilterState) => {
+    const searchParams = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
+    if (currentFilters.search) searchParams.set('search', currentFilters.search);
+    if (currentFilters.city) searchParams.set('city', currentFilters.city);
+    if (currentFilters.neighborhood) searchParams.set('neighborhood', currentFilters.neighborhood);
+    if (currentFilters.priceMin) searchParams.set('price_min', currentFilters.priceMin);
+    if (currentFilters.priceMax) searchParams.set('price_max', currentFilters.priceMax);
+    if (currentFilters.roomsMin) searchParams.set('rooms_min', currentFilters.roomsMin);
+    if (currentFilters.roomsMax) searchParams.set('rooms_max', currentFilters.roomsMax);
+    if (currentFilters.isActive) searchParams.set('is_active', currentFilters.isActive);
+    if (currentFilters.amenities.length > 0) searchParams.set('amenities', currentFilters.amenities.join(','));
+    if (currentFilters.isBrokerage) searchParams.set('is_brokerage', currentFilters.isBrokerage);
+    if (extraParams) for (const [k, v] of Object.entries(extraParams)) searchParams.set(k, v);
+    return searchParams;
+  };
+
+  const exportSpec = async () => {
+    const res = await fetch(`${apiEndpoint}?${filterParams(1, 5000, filters)}`);
+    if (!res.ok) throw new Error('export fetch failed');
+    const data: PropertiesResponse = await res.json();
+    return {
+      filename: pageTitle,
+      rows: data.properties,
+      columns: [
+        { header: 'כתובת', value: (p: ExtendedProperty) => p.street || p.address || p.title, width: 28 },
+        { header: 'עיר', value: (p: ExtendedProperty) => p.city, width: 16 },
+        { header: 'שכונה', value: (p: ExtendedProperty) => p.neighborhood, width: 16 },
+        { header: 'שם בעל הדירה', value: (p: ExtendedProperty) => p.contact_name, width: 18 },
+        { header: 'טלפון בעל הדירה', value: (p: ExtendedProperty) => p.contact_phone, width: 16 },
+        { header: 'חדרים', value: (p: ExtendedProperty) => p.rooms, width: 8 },
+        { header: 'מ״ר', value: (p: ExtendedProperty) => p.sqm, width: 8 },
+        { header: 'קומה', value: (p: ExtendedProperty) => p.floor, width: 8 },
+        { header: 'מחיר מבוקש', value: (p: ExtendedProperty) => p.price, numFmt: '₪#,##0', width: 14 },
+        { header: 'ארנונה', value: (p: ExtendedProperty) => p.arnona_monthly, numFmt: '₪#,##0', width: 10 },
+        { header: 'ועד בית', value: (p: ExtendedProperty) => p.vaad_bayit_monthly, numFmt: '₪#,##0', width: 10 },
+        { header: 'המחיר כולל', value: (p: ExtendedProperty) => priceIncludesLabel(p.price_includes), width: 22 },
+        { header: 'מצב הדירה', value: (p: ExtendedProperty) => p.condition, width: 14 },
+        { header: 'פנויה מתאריך', value: (p: ExtendedProperty) => (p.evacuation_date || p.available_from ? new Date((p.evacuation_date || p.available_from) as string) : null), numFmt: 'dd/mm/yyyy', width: 14 },
+        { header: 'פעילה', value: (p: ExtendedProperty) => p.is_active, width: 8 },
+        { header: 'מקור', value: (p: ExtendedProperty) => p.source, width: 14 },
+        { header: 'נוספה', value: (p: ExtendedProperty) => new Date(p.created_at), numFmt: 'dd/mm/yyyy', width: 12 },
+      ],
+    };
+  };
+
   // Fetch properties function
   const fetchProperties = async (page: number = 1, currentFilters: FilterState = filters) => {
     setLoading(true);
     try {
-      const searchParams = new URLSearchParams({
-        page: page.toString(),
-        limit: pagination.limit.toString()
-      });
-
-      if (currentFilters.search) searchParams.set('search', currentFilters.search);
-      if (currentFilters.city) searchParams.set('city', currentFilters.city);
-      if (currentFilters.neighborhood) searchParams.set('neighborhood', currentFilters.neighborhood);
-      if (currentFilters.priceMin) searchParams.set('price_min', currentFilters.priceMin);
-      if (currentFilters.priceMax) searchParams.set('price_max', currentFilters.priceMax);
-      if (currentFilters.roomsMin) searchParams.set('rooms_min', currentFilters.roomsMin);
-      if (currentFilters.roomsMax) searchParams.set('rooms_max', currentFilters.roomsMax);
-      if (currentFilters.isActive) searchParams.set('is_active', currentFilters.isActive);
-      if (currentFilters.amenities.length > 0) searchParams.set('amenities', currentFilters.amenities.join(','));
-      if (currentFilters.isBrokerage) searchParams.set('is_brokerage', currentFilters.isBrokerage);
-      if (extraParams) for (const [k, v] of Object.entries(extraParams)) searchParams.set(k, v);
+      const searchParams = filterParams(page, pagination.limit, currentFilters);
 
       const response = await fetch(`${apiEndpoint}?${searchParams}`);
       if (!response.ok) throw new Error('Failed to fetch properties');
@@ -236,9 +270,12 @@ export default function ModernPropertiesPage({
         crumb={`בית · ${pageTitle}`}
         title={pageTitle}
         action={
-          <Link href="/properties/new" className="btn btn-brand">
-            <Plus size={14} /> נכס חדש
-          </Link>
+          <div className="flex items-center gap-2">
+            <ExportButton disabled={totalProperties === 0} getSpec={exportSpec} />
+            <Link href="/properties/new" className="btn btn-brand">
+              <Plus size={14} /> נכס חדש
+            </Link>
+          </div>
         }
       />
       <div className="page-wrap space-y-6">
