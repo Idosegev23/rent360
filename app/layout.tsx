@@ -1,28 +1,18 @@
 import '../styles/globals.css'
 import Providers from './providers'
 import type { Metadata, Viewport } from 'next'
-import { Assistant, Frank_Ruhl_Libre, JetBrains_Mono } from 'next/font/google'
 
-const assistant = Assistant({
-  subsets: ['hebrew', 'latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-ui',
-  display: 'swap',
-})
+// Fonts load straight from Google Fonts. next/font (Next 14) can no longer parse Google's font URLs
+// (they dropped the file extension), which fails every production build. The CSS variables below
+// keep the names the stylesheet and Tailwind config already use.
+const FONTS_HREF =
+  'https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&family=Frank+Ruhl+Libre:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap'
 
-const frankRuhl = Frank_Ruhl_Libre({
-  subsets: ['hebrew', 'latin'],
-  weight: ['300', '400', '500', '700', '900'],
-  variable: '--font-display',
-  display: 'swap',
-})
-
-const jetMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-mono',
-  display: 'swap',
-})
+const fontVars = {
+  '--font-ui': "'Assistant'",
+  '--font-display': "'Frank Ruhl Libre'",
+  '--font-mono': "'JetBrains Mono'",
+} as React.CSSProperties
 
 export const metadata: Metadata = {
   title: 'rent360 — real estate ops',
@@ -39,7 +29,12 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl" className={`${assistant.variable} ${frankRuhl.variable} ${jetMono.variable}`}>
+    <html lang="he" dir="rtl" style={fontVars}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="stylesheet" href={FONTS_HREF} />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>
