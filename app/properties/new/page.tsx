@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { uploadPropertyImage } from '../../../lib/storage'
 import { useAddressSearch } from '../../../lib/hooks/useAddressSearch'
+import { PRICE_INCLUDES_OPTIONS, CONDITION_OPTIONS } from '../../../lib/data/property-costs'
 import { useDraftAutosave, loadDraft, clearDraft } from '../../../lib/hooks/useDraftAutosave'
 import {
   ArrowRight, User, Phone, MapPin, Home, Ruler, Building, Calendar, Camera,
@@ -18,6 +19,8 @@ type Amenities = {
   airConditioner: boolean
   storage: boolean
   mamad: boolean
+  // מקלט בבניין — the same `shelter` key the renter matcher reads.
+  shelter: boolean
   // Same keys the property page toggles and the matcher reads (amenities.divided / amenities.garden).
   divided: boolean
   garden: boolean
@@ -30,6 +33,7 @@ const AMENITY_LABELS: Record<keyof Amenities, string> = {
   airConditioner: 'מזגן',
   storage: 'מחסן',
   mamad: 'ממ"ד',
+  shelter: 'מקלט בבניין',
   divided: 'דירה מחולקת',
   garden: 'חצר',
 }
@@ -59,6 +63,10 @@ type FormState = {
   rooms: string
   sqm: string
   price: string
+  condition: string
+  arnona_monthly: string
+  vaad_bayit_monthly: string
+  price_includes: string[]
   available_from: string
   description: string
   pets_allowed: boolean
@@ -76,6 +84,10 @@ const INITIAL_FORM: FormState = {
   rooms: '',
   sqm: '',
   price: '',
+  condition: '',
+  arnona_monthly: '',
+  vaad_bayit_monthly: '',
+  price_includes: [],
   available_from: '',
   description: '',
   pets_allowed: false,
@@ -89,6 +101,7 @@ const INITIAL_AMENITIES: Amenities = {
   airConditioner: false,
   storage: false,
   mamad: false,
+  shelter: false,
   divided: false,
   garden: false,
 }
@@ -112,7 +125,8 @@ export default function NewPropertyPage() {
       const ageLabel = ageMin < 1 ? 'פחות מדקה' : ageMin === 1 ? 'דקה' : `${ageMin} דקות`
       const yes = window.confirm(`נמצאה טיוטה שמורה מלפני ${ageLabel}. לטעון אותה?`)
       if (yes) {
-        setForm(saved.form)
+        // Merge over the defaults: a draft saved before the cost fields existed lacks those keys.
+        setForm({ ...INITIAL_FORM, ...saved.form })
         // Merge over the defaults: a draft saved before a new amenity existed lacks that key.
         if (saved.amenities) setAmenities({ ...INITIAL_AMENITIES, ...saved.amenities })
         setDraftRestored(true)
@@ -227,6 +241,10 @@ export default function NewPropertyPage() {
           rooms: form.rooms !== '' ? Number(form.rooms) : undefined,
           sqm: form.sqm !== '' ? Number(form.sqm) : undefined,
           price: Number(form.price),
+          condition: form.condition || undefined,
+          arnona_monthly: form.arnona_monthly !== '' ? Number(form.arnona_monthly) : undefined,
+          vaad_bayit_monthly: form.vaad_bayit_monthly !== '' ? Number(form.vaad_bayit_monthly) : undefined,
+          price_includes: form.price_includes,
           available_from: form.available_from || undefined,
           description: form.description.trim() || undefined,
           amenities,
@@ -412,6 +430,49 @@ export default function NewPropertyPage() {
                 className="input"
                 required
               />
+            </Field>
+            <Field label="ארנונה לחודש (₪)">
+              <input
+                type="number"
+                min="0"
+                value={form.arnona_monthly}
+                onChange={e => setForm(v => ({ ...v, arnona_monthly: e.target.value }))}
+                placeholder="450"
+                className="input"
+              />
+            </Field>
+            <Field label="ועד בית לחודש (₪)">
+              <input
+                type="number"
+                min="0"
+                value={form.vaad_bayit_monthly}
+                onChange={e => setForm(v => ({ ...v, vaad_bayit_monthly: e.target.value }))}
+                placeholder="120"
+                className="input"
+              />
+            </Field>
+            <Field label="מצב הדירה">
+              <select value={form.condition} onChange={e => setForm(v => ({ ...v, condition: e.target.value }))} className="input">
+                <option value="">לא צוין</option>
+                {CONDITION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Field>
+            <Field label="המחיר כולל" className="sm:col-span-3" hint="מה כבר כלול בשכירות המבוקשת">
+              <div className="flex flex-wrap gap-2">
+                {PRICE_INCLUDES_OPTIONS.map(o => {
+                  const on = form.price_includes.includes(o.key)
+                  return (
+                    <button
+                      key={o.key}
+                      type="button"
+                      onClick={() => setForm(v => ({ ...v, price_includes: on ? v.price_includes.filter(k => k !== o.key) : [...v.price_includes, o.key] }))}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition ${on ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      {on && <Check className="me-1 inline h-3.5 w-3.5" />}{o.label}
+                    </button>
+                  )
+                })}
+              </div>
             </Field>
             <Field label="תאריך כניסה" className="sm:col-span-2">
               <input

@@ -15,7 +15,7 @@ const MAX_RESULTS = 30
 const CANDIDATE_CAP = 1500 // bound the on-the-fly scoring work
 
 // Same fields scoreMatch needs, minus `embedding`, plus display fields.
-const RENTER_COLS = 'id, preferred_cities, preferred_neighborhoods, preferred_rooms, rooms_flexible, min_sqm, floor_min, floor_max, top_floor_preference, condition_preference, budget_min, budget_max, budget_flexibility, vaad_bayit_max, arnona_max, move_in_date, move_in_flexible, has_pets, smokers, household_size, has_children, children_count, preferences, match_weights'
+const RENTER_COLS = 'id, preferred_cities, preferred_neighborhoods, preferred_rooms, preferred_rooms_min, preferred_rooms_max, rooms_flexible, min_sqm, floor_min, floor_max, top_floor_preference, condition_preference, budget_min, budget_max, budget_flexibility, vaad_bayit_max, arnona_max, move_in_date, move_in_date_to, move_in_flexible, has_pets, smokers, household_size, has_children, children_count, preferences, match_weights'
 const PROP_COLS = 'id, org_id, city, neighborhood, street, address, price, rooms, sqm, floor, amenities, evacuation_date, available_from, pets_allowed, smokers_allowed, is_active, title, images, contact_name, contact_phone, initial_message_sent'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

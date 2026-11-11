@@ -7,6 +7,14 @@ import { embedInBackground, embedPropertyIfChanged } from '../../../../../lib/ai
 import { improveTextOrFallback } from '../../../../../lib/ai/text-improve'
 import { generatePersonalizationInBackground } from '../../../../../lib/ai/property-vision'
 import { computeMatchesInBackground } from '../../../../../lib/matching/orchestrator'
+import { normalizePriceIncludes } from '../../../../../lib/data/property-costs'
+
+/** Non-negative whole shekels, or null when empty/invalid. */
+function moneyOrNull(v: unknown): number | null {
+  if (v === undefined || v === null || v === '') return null
+  const n = Math.round(Number(v))
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
 
 /**
  * Employee-facing endpoint to manually add a property the company has already
@@ -83,6 +91,11 @@ export async function POST(req: NextRequest) {
     evacuation_date: body.evacuation_date || body.available_from || null,
     amenities: typeof body.amenities === 'object' && body.amenities ? body.amenities : {},
     images: Array.isArray(body.images) ? body.images.filter((u: unknown) => typeof u === 'string' && u.length > 0) : [],
+    condition: body.condition ? String(body.condition).trim().slice(0, 60) : null,
+    arnona_monthly: moneyOrNull(body.arnona_monthly),
+    vaad_bayit_monthly: moneyOrNull(body.vaad_bayit_monthly),
+    // Left null when empty so the insert doesn't touch the 0042 columns unless the employee filled them.
+    price_includes: normalizePriceIncludes(body.price_includes).length ? normalizePriceIncludes(body.price_includes) : null,
     pets_allowed: typeof body.pets_allowed === 'boolean' ? body.pets_allowed : null,
     smokers_allowed: typeof body.smokers_allowed === 'boolean' ? body.smokers_allowed : null,
     source: 'manual_employee',

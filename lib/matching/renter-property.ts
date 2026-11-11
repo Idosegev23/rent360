@@ -23,6 +23,8 @@ export type RenterRow = {
   preferred_cities: unknown            // jsonb — array of strings
   preferred_neighborhoods: unknown     // jsonb — array of strings (optional)
   preferred_rooms: number | null
+  preferred_rooms_min?: number | null   // range; when set it wins over preferred_rooms
+  preferred_rooms_max?: number | null
   rooms_flexible: boolean | null
   min_sqm: number | null
   floor_min: number | null
@@ -34,7 +36,8 @@ export type RenterRow = {
   budget_flexibility: number | null     // %, e.g. 10 means allow +10% over budget_max
   vaad_bayit_max: number | null
   arnona_max: number | null
-  move_in_date: string | null           // ISO date
+  move_in_date: string | null           // ISO date; start of the acceptable window
+  move_in_date_to?: string | null       // ISO date; end of the window (null = a single date)
   move_in_flexible: boolean | null
   has_pets: boolean | null
   smokers: boolean | null
@@ -361,6 +364,23 @@ function scoreNeighborhood(renter: RenterRow, property: PropertyRow, weight: num
 }
 
 function scoreRooms(renter: RenterRow, property: PropertyRow, weight: number): DimensionResult {
+  // Range ("3 עד 5 חדרים"): inside it is a full match, outside it the penalty grows with the gap.
+  const rMin = renter.preferred_rooms_min ?? null
+  const rMax = renter.preferred_rooms_max ?? null
+  if (rMin != null || rMax != null) {
+    if (property.rooms == null) {
+      return { weight, raw: 0.5, weighted: 0.5 * weight, note: 'חסר נתון חדרים בנכס', applies: false }
+    }
+    const lo = rMin ?? rMax as number
+    const hi = rMax ?? rMin as number
+    const gap = property.rooms < lo ? lo - property.rooms : property.rooms > hi ? property.rooms - hi : 0
+    if (gap === 0) return { weight, raw: 1, weighted: weight, note: `${property.rooms} חדרים — בטווח ${lo}–${hi}` }
+    if (renter.rooms_flexible && gap <= 0.5) {
+      return { weight, raw: 0.85, weighted: 0.85 * weight, note: `${property.rooms} חדרים — בטווח הגמישות` }
+    }
+    if (gap <= 1) return { weight, raw: 0.55, weighted: 0.55 * weight, note: `${property.rooms} חדרים — מחוץ לטווח ${lo}–${hi} ב-${gap}` }
+    return { weight, raw: 0.2, weighted: 0.2 * weight, note: `${property.rooms} חדרים — שונה משמעותית מהטווח ${lo}–${hi}` }
+  }
   if (renter.preferred_rooms == null) {
     return { weight, raw: 0, weighted: 0, note: 'לא ביקש מספר חדרים', applies: false }
   }
@@ -426,8 +446,21 @@ function scoreAmenitiesSplit(
   const mustItems: Array<{ key: string; label: string; level: 'must'; has: boolean }> = []
   const niceItems: Array<{ key: string; label: string; level: 'nice'; has: boolean }> = []
 
+  // "מרחב מוגן": one question replacing the separate ממ״ד / מקלט rows. kind = mamad | shelter | either | any.
+  // When a kind is chosen it owns both keys, so the legacy mamad/shelter prefs below are skipped ("any" leaves them alone).
+  const protectedKind = prefs && typeof prefs.protected_space === 'object' && prefs.protected_space
+    ? String((prefs.protected_space as Record<string, unknown>).kind ?? 'any')
+    : null
+  const truthy = (v: unknown) => !!v && v !== 'none' && v !== false
+  if (protectedKind === 'mamad') mustItems.push({ key: 'mamad', label: 'ממ״ד', level: 'must', has: truthy(amen.mamad) })
+  else if (protectedKind === 'shelter') mustItems.push({ key: 'shelter', label: 'מקלט בבניין', level: 'must', has: truthy(amen.shelter) })
+  else if (protectedKind === 'either') {
+    mustItems.push({ key: 'protected_space', label: 'ממ״ד או מקלט', level: 'must', has: truthy(amen.mamad) || truthy(amen.shelter) })
+  }
+
   if (prefs) {
     for (const [prefKey, propKey] of Object.entries(AMENITY_KEY_MAP)) {
+      if (protectedKind !== null && protectedKind !== 'any' && (prefKey === 'mamad' || prefKey === 'shelter')) continue
       const pref = prefs[prefKey]
       if (!pref || typeof pref !== 'object') continue
       const level = (pref.level as string | undefined) ?? (pref.wanted === true ? 'nice' : undefined)
@@ -525,7 +558,12 @@ function scoreTiming(renter: RenterRow, property: PropertyRow, weight: number): 
   if (Number.isNaN(desiredTs) || Number.isNaN(availableTs)) {
     return { weight, raw: 0.6, weighted: 0.6 * weight, note: 'בעיה בקריאת תאריכים', applies: false }
   }
-  const diffDays = Math.abs(desiredTs - availableTs) / 86400000
+  // A window ("בין 1.9 ל-15.9"): distance is measured to the nearest edge, so any date inside is a 0-day deviation.
+  const windowEndTs = renter.move_in_date_to ? Date.parse(renter.move_in_date_to) : NaN
+  const hasWindow = !Number.isNaN(windowEndTs) && windowEndTs > desiredTs
+  const diffDays = hasWindow
+    ? (availableTs < desiredTs ? desiredTs - availableTs : availableTs > windowEndTs ? availableTs - windowEndTs : 0) / 86400000
+    : Math.abs(desiredTs - availableTs) / 86400000
   const buffer = renter.move_in_flexible ? 21 : 7
   if (diffDays <= buffer) return { weight, raw: 1, weighted: weight, note: `תזמון תואם (סטייה ${Math.round(diffDays)} ימים)` }
   if (diffDays <= 45) {

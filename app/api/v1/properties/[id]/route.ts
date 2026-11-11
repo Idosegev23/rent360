@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseService } from '../../../../../lib/supabase'
 import { getUserIdFromSupabaseCookie } from '../../../../../lib/auth'
 import { cookies } from 'next/headers'
+import { normalizePriceIncludes } from '../../../../../lib/data/property-costs'
 
 export async function GET(
   req: NextRequest,
@@ -60,13 +61,14 @@ export async function GET(
 
 // Toggle a boolean amenity flag (currently: divided / garden) on a property.
 // Body: { amenity: 'divided' | 'garden', value: boolean }
-const TOGGLEABLE_AMENITIES = new Set(['divided', 'garden'])
+const TOGGLEABLE_AMENITIES = new Set(['divided', 'garden', 'mamad', 'shelter'])
 
 // Editable scalar columns for the "ערוך פרטים" form. Body: { fields: { ...subset } }.
 // Each value is coerced to the column's type; '' / null clears the column (except required ones).
 const EDITABLE_FIELDS: Record<string, 'text' | 'int' | 'num' | 'date' | 'bool'> = {
   title: 'text', city: 'text', neighborhood: 'text', street: 'text', address: 'text',
   price: 'int', rooms: 'num', sqm: 'int', floor: 'int',
+  arnona_monthly: 'int', vaad_bayit_monthly: 'int',
   type: 'text', condition: 'text', status: 'text',
   available_from: 'date', evacuation_date: 'date',
   description: 'text', full_text: 'text',
@@ -139,6 +141,7 @@ export async function PATCH(
         }
         update[key] = val
       }
+      if ('price_includes' in fields) update.price_includes = normalizePriceIncludes(fields.price_includes)
       if (Object.keys(update).length === 0) {
         return NextResponse.json({ error: 'אין שדות לעדכון' }, { status: 400 })
       }
@@ -158,7 +161,7 @@ export async function PATCH(
     // --- Amenity toggle: { amenity, value } ---
     const amenity = String(body.amenity || '')
     if (!TOGGLEABLE_AMENITIES.has(amenity)) {
-      return NextResponse.json({ error: 'amenity must be one of: divided, garden' }, { status: 400 })
+      return NextResponse.json({ error: 'amenity must be one of: divided, garden, mamad, shelter' }, { status: 400 })
     }
     const value = body.value === true
 

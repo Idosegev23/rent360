@@ -56,7 +56,7 @@ const DIM_LABEL: Record<string, string> = {
 }
 
 // Editable boolean amenity flag (divided / garden) — PATCHes /api/v1/properties/[id].
-function FlagToggle({ propertyId, amenity, label, initial }: { propertyId: string; amenity: 'divided' | 'garden'; label: string; initial: boolean }) {
+function FlagToggle({ propertyId, amenity, label, initial }: { propertyId: string; amenity: 'divided' | 'garden' | 'mamad' | 'shelter'; label: string; initial: boolean }) {
   const [on, setOn] = useState(initial)
   const [saving, setSaving] = useState(false)
   async function toggle() {
@@ -330,8 +330,10 @@ export default function PropertyPage({ params }: { params: { id: string } }) {
               <div className="flex flex-wrap gap-2">
                 <FlagToggle propertyId={item.id} amenity="divided" label="דירה מחולקת" initial={!!(item.amenities as any)?.divided} />
                 <FlagToggle propertyId={item.id} amenity="garden" label="חצר / גינה" initial={!!(item.amenities as any)?.garden} />
+                <FlagToggle propertyId={item.id} amenity="mamad" label="ממ״ד" initial={!!(item.amenities as any)?.mamad} />
+                <FlagToggle propertyId={item.id} amenity="shelter" label="מקלט בבניין" initial={!!(item.amenities as any)?.shelter} />
               </div>
-              <p className="text-xs text-gray-500">משפיע על התאמות: «מחולקת» פוסל שוכרים שביקשו דירה שלמה; «חצר» מתאים למי שביקש/ה חצר.</p>
+              <p className="text-xs text-gray-500">משפיע על התאמות: «מחולקת» פוסל שוכרים שביקשו דירה שלמה; «חצר» מתאים למי שביקש/ה חצר; «ממ״ד» ו«מקלט» מתאימים למי שביקש/ה מרחב מוגן.</p>
             </div>
           </div>
 

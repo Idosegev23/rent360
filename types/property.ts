@@ -76,6 +76,12 @@ export interface ExtendedProperty {
   street?: string | null;
   floor?: number | null;
 
+  // Running costs (migration 0042). price_includes = keys the asking rent already covers.
+  condition?: string | null;
+  arnona_monthly?: number | null;
+  vaad_bayit_monthly?: number | null;
+  price_includes?: string[] | null;
+
   // Match aggregates (attached by /api/v1/approved-properties when available)
   matches_count?: number;
   matches_top_score?: number | null;

@@ -10,7 +10,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 type HouseholdType = 'single' | 'couple' | 'family' | 'roommates' | 'students' | 'other'
 type EmploymentStatus = 'employed' | 'self_employed' | 'student' | 'other'
-type ContractLength = '6' | '12' | 'flexible'
+type ContractLength = '12' | '12_plus'
+type SecurityAlt = 'bank_guarantee' | 'bank_check' | 'cash_deposit'
+type ProtectedKind = 'any' | 'mamad' | 'shelter' | 'either'
 type Condition = 'renovated' | 'good' | 'needs-work' | 'any'
 type TopFloorPref = 'any' | 'yes' | 'no'
 type PrefLevel = 'must' | 'nice' | 'any'
@@ -33,6 +35,8 @@ type Preferences = {
   furnished: LevelPref
   aircon: LevelPref
   mamad: RankedPref
+  // שאלה אחת במקום ממ״ד + מקלט נפרדים; המנוע קורא אותה לפני mamad/shelter.
+  protected_space: { kind: ProtectedKind }
   accessibility: AccessPref
   storage: Wanted
   solar_heater: Wanted
@@ -60,7 +64,8 @@ type FormData = {
   arnonaMax: string
   contractLength: ContractLength | ''
 
-  preferredRooms: string
+  roomsMin: string
+  roomsMax: string
   roomsFlexible: boolean
   minSqm: string
   floorMin: string
@@ -69,6 +74,7 @@ type FormData = {
   conditionPreference: Condition
 
   moveInDate: string
+  moveInDateTo: string
   moveInFlexible: boolean | null
 
   householdType: HouseholdType | ''
@@ -85,6 +91,8 @@ type FormData = {
   hasPayslips: boolean | null
   hasSecurityChecks: boolean | null
   hasGuarantors: boolean | null
+  securityAlternatives: SecurityAlt[]
+  noAltSecurity: boolean
 
   notes: string
 }
@@ -109,6 +117,7 @@ const initialPreferences: Preferences = {
   furnished: { level: 'any', amount: 'any' },
   aircon: { level: 'any', amount: 'any' },
   mamad: { level: 'any' },
+  protected_space: { kind: 'any' },
   accessibility: { level: 'any', type: 'any' },
   storage: { wanted: false },
   solar_heater: { wanted: false },
@@ -133,7 +142,8 @@ const initial: FormData = {
   vaadBayitMax: '',
   arnonaMax: '',
   contractLength: '',
-  preferredRooms: '',
+  roomsMin: '',
+  roomsMax: '',
   roomsFlexible: false,
   minSqm: '',
   floorMin: '',
@@ -141,6 +151,7 @@ const initial: FormData = {
   topFloorPreference: 'any',
   conditionPreference: 'any',
   moveInDate: '',
+  moveInDateTo: '',
   moveInFlexible: null,
   householdType: '',
   householdSize: '',
@@ -154,6 +165,8 @@ const initial: FormData = {
   hasPayslips: null,
   hasSecurityChecks: null,
   hasGuarantors: null,
+  securityAlternatives: [],
+  noAltSecurity: false,
   notes: '',
 }
 
@@ -279,7 +292,7 @@ export default function RenterFormPage() {
       case 1:
         return allCities().length > 0 && data.budgetMax.trim() !== ''
       case 2:
-        return data.preferredRooms.trim() !== ''
+        return data.roomsMin.trim() !== ''
       case 3:
         return data.householdType !== '' && data.hasPets !== null && data.smokers !== null
       case 4:
@@ -289,7 +302,9 @@ export default function RenterFormPage() {
           data.employmentStatus !== '' &&
           data.hasPayslips !== null &&
           data.hasSecurityChecks !== null &&
-          data.hasGuarantors !== null
+          data.hasGuarantors !== null &&
+          // בלי ערבים: חייבים לציין מה כן אפשר להביא (ערבות בנקאית / צ׳ק בנקאי / פיקדון), או לסמן שאין כלום.
+          (data.hasGuarantors === true || data.securityAlternatives.length > 0 || data.noAltSecurity)
         )
       default:
         return false
@@ -335,8 +350,8 @@ export default function RenterFormPage() {
           arnona_max: data.arnonaMax,
           contract_length: data.contractLength,
 
-          preferred_rooms: data.preferredRooms,
-          rooms_flexible: data.roomsFlexible,
+          ...roomsPayload(data.roomsMin, data.roomsMax),
+          rooms_flexible: false,
           min_sqm: data.minSqm,
           floor_min: data.floorMin,
           floor_max: data.floorMax,
@@ -344,6 +359,7 @@ export default function RenterFormPage() {
           condition_preference: data.conditionPreference,
 
           move_in_date: data.moveInDate || null,
+          move_in_date_to: data.moveInDateTo && data.moveInDateTo > data.moveInDate ? data.moveInDateTo : null,
           move_in_flexible: data.moveInFlexible,
 
           household_type: data.householdType,
@@ -360,6 +376,7 @@ export default function RenterFormPage() {
           has_payslips: data.hasPayslips,
           has_security_checks: data.hasSecurityChecks,
           has_guarantors: data.hasGuarantors,
+          security_alternatives: data.hasGuarantors === false ? data.securityAlternatives : [],
 
           notes: data.notes.trim(),
         }),
@@ -645,8 +662,7 @@ export default function RenterFormPage() {
                       onChange={v => set('contractLength', v as ContractLength)}
                       options={[
                         { value: '12', label: 'שנה' },
-                        { value: '6', label: '6 חודשים' },
-                        { value: 'flexible', label: 'גמיש' },
+                        { value: '12_plus', label: 'שנה ומעלה' },
                       ]}
                     />
                   </Field>
@@ -660,28 +676,21 @@ export default function RenterFormPage() {
             <StepWrap key="step-2">
               <Card title="איזו דירה?" subtitle="גודל, קומה, מצב ותאריך כניסה">
                 <div className="space-y-5">
-                  <Field label="מספר חדרים רצוי">
+                  <Field label="כמה חדרים?" hint="אפשר לבחור טווח, למשל 3 עד 5. אם רוצים מספר מדויק, בוחרים רק ״מ-״.">
                     <div className="flex gap-3">
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        step="0.5"
-                        dir="ltr"
-                        value={data.preferredRooms}
-                        onChange={e => set('preferredRooms', e.target.value)}
-                        className={inputCls}
-                        placeholder="3.5"
-                      />
+                      <label className="flex-1 text-xs text-brand-inkMuted">מ-
+                        <select value={data.roomsMin} onChange={e => set('roomsMin', e.target.value)} className={`${inputCls} mt-1`}>
+                          <option value="">בחירה</option>
+                          {ROOM_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex-1 text-xs text-brand-inkMuted">עד (לא חובה)
+                        <select value={data.roomsMax} onChange={e => set('roomsMax', e.target.value)} className={`${inputCls} mt-1`}>
+                          <option value="">אותו מספר</option>
+                          {ROOM_OPTIONS.filter(r => data.roomsMin === '' || r > Number(data.roomsMin)).map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </label>
                     </div>
-                    <label className="flex items-center gap-2 mt-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={data.roomsFlexible}
-                        onChange={e => set('roomsFlexible', e.target.checked)}
-                        className="w-4 h-4 accent-brand-primary"
-                      />
-                      <span className="text-sm text-brand-inkMuted">גמיש ±0.5 חדר</span>
-                    </label>
                   </Field>
 
                   <Field label="מ״ר מינימום (לא חובה)">
@@ -723,8 +732,11 @@ export default function RenterFormPage() {
                   </Field>
 
                   <div className="flex gap-3">
-                    <Field label="תאריך כניסה רצוי" className="flex-1">
+                    <Field label="כניסה מתאריך" className="flex-1">
                       <input type="date" value={data.moveInDate} onChange={e => set('moveInDate', e.target.value)} className={inputCls} />
+                    </Field>
+                    <Field label="עד תאריך (לא חובה)" className="flex-1">
+                      <input type="date" min={data.moveInDate || undefined} value={data.moveInDateTo} onChange={e => set('moveInDateTo', e.target.value)} className={inputCls} />
                     </Field>
                   </div>
 
@@ -869,7 +881,18 @@ export default function RenterFormPage() {
                       )
                     }
                   />
-                  <RankedRow label="ממ״ד" level={data.preferences.mamad.level} onLevel={l => setPref('mamad', { level: l })} />
+                  <Field label="מרחב מוגן">
+                    <Choices
+                      value={data.preferences.protected_space.kind}
+                      onChange={v => setPref('protected_space', { kind: v as ProtectedKind })}
+                      options={[
+                        { value: 'any', label: 'לא משנה' },
+                        { value: 'mamad', label: 'ממ״ד' },
+                        { value: 'shelter', label: 'מקלט בבניין' },
+                        { value: 'either', label: 'ממ״ד או מקלט' },
+                      ]}
+                    />
+                  </Field>
                   <RankedRow
                     label="נגישות"
                     level={data.preferences.accessibility.level}
@@ -900,7 +923,6 @@ export default function RenterFormPage() {
                     { key: 'bars' as const, label: 'סורגים' },
                     { key: 'quiet' as const, label: 'שקט' },
                     { key: 'fiber_internet' as const, label: 'אינטרנט סיבים' },
-                    { key: 'shelter' as const, label: 'מקלט בבניין' },
                   ].map(opt => {
                     const wanted = data.preferences[opt.key].wanted
                     return (
@@ -970,7 +992,45 @@ export default function RenterFormPage() {
 
                   <YesNo label="יש תלושי שכר של 3 חודשים אחרונים?" value={data.hasPayslips} onChange={v => set('hasPayslips', v)} />
                   <YesNo label="יכול/ה לתת צ׳קים לביטחון?" value={data.hasSecurityChecks} onChange={v => set('hasSecurityChecks', v)} />
-                  <YesNo label="יש לך ערבים?" value={data.hasGuarantors} onChange={v => set('hasGuarantors', v)} />
+                  <YesNo label="יש לכם ערבים?" value={data.hasGuarantors} onChange={v => set('hasGuarantors', v)} />
+                  {data.hasGuarantors === false && (
+                    <Field label="מה כן אפשר להביא כביטחון?" hint="אפשר לבחור כמה אפשרויות">
+                      <div className="grid grid-cols-1 gap-2">
+                        {([
+                          { key: 'bank_guarantee', label: 'ערבות בנקאית' },
+                          { key: 'bank_check', label: 'צ׳ק בנקאי' },
+                          { key: 'cash_deposit', label: 'פיקדון מזומן' },
+                        ] as Array<{ key: SecurityAlt; label: string }>).map(opt => {
+                          const on = data.securityAlternatives.includes(opt.key)
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => setData(d => ({
+                                ...d,
+                                noAltSecurity: false,
+                                securityAlternatives: on ? d.securityAlternatives.filter(k => k !== opt.key) : [...d.securityAlternatives, opt.key],
+                              }))}
+                              className={`py-2.5 px-3 rounded-md border-2 text-sm font-medium transition-all ${
+                                on ? 'border-brand-primary bg-brand-primarySoft text-brand-primary' : 'border-brand-border bg-brand-surfaceMuted text-brand-inkMuted hover:border-brand-borderStrong'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => setData(d => ({ ...d, noAltSecurity: !d.noAltSecurity, securityAlternatives: [] }))}
+                          className={`py-2.5 px-3 rounded-md border-2 text-sm font-medium transition-all ${
+                            data.noAltSecurity ? 'border-brand-primary bg-brand-primarySoft text-brand-primary' : 'border-brand-border bg-brand-surfaceMuted text-brand-inkMuted hover:border-brand-borderStrong'
+                          }`}
+                        >
+                          אין אפשרות אחרת
+                        </button>
+                      </div>
+                    </Field>
+                  )}
                 </div>
               </Card>
 
@@ -1020,6 +1080,17 @@ export default function RenterFormPage() {
 
 const inputCls = 'w-full px-4 py-3 bg-brand-surfaceMuted border border-brand-border rounded-md text-brand-ink placeholder:text-brand-inkSoft'
 
+// 1 עד 7 בקפיצות של חצי חדר.
+const ROOM_OPTIONS = Array.from({ length: 13 }, (_, i) => 1 + i * 0.5)
+
+/** Range → the three columns the server stores. preferred_rooms stays the midpoint so older readers keep working. */
+function roomsPayload(min: string, max: string) {
+  const lo = Number(min)
+  const hi = max === '' ? lo : Number(max)
+  const [a, b] = lo <= hi ? [lo, hi] : [hi, lo]
+  return { preferred_rooms_min: a, preferred_rooms_max: b, preferred_rooms: (a + b) / 2 }
+}
+
 function StepWrap({ children }: { children: React.ReactNode }) {
   return (
     <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.25 }}>
@@ -1038,10 +1109,11 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
   )
 }
 
-function Field({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({ label, hint, children, className = '' }: { label: string; hint?: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
       <label className="block text-sm font-medium text-brand-ink mb-1.5">{label}</label>
+      {hint && <p className="text-xs text-brand-inkMuted mb-1.5">{hint}</p>}
       {children}
     </div>
   )

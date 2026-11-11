@@ -17,14 +17,25 @@ const arrJoin = (v: unknown) => (Array.isArray(v) ? v.filter(Boolean).join(', ')
 const splitArr = (v: string) => v.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
 
 const LEVELS = [{ v: 'must', t: 'חובה' }, { v: 'nice', t: 'יתרון' }, { v: 'any', t: 'לא משנה' }]
-const RANKED_AMENITIES = [{ k: 'elevator', l: 'מעלית' }, { k: 'yard', l: 'חצר' }, { k: 'mamad', l: 'ממ״ד' }]
+const RANKED_AMENITIES = [{ k: 'elevator', l: 'מעלית' }, { k: 'yard', l: 'חצר' }]
+const PROTECTED_KINDS = [{ v: 'any', t: 'לא משנה' }, { v: 'mamad', t: 'ממ״ד' }, { v: 'shelter', t: 'מקלט בבניין' }, { v: 'either', t: 'ממ״ד או מקלט' }]
+const SECURITY_ALTS = [{ v: 'bank_guarantee', t: 'ערבות בנקאית' }, { v: 'bank_check', t: 'צ׳ק בנקאי' }, { v: 'cash_deposit', t: 'פיקדון מזומן' }]
+const ROOM_OPTIONS = Array.from({ length: 13 }, (_, i) => 1 + i * 0.5)
 const WANTED_AMENITIES = [
   { k: 'storage', l: 'מחסן' }, { k: 'solar_heater', l: 'דוד שמש' }, { k: 'bars', l: 'סורגים' },
-  { k: 'quiet', l: 'שקט' }, { k: 'fiber_internet', l: 'אינטרנט סיבים' }, { k: 'shelter', l: 'מקלט' },
+  { k: 'quiet', l: 'שקט' }, { k: 'fiber_internet', l: 'אינטרנט סיבים' },
 ]
 const PARKING_TYPES = [{ v: 'any', t: 'לא משנה' }, { v: 'private', t: 'פרטית' }, { v: 'shared', t: 'משותפת' }, { v: 'street', t: 'רחוב' }]
 const AMOUNTS = [{ v: 'any', t: 'לא משנה' }, { v: 'none', t: 'אין' }, { v: 'partial', t: 'חלקי' }, { v: 'full', t: 'מלא' }]
 const ACCESS_TYPES = [{ v: 'any', t: 'לא משנה' }, { v: 'no-stairs', t: 'בלי מדרגות' }, { v: 'ramp', t: 'רמפה' }, { v: 'wide-door', t: 'דלת רחבה' }]
+
+/** Rooms range → the columns the server stores; preferred_rooms is the midpoint. Empty min clears all three. */
+function roomsFromRange(min: string, max: string) {
+  if (min === '') return { preferred_rooms_min: '', preferred_rooms_max: '', preferred_rooms: '' }
+  const lo = Number(min), hi = max === '' ? lo : Number(max)
+  const [a, b] = lo <= hi ? [lo, hi] : [hi, lo]
+  return { preferred_rooms_min: a, preferred_rooms_max: b, preferred_rooms: (a + b) / 2 }
+}
 
 function initPrefs(src: any): Record<string, any> {
   const p = (src && typeof src === 'object') ? src : {}
@@ -37,6 +48,8 @@ function initPrefs(src: any): Record<string, any> {
     furnished: { level: lvl('furnished'), amount: p.furnished?.amount ?? 'any' },
     aircon: { level: lvl('aircon'), amount: p.aircon?.amount ?? 'any' },
     mamad: { level: lvl('mamad') },
+    // Legacy renters: a hard ממ״ד requirement carries over; the old shelter nice-to-have stays in the stored prefs untouched.
+    protected_space: { kind: p.protected_space?.kind ?? (p.mamad?.level === 'must' ? 'mamad' : 'any') },
     accessibility: { level: lvl('accessibility'), type: p.accessibility?.type ?? 'any' },
     storage: { wanted: !!p.storage?.wanted },
     solar_heater: { wanted: !!p.solar_heater?.wanted },
@@ -58,9 +71,9 @@ export default function RenterEditDialog({ renter, onSaved }: { renter: Renter; 
     preferred_cities: arrJoin(renter.preferred_cities), preferred_neighborhoods: arrJoin(renter.preferred_neighborhoods),
     budget_min: numStr(renter.budget_min), budget_max: numStr(renter.budget_max), budget_flexibility: numStr(renter.budget_flexibility),
     vaad_bayit_max: numStr(renter.vaad_bayit_max), arnona_max: numStr(renter.arnona_max), contract_length: renter.contract_length ?? '',
-    preferred_rooms: numStr(renter.preferred_rooms), rooms_flexible: renter.rooms_flexible ? 'true' : 'false', min_sqm: numStr(renter.min_sqm),
+    preferred_rooms_min: numStr(renter.preferred_rooms_min ?? renter.preferred_rooms), preferred_rooms_max: numStr(renter.preferred_rooms_max ?? renter.preferred_rooms), rooms_flexible: renter.rooms_flexible ? 'true' : 'false', min_sqm: numStr(renter.min_sqm),
     floor_min: numStr(renter.floor_min), floor_max: numStr(renter.floor_max), top_floor_preference: renter.top_floor_preference ?? 'any',
-    condition_preference: renter.condition_preference ?? 'any', move_in_date: String(renter.move_in_date ?? '').slice(0, 10), move_in_flexible: renter.move_in_flexible ? 'true' : 'false',
+    condition_preference: renter.condition_preference ?? 'any', move_in_date: String(renter.move_in_date ?? '').slice(0, 10), move_in_date_to: String(renter.move_in_date_to ?? '').slice(0, 10), move_in_flexible: renter.move_in_flexible ? 'true' : 'false',
     household_type: renter.household_type ?? '', household_size: numStr(renter.household_size), has_children: triStr(renter.has_children),
     children_count: numStr(renter.children_count), has_pets: triStr(renter.has_pets), smokers: triStr(renter.smokers),
     employment_status: renter.employment_status ?? '', employer: renter.employer ?? '', has_payslips: triStr(renter.has_payslips),
@@ -68,8 +81,9 @@ export default function RenterEditDialog({ renter, onSaved }: { renter: Renter; 
   })
   const [f, setF] = useState(initial)
   const [prefs, setPrefs] = useState<Record<string, any>>(() => initPrefs(renter.preferences))
+  const [secAlts, setSecAlts] = useState<string[]>(() => (Array.isArray(renter.security_alternatives) ? renter.security_alternatives : []))
 
-  function openDialog() { setF(initial()); setPrefs(initPrefs(renter.preferences)); setError(null); setOpen(true) }
+  function openDialog() { setF(initial()); setPrefs(initPrefs(renter.preferences)); setSecAlts(Array.isArray(renter.security_alternatives) ? renter.security_alternatives : []); setError(null); setOpen(true) }
   // All form values are strings ('true'/'false' for the two checkboxes); the server coerces them.
   const set = (k: keyof ReturnType<typeof initial>) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setF(prev => ({ ...prev, [k]: e.target.value }))
@@ -87,6 +101,10 @@ export default function RenterEditDialog({ renter, onSaved }: { renter: Renter; 
         preferred_cities: splitArr(f.preferred_cities),
         preferred_neighborhoods: splitArr(f.preferred_neighborhoods),
         preferences: prefs,
+        // preferred_rooms stays the midpoint of the range so every older reader keeps working.
+        ...roomsFromRange(f.preferred_rooms_min, f.preferred_rooms_max),
+        security_alternatives: f.has_guarantors === 'false' ? secAlts : [],
+        move_in_date_to: f.move_in_date_to && f.move_in_date_to > f.move_in_date ? f.move_in_date_to : '',
       }
       const res = await fetch(`/api/v1/renters/${renter.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -131,14 +149,14 @@ export default function RenterEditDialog({ renter, onSaved }: { renter: Renter; 
                 <Field label="תקציב מקס׳ (₪)"><input type="number" inputMode="numeric" value={f.budget_max} onChange={set('budget_max')} className={inp} /></Field>
                 <Field label="תקציב מינ׳ (₪)"><input type="number" inputMode="numeric" value={f.budget_min} onChange={set('budget_min')} className={inp} /></Field>
                 <Field label="גמישות תקציב (₪)"><input type="number" inputMode="numeric" value={f.budget_flexibility} onChange={set('budget_flexibility')} className={inp} /></Field>
-                <Field label="אורך חוזה"><select value={f.contract_length} onChange={set('contract_length')} className={inp}><option value="">—</option><option value="6">6 חודשים</option><option value="12">שנה</option><option value="flexible">גמיש</option></select></Field>
+                <Field label="אורך חוזה"><select value={f.contract_length} onChange={set('contract_length')} className={inp}><option value="">—</option><option value="12">שנה</option><option value="12_plus">שנה ומעלה</option>{(f.contract_length === '6' || f.contract_length === 'flexible') && <option value={f.contract_length}>{f.contract_length === '6' ? '6 חודשים (ישן)' : 'גמיש (ישן)'}</option>}</select></Field>
                 <Field label="ועד בית מקס׳ (₪)"><input type="number" inputMode="numeric" value={f.vaad_bayit_max} onChange={set('vaad_bayit_max')} className={inp} /></Field>
                 <Field label="ארנונה מקס׳ (₪)"><input type="number" inputMode="numeric" value={f.arnona_max} onChange={set('arnona_max')} className={inp} /></Field>
               </Section>
 
               <Section title="דירה">
-                <Field label="חדרים"><input type="number" inputMode="decimal" step="0.5" value={f.preferred_rooms} onChange={set('preferred_rooms')} className={inp} /></Field>
-                <Field label="גמיש בחדרים"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.rooms_flexible === 'true'} onChange={setBool('rooms_flexible')} /> כן</label></Field>
+                <Field label="חדרים מ-"><select value={f.preferred_rooms_min} onChange={set('preferred_rooms_min')} className={inp}><option value="">—</option>{ROOM_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}</select></Field>
+                <Field label="חדרים עד"><select value={f.preferred_rooms_max} onChange={set('preferred_rooms_max')} className={inp}><option value="">אותו מספר</option>{ROOM_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}</select></Field>
                 <Field label="מ״ר מינ׳"><input type="number" inputMode="numeric" value={f.min_sqm} onChange={set('min_sqm')} className={inp} /></Field>
                 <Field label="קומה מינ׳"><input type="number" inputMode="numeric" value={f.floor_min} onChange={set('floor_min')} className={inp} /></Field>
                 <Field label="קומה מקס׳"><input type="number" inputMode="numeric" value={f.floor_max} onChange={set('floor_max')} className={inp} /></Field>
@@ -147,7 +165,8 @@ export default function RenterEditDialog({ renter, onSaved }: { renter: Renter; 
               </Section>
 
               <Section title="כניסה">
-                <Field label="תאריך כניסה"><input type="date" value={f.move_in_date} onChange={set('move_in_date')} className={inp} /></Field>
+                <Field label="כניסה מתאריך"><input type="date" value={f.move_in_date} onChange={set('move_in_date')} className={inp} /></Field>
+                <Field label="עד תאריך (לא חובה)"><input type="date" min={f.move_in_date || undefined} value={f.move_in_date_to} onChange={set('move_in_date_to')} className={inp} /></Field>
                 <Field label="גמיש בתאריך"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.move_in_flexible === 'true'} onChange={setBool('move_in_flexible')} /> כן</label></Field>
               </Section>
 
@@ -166,6 +185,17 @@ export default function RenterEditDialog({ renter, onSaved }: { renter: Renter; 
                 <Field label="תלושי שכר"><select value={f.has_payslips} onChange={set('has_payslips')} className={inp}><TriOpts /></select></Field>
                 <Field label="צ׳קים לביטחון"><select value={f.has_security_checks} onChange={set('has_security_checks')} className={inp}><TriOpts /></select></Field>
                 <Field label="ערבים"><select value={f.has_guarantors} onChange={set('has_guarantors')} className={inp}><TriOpts /></select></Field>
+                {f.has_guarantors === 'false' && (
+                  <Field label="ביטחון חלופי" wide>
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      {SECURITY_ALTS.map(o => (
+                        <label key={o.v} className="flex items-center gap-1.5">
+                          <input type="checkbox" checked={secAlts.includes(o.v)} onChange={e => setSecAlts(prev => e.target.checked ? [...prev, o.v] : prev.filter(x => x !== o.v))} /> {o.t}
+                        </label>
+                      ))}
+                    </div>
+                  </Field>
+                )}
               </Section>
 
               <Section title="העדפות (חובה / יתרון / לא משנה)">
@@ -187,6 +217,12 @@ export default function RenterEditDialog({ renter, onSaved }: { renter: Renter; 
                 {RANKED_AMENITIES.map(a => (
                   <PrefRow key={a.k} label={a.l} level={prefs[a.k].level} onLevel={v => setPref(a.k, { level: v })} />
                 ))}
+                <div className="sm:col-span-2 flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-sm" style={{ color: 'var(--ink-2)' }}>מרחב מוגן</span>
+                  <select value={prefs.protected_space.kind} onChange={e => setPref('protected_space', { kind: e.target.value })} className={inpSm} style={{ maxWidth: 160 }}>
+                    {PROTECTED_KINDS.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}
+                  </select>
+                </div>
                 <div className="mt-1 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
                   <div className="mb-1 text-xs" style={{ color: 'var(--ink-4)' }}>נחוץ / לא נחוץ:</div>
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">

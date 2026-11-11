@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Pencil, X, Loader2 } from 'lucide-react'
 import { type ExtendedProperty } from '../../types/property'
+import { PRICE_INCLUDES_OPTIONS, CONDITION_OPTIONS, normalizePriceIncludes } from '../../lib/data/property-costs'
 
 /** "ערוך פרטים" — edit the scalar details of a property. PATCHes /api/v1/properties/[id]
  *  with { fields }, which is whitelisted + type-coerced server-side. */
@@ -27,6 +28,9 @@ export default function EditPropertyDialog({
     street: (property.street ?? '') as string,
     address: (property.address ?? '') as string,
     price: property.price != null ? String(property.price) : '',
+    arnona_monthly: property.arnona_monthly != null ? String(property.arnona_monthly) : '',
+    vaad_bayit_monthly: property.vaad_bayit_monthly != null ? String(property.vaad_bayit_monthly) : '',
+    price_includes: normalizePriceIncludes(property.price_includes) as string[],
     rooms: property.rooms != null ? String(property.rooms) : '',
     sqm: property.sqm != null ? String(property.sqm) : '',
     floor: property.floor != null ? String(property.floor) : '',
@@ -98,7 +102,14 @@ export default function EditPropertyDialog({
               <Section title="פרטי הנכס">
                 <Field label="כותרת *" wide><input value={f.title} onChange={set('title')} className={inp} /></Field>
                 <Field label="סוג נכס"><input value={f.type} onChange={set('type')} placeholder="מגורים…" className={inp} /></Field>
-                <Field label="מצב"><input value={f.condition} onChange={set('condition')} placeholder="משופצת…" className={inp} /></Field>
+                <Field label="מצב">
+                  <select value={f.condition} onChange={set('condition')} className={inp}>
+                    <option value="">לא צוין</option>
+                    {CONDITION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {/* Free-text values from scraped/legacy rows stay selectable instead of silently blanking. */}
+                    {f.condition && !CONDITION_OPTIONS.some(o => o.value === f.condition) && <option value={f.condition}>{f.condition}</option>}
+                  </select>
+                </Field>
                 <Field label="סטטוס"><input value={f.status} onChange={set('status')} className={inp} /></Field>
               </Section>
 
@@ -114,6 +125,25 @@ export default function EditPropertyDialog({
                 <Field label="חדרים"><input type="number" inputMode="decimal" step="0.5" min="0" value={f.rooms} onChange={set('rooms')} className={inp} /></Field>
                 <Field label="שטח (מ״ר)"><input type="number" inputMode="numeric" min="0" value={f.sqm} onChange={set('sqm')} className={inp} /></Field>
                 <Field label="קומה"><input type="number" inputMode="numeric" value={f.floor} onChange={set('floor')} className={inp} /></Field>
+              </Section>
+
+              <Section title="עלויות">
+                <Field label="ארנונה לחודש (₪)"><input type="number" inputMode="numeric" min="0" value={f.arnona_monthly} onChange={set('arnona_monthly')} className={inp} /></Field>
+                <Field label="ועד בית לחודש (₪)"><input type="number" inputMode="numeric" min="0" value={f.vaad_bayit_monthly} onChange={set('vaad_bayit_monthly')} className={inp} /></Field>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs" style={{ color: 'var(--ink-4)' }}>המחיר כולל</label>
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    {PRICE_INCLUDES_OPTIONS.map(o => (
+                      <label key={o.key} className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={f.price_includes.includes(o.key)}
+                          onChange={e => setF(prev => ({ ...prev, price_includes: e.target.checked ? [...prev.price_includes, o.key] : prev.price_includes.filter(k => k !== o.key) }))}
+                        /> {o.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </Section>
 
               <Section title="תאריך כניסה">

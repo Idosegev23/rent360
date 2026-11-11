@@ -11,13 +11,13 @@ const SOURCES = new Set(['facebook', 'whatsapp', 'referral', 'manual', 'website'
 
 // ---- Questionnaire fields (editable via the renter edit dialog) ----
 const IDENTITY_FIELDS = new Set(['first_name', 'last_name', 'email'])
-const TEXT_FIELDS = ['first_name', 'last_name', 'email', 'employer', 'notes', 'move_in_date']
+const TEXT_FIELDS = ['first_name', 'last_name', 'email', 'employer', 'notes', 'move_in_date', 'move_in_date_to']
 const INT_FIELDS = ['budget_min', 'budget_max', 'budget_flexibility', 'vaad_bayit_max', 'arnona_max', 'min_sqm', 'floor_min', 'floor_max', 'household_size', 'children_count']
-const NUM_FIELDS = ['preferred_rooms']
+const NUM_FIELDS = ['preferred_rooms', 'preferred_rooms_min', 'preferred_rooms_max']
 const BOOL_FIELDS = ['rooms_flexible', 'move_in_flexible', 'has_children', 'has_pets', 'smokers', 'has_payslips', 'has_security_checks', 'has_guarantors']
 const ARRAY_FIELDS = ['preferred_cities', 'preferred_neighborhoods']
 const ENUM_FIELDS: Record<string, Set<string>> = {
-  contract_length: new Set(['6', '12', 'flexible']),
+  contract_length: new Set(['6', '12', '12_plus', 'flexible']),
   top_floor_preference: new Set(['any', 'yes', 'no']),
   condition_preference: new Set(['renovated', 'good', 'needs-work', 'any']),
   household_type: new Set(['single', 'couple', 'family', 'roommates', 'students', 'other']),
@@ -34,6 +34,8 @@ const asArr = (v: unknown): string[] => Array.isArray(v) ? v.map(x => String(x).
 const PREF_LEVELS = new Set(['must', 'nice', 'any'])
 const PARKING_TYPES = new Set(['any', 'private', 'shared', 'street'])
 const PREF_AMOUNTS = new Set(['none', 'partial', 'full', 'any'])
+const PROTECTED_KINDS = new Set(['any', 'mamad', 'shelter', 'either'])
+const SECURITY_ALTERNATIVES = new Set(['bank_guarantee', 'bank_check', 'cash_deposit'])
 const ACCESS_TYPES = new Set(['any', 'no-stairs', 'ramp', 'wide-door'])
 const RANKED_PREFS = ['elevator', 'yard', 'mamad']
 const WANTED_PREFS = ['storage', 'solar_heater', 'bars', 'quiet', 'fiber_internet', 'shelter']
@@ -48,6 +50,7 @@ function sanitizePreferences(input: unknown): Record<string, unknown> {
   if (p.accessibility) out.accessibility = { level: lvl(p.accessibility), type: ACCESS_TYPES.has(String(p.accessibility.type)) ? p.accessibility.type : 'any' }
   for (const k of WANTED_PREFS) if (p[k]) out[k] = { wanted: !!p[k].wanted }
   if ('divided_ok' in p) out.divided_ok = !!p.divided_ok
+  if (p.protected_space) out.protected_space = { kind: PROTECTED_KINDS.has(String(p.protected_space.kind)) ? p.protected_space.kind : 'any' }
   return out
 }
 
@@ -205,6 +208,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       update[k] = v
     }
     markMatchable(k)
+  }
+  if ('security_alternatives' in body) {
+    // Only meaningful when the renter has no guarantors; the questionnaire sends it empty otherwise.
+    update.security_alternatives = asArr(body.security_alternatives).filter(v => SECURITY_ALTERNATIVES.has(v))
   }
   if ('preferences' in body) { update.preferences = sanitizePreferences(body.preferences); touchedMatchable = true }
 

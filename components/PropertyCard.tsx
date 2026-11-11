@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { type ExtendedProperty } from '../types/property';
 import { Calendar, MapPin, Phone, Clock, Info, Building2, Check, Loader2, Trash2, MessageCircle, Target, Archive, RotateCcw } from 'lucide-react';
 import { amenityLabelsFrom } from '../lib/data/amenity-labels';
+import { priceIncludesLabel, normalizePriceIncludes } from '../lib/data/property-costs';
 
 interface PropertyCardProps {
   item: ExtendedProperty;
@@ -233,6 +234,20 @@ export default function PropertyCard({ item, showApproveButton = false, showDele
             </span>
           )}
         </div>
+
+        {/* Costs at a glance: what the rent already covers, and what is paid on top. */}
+        {(normalizePriceIncludes(item.price_includes).length > 0 || item.arnona_monthly != null || item.vaad_bayit_monthly != null) && (
+          <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+            {normalizePriceIncludes(item.price_includes).length > 0 && <div><strong>המחיר כולל:</strong> {priceIncludesLabel(item.price_includes)}</div>}
+            {(item.arnona_monthly != null || item.vaad_bayit_monthly != null) && (
+              <div>
+                {item.arnona_monthly != null && <span>ארנונה ₪{Number(item.arnona_monthly).toLocaleString('he-IL')}</span>}
+                {item.arnona_monthly != null && item.vaad_bayit_monthly != null && ' · '}
+                {item.vaad_bayit_monthly != null && <span>ועד ₪{Number(item.vaad_bayit_monthly).toLocaleString('he-IL')}</span>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Approval line */}
         {item.approved_at && (

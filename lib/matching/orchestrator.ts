@@ -24,10 +24,10 @@ import {
 } from './renter-property'
 
 const RENTER_COLUMNS = `
-  id, preferred_cities, preferred_neighborhoods, preferred_rooms, rooms_flexible, min_sqm,
+  id, preferred_cities, preferred_neighborhoods, preferred_rooms, preferred_rooms_min, preferred_rooms_max, rooms_flexible, min_sqm,
   floor_min, floor_max, top_floor_preference, condition_preference,
   budget_min, budget_max, budget_flexibility, vaad_bayit_max, arnona_max,
-  move_in_date, move_in_flexible, has_pets, smokers, household_size,
+  move_in_date, move_in_date_to, move_in_flexible, has_pets, smokers, household_size,
   has_children, children_count, preferences, match_weights, notes_embedding
 ` as const
 

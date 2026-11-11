@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
       preferred_neighborhoods: toArray(payload.preferred_neighborhoods),
 
       preferred_rooms: toNum(payload.preferred_rooms),
+      preferred_rooms_min: toNum(payload.preferred_rooms_min),
+      preferred_rooms_max: toNum(payload.preferred_rooms_max),
       rooms_flexible: toBool(payload.rooms_flexible) ?? false,
       min_sqm: toInt(payload.min_sqm),
       floor_min: toInt(payload.floor_min),
@@ -85,6 +87,7 @@ export async function POST(request: NextRequest) {
       condition_preference: s(payload.condition_preference) ?? 'any',
 
       move_in_date: s(payload.move_in_date),
+      move_in_date_to: s(payload.move_in_date_to),
       move_in_flexible: toBool(payload.move_in_flexible),
 
       household_type: s(payload.household_type),
@@ -101,6 +104,9 @@ export async function POST(request: NextRequest) {
       has_payslips: toBool(payload.has_payslips),
       has_security_checks: toBool(payload.has_security_checks),
       has_guarantors: toBool(payload.has_guarantors),
+      security_alternatives: toBool(payload.has_guarantors) === false
+        ? toArray(payload.security_alternatives).filter(v => ['bank_guarantee', 'bank_check', 'cash_deposit'].includes(v))
+        : [],
 
       notes: s(payload.notes),
     }
