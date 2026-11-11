@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireOrg } from '../../../../../lib/api/org-context'
+import { requireCapability } from '../../../../../lib/api/org-context'
 
 /** Upsert one agent's target for one month. `month` is always the 1st ('YYYY-MM-01'). */
 export async function PUT(req: NextRequest) {
-  const ctx = await requireOrg()
-  if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
-  const { sb, orgId } = ctx
+  const guard = await requireCapability('targets.manage')
+  if ('res' in guard) return guard.res
+  const { sb, orgId } = guard.ctx
 
   let body: { userId?: unknown; month?: unknown; targetDeals?: unknown; targetCommission?: unknown } = {}
   try { body = await req.json() } catch { /* empty body */ }

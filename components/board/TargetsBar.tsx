@@ -18,7 +18,10 @@ function Meter({ label, actual, target, format }: { label: string; actual: numbe
   )
 }
 
+import { useCan } from '../../lib/hooks/useMe'
+
 export default function TargetsBar({ targets, userId, onSaved }: { targets: BoardTargets; userId: string; onSaved: () => void }) {
+  const canEdit = useCan('targets.manage') === true
   const [editing, setEditing] = useState(false)
   const [deals, setDeals] = useState(String(targets.targetDeals))
   const [commission, setCommission] = useState(String(targets.targetCommission))
@@ -33,7 +36,7 @@ export default function TargetsBar({ targets, userId, onSaved }: { targets: Boar
       body: JSON.stringify({ userId, month: targets.month, targetDeals: Number(deals), targetCommission: Number(commission) }),
     }).catch(() => null)
     setSaving(false)
-    if (!r || !r.ok) { setErr('השמירה נכשלה — צריך מספרים שלמים, 0 ומעלה.'); return }
+    if (!r || !r.ok) { setErr('השמירה נכשלה — צריך מספרים שלמים, 0 ומעלה (ורק הנהלה יכולה לעדכן יעדים).'); return }
     setEditing(false); onSaved()
   }
 
@@ -41,7 +44,7 @@ export default function TargetsBar({ targets, userId, onSaved }: { targets: Boar
     <div className="surface-card mb-4" style={{ padding: 16 }}>
       <div className="flex items-center justify-between mb-3">
         <span className="font-semibold">יעד {monthLabel}</span>
-        {!editing && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>עריכת יעד</button>}
+        {!editing && canEdit && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>עריכת יעד</button>}
       </div>
       {editing ? (
         <div className="flex flex-wrap items-end gap-3">

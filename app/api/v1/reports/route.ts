@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { requireOrg } from '../../../../lib/api/org-context'
+import { requireCapability } from '../../../../lib/api/org-context'
 
 /** Office KPIs: inventory, funnel, deals, commissions, viewings, lead sources. */
 export async function GET() {
-  const ctx = await requireOrg()
-  if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
-  const { sb, orgId } = ctx
+  const guard = await requireCapability('reports.view')
+  if ('res' in guard) return guard.res
+  const { sb, orgId } = guard.ctx
   const count = async (table: string, build: (q: any) => any) => {
     const { count } = await build(sb.from(table).select('id', { count: 'exact', head: true }).eq('org_id', orgId))
     return count || 0

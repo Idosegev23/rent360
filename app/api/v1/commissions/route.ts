@@ -1,16 +1,22 @@
 import { NextResponse } from 'next/server'
-import { requireOrg } from '../../../../lib/api/org-context'
+import { requireOrg, capabilitiesOf } from '../../../../lib/api/org-context'
 
-/** Commission tracking across closed deals (tenancies): expected / collected / outstanding + per-deal. */
+/**
+ * Commission tracking across closed deals (tenancies): expected / collected / outstanding + per-deal.
+ * Staff with `commissions.view_all` see every deal; everyone else sees only the deals they recorded.
+ */
 export async function GET() {
   const ctx = await requireOrg()
   if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
-  const { sb, orgId } = ctx
+  const { sb, orgId, uid } = ctx
+  const seeAll = (await capabilitiesOf(ctx)).includes('commissions.view_all')
 
-  const { data: tens } = await sb
+  let q = sb
     .from('tenancies')
     .select('id, renter_id, property_id, monthly_rent, commission_amount, commission_status, commission_collected_at, status, started_at, created_at')
     .eq('org_id', orgId)
+  if (!seeAll) q = q.eq('created_by', uid)
+  const { data: tens } = await q
     .order('created_at', { ascending: false })
     .limit(300)
   const rows = tens || []
@@ -34,6 +40,7 @@ export async function GET() {
   }))
   const sum = (f: (i: typeof items[number]) => boolean) => items.filter(f).reduce((s, i) => s + (i.amount || 0), 0)
   return NextResponse.json({
+    scope: seeAll ? 'all' : 'mine',
     items,
     totals: {
       expected: sum(() => true),

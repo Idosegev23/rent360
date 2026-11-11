@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireOrg } from '@/lib/api/org-context'
+import { requireOrg, capabilitiesOf } from '@/lib/api/org-context'
 import { getConnection } from '@/lib/google/connections'
 
 export async function GET() {
@@ -17,6 +17,7 @@ export async function GET() {
     email: user?.email ?? null,
     role: user?.role ?? null,
     title: user?.title ?? null,
+    capabilities: await capabilitiesOf(ctx),
     google: { connected: !!conn && conn.status === 'active', email: conn?.google_email ?? null },
   })
 }

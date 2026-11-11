@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { MessageSquareText, ChevronLeft } from 'lucide-react'
 import { GoogleConnectionCard } from '@/components/google/GoogleConnectionCard'
+import Can from '@/components/auth/Can'
 
 export default function Page() {
   return (
@@ -9,6 +10,7 @@ export default function Page() {
       <div className="max-w-xl space-y-4">
         <GoogleConnectionCard />
 
+        <Can cap="settings.admin">
         <Link
           href="/admin/interview"
           className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50"
@@ -20,6 +22,7 @@ export default function Page() {
           </div>
           <ChevronLeft className="h-5 w-5 text-gray-300" />
         </Link>
+        </Can>
       </div>
     </main>
   )

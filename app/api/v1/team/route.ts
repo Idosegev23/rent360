@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireOrg } from '../../../../lib/api/org-context'
+import { requireOrg, requireCapability } from '../../../../lib/api/org-context'
+import { isRole } from '../../../../lib/auth/permissions'
 import { normalizePhone } from '../../../../lib/whatsapp/meta-provider'
 
 /**
- * Team directory. All 4 staff have identical permissions — any authed user can list AND add/edit
- * staff (no role gating). GET → the org's staff; POST → add a staff member (creates an auth user
+ * Team directory. Any staff member can list the team (assignee pickers need it); adding staff is
+ * limited to `team.manage`. GET → the org's staff; POST → add a staff member (creates an auth user
  * so they can log in with Google by email, + a users row).
  */
 export async function GET() {
@@ -20,10 +21,11 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const ctx = await requireOrg()
-  if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
+  const guard = await requireCapability('team.manage')
+  if ('res' in guard) return guard.res
+  const { ctx } = guard
 
-  let body: { name?: string; email?: string; phone?: string; title?: string; receives_alerts?: boolean } = {}
+  let body: { name?: string; email?: string; phone?: string; title?: string; receives_alerts?: boolean; role?: string } = {}
   try { body = await req.json() } catch {/* empty */}
   const email = String(body.email || '').trim().toLowerCase()
   const name = String(body.name || '').trim()
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
   if (!authId) return NextResponse.json({ error: { code: 'AUTH_CREATE_FAILED', message: created.error?.message || 'no auth id' } }, { status: 500 })
 
   const { error: insErr } = await ctx.sb.from('users').insert({
-    id: authId, org_id: ctx.orgId, email, name, phone, role: 'admin',
+    id: authId, org_id: ctx.orgId, email, name, phone, role: isRole(body.role) ? body.role : 'agent',
     title: body.title ?? null, is_active: true, receives_alerts: body.receives_alerts ?? true,
   })
   if (insErr) return NextResponse.json({ error: { code: 'INSERT_FAILED', message: insErr.message } }, { status: 500 })

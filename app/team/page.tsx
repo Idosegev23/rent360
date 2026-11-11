@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Loader2, Plus, Phone, Mail, Check } from 'lucide-react'
+import { ROLES, ROLE_LABELS } from '../../lib/auth/permissions'
+import { useMe, useCan } from '../../lib/hooks/useMe'
 
 type Member = {
   id: string
@@ -18,7 +20,9 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', phone: '', title: '' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', title: '', role: 'agent' })
+  const me = useMe()
+  const canManage = useCan('team.manage') === true
   const [busy, setBusy] = useState(false)
 
   async function load() {
@@ -40,24 +44,31 @@ export default function TeamPage() {
       const r = await fetch('/api/v1/team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
       const d = await r.json()
       if (!r.ok || d.error) throw new Error(d?.error?.message || 'נכשל')
-      setForm({ name: '', email: '', phone: '', title: '' }); setShowAdd(false); load()
+      setForm({ name: '', email: '', phone: '', title: '', role: 'agent' }); setShowAdd(false); load()
     } catch (e) { alert(e instanceof Error ? e.message : 'נכשל') } finally { setBusy(false) }
   }
 
   async function patch(id: string, body: Record<string, unknown>) {
     setMembers(ms => ms.map(m => m.id === id ? { ...m, ...body } as Member : m)) // optimistic
-    await fetch(`/api/v1/team/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const r = await fetch(`/api/v1/team/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null)
+    if (!r || !r.ok) {
+      const d = await r?.json().catch(() => null)
+      alert(d?.error?.message || 'העדכון נכשל')
+      load() // roll the optimistic change back to what the server has
+    }
   }
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 pb-24" dir="rtl">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">צוות</h1>
-        <button onClick={() => setShowAdd(s => !s)} className="inline-flex items-center gap-1.5 rounded-md bg-brand-primary px-3 py-1.5 text-sm font-medium text-white">
-          <Plus className="h-4 w-4" /> הוסף איש צוות
-        </button>
+        {canManage && (
+          <button onClick={() => setShowAdd(s => !s)} className="inline-flex items-center gap-1.5 rounded-md bg-brand-primary px-3 py-1.5 text-sm font-medium text-white">
+            <Plus className="h-4 w-4" /> הוסף איש צוות
+          </button>
+        )}
       </div>
-      <p className="mb-4 text-sm text-gray-500">לכולם הרשאות זהות — כל אחד רואה ומנהל הכל. השיוך (משימות/פגישות) הוא פרטני לכל עובד.</p>
+      <p className="mb-4 text-sm text-gray-500">התפקיד קובע מה רואים ומה מותר לעדכן: הנהלה רואה את כל החברה (יעדים, עמלות, דוחות, צוות), יועצי נדל״ן רואים את כל מאגר הנכסים ואת העסקאות שרשמו.{!canManage && ' שינוי תפקידים מתבצע על ידי הנהלה.'}</p>
 
       {showAdd && (
         <div className="mb-4 rounded-lg border border-brand-border bg-white p-3 space-y-2">
@@ -65,7 +76,10 @@ export default function TeamPage() {
             <input className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="שם" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             <input className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="אימייל (Google)" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} dir="ltr" />
             <input className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="טלפון" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" />
-            <input className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="תפקיד (אופציונלי)" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+            <input className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="תיאור תפקיד (אופציונלי)" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+            <select className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+              {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </select>
           </div>
           <button onClick={addMember} disabled={busy} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} הוסף
@@ -91,14 +105,31 @@ export default function TeamPage() {
                   {m.phone && <span className="inline-flex items-center gap-1" dir="ltr"><Phone className="h-3 w-3" />{m.phone}</span>}
                 </div>
               </div>
-              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                <input type="checkbox" checked={m.receives_alerts} onChange={e => patch(m.id, { receives_alerts: e.target.checked })} />
-                התראות וואטסאפ
-              </label>
-              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                <input type="checkbox" checked={m.is_active} onChange={e => patch(m.id, { is_active: e.target.checked })} />
-                פעיל
-              </label>
+              {canManage ? (
+                <select
+                  value={m.role}
+                  onChange={e => patch(m.id, { role: e.target.value })}
+                  disabled={me?.id === m.id}
+                  title={me?.id === m.id ? 'אי אפשר לשנות את התפקיד של עצמכם' : undefined}
+                  className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                >
+                  {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                </select>
+              ) : (
+                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{(ROLE_LABELS as Record<string, string>)[m.role] ?? m.role}</span>
+              )}
+              {(canManage || me?.id === m.id) && (
+                <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <input type="checkbox" checked={m.receives_alerts} onChange={e => patch(m.id, { receives_alerts: e.target.checked })} />
+                  התראות וואטסאפ
+                </label>
+              )}
+              {canManage && (
+                <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <input type="checkbox" checked={m.is_active} disabled={me?.id === m.id} onChange={e => patch(m.id, { is_active: e.target.checked })} />
+                  פעיל
+                </label>
+              )}
             </div>
           </div>
         ))}

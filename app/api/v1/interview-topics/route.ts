@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireOrg } from '../../../../lib/api/org-context'
+import { requireOrg, requireCapability } from '../../../../lib/api/org-context'
 import { DEFAULT_TOPICS } from '../../../../lib/ai/renter-interview/topics'
 
 /**
@@ -26,8 +26,9 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  const ctx = await requireOrg()
-  if (!ctx) return NextResponse.json({ error: { code: 'NO_SESSION' } }, { status: 401 })
+  const guard = await requireCapability('settings.admin')
+  if ('res' in guard) return guard.res
+  const ctx = guard.ctx
   const bad = (message: string) => NextResponse.json({ error: { code: 'BAD_REQUEST', message } }, { status: 400 })
 
   let body: Record<string, any> = {}
